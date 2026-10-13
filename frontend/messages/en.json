@@ -1,0 +1,42 @@
+{
+  "skip": "Skip to content",
+  "products": "QR stickers",
+  "how": "How it works",
+  "help": "FAQs",
+  "menu": "Menu",
+  "eyebrow": "STAY CONNECTED TO WHAT MATTERS",
+  "title": "A simple scan can help return what matters.",
+  "intro": "Lost belongings. Emergency contact information. Two QR tags, one paired kit—with separate profiles you control.",
+  "primary": "Explore QR stickers",
+  "secondary": "See how it works",
+  "chips": ["No app needed to scan", "Manage details anytime", "English + اردو"],
+  "pair": "One kit. Two purposes.",
+  "lost": "Lost item",
+  "lostText": "Help a finder contact you about a misplaced belonging.",
+  "ice": "Emergency / ICE",
+  "iceText": "Choose the emergency information you want to publish.",
+  "profileNote": "Two separate QR profiles. One account to manage them.",
+  "catalogEyebrow": "THE COLLECTION",
+  "catalogTitle": "QR stickers for everyday essentials.",
+  "catalogEmpty": "No QR stickers are available to browse yet. Please check back soon.",
+  "stepsTitle": "Simple from day one.",
+  "steps": [
+    ["Choose your stickers", "Choose your Lost and Emergency sticker sizes and copy counts."],
+    ["Receive your paired kit", "Your Lost and Emergency stickers belong to the same pair."],
+    ["Scan and activate", "Sign in and confirm ownership to activate both QR identities."],
+    ["Make each profile yours", "Edit Lost and Emergency details separately, anytime."],
+    ["Connect through a scan", "Finders and responders can scan without an account."]
+  ],
+  "privacyTitle": "Your details. Your choice.",
+  "privacyText": "One account can manage multiple pairs. Each Lost and Emergency QR has its own editable profile. Printed copies of the same QR share that profile.",
+  "copiesTitle": "More copies, the same profile.",
+  "copiesText": "Three printed Lost stickers use one Lost QR identity. Editing that profile updates the information reached by every copy.",
+  "faqTitle": "Good to know.",
+  "faqs": [
+    ["What is the difference between Lost and Emergency QR?", "Lost profiles help finders get in touch about an item. Emergency profiles share the emergency details you choose to publish. The two profiles are edited separately."],
+    ["Can I update my information later?", "Yes. Each QR identity has its own editable profile under your account."],
+    ["Do extra printed copies create more profiles?", "No. Copies of the same QR lead to the same profile. A different pair has its own Lost and Emergency identities."]
+  ],
+  "safety": "SafeReturn facilitates contact. It does not guarantee item recovery or medical care.",
+  "footer": "Stay connected to what matters."
+}
