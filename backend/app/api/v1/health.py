@@ -1,11 +1,13 @@
 from secrets import compare_digest
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 
 from app.core.config import Settings
+from app.db.session import Database, get_database
 
 
 class Liveness(BaseModel):
@@ -19,6 +21,12 @@ class ReadinessUnavailable(BaseModel):
     database: Literal["unavailable"] = "unavailable"
 
 
+class Readiness(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["ready"] = "ready"
+    database: Literal["ok"] = "ok"
+
+
 def health_router(settings: Settings) -> APIRouter:
     router = APIRouter(prefix="/health", tags=["health"])
     bearer = HTTPBearer(auto_error=False, scheme_name="InternalReadinessProbe")
@@ -29,14 +37,20 @@ def health_router(settings: Settings) -> APIRouter:
 
     @router.get(
         "/ready",
-        response_model=ReadinessUnavailable,
-        status_code=503,
+        response_model=Readiness,
         operation_id="API-002",
-        responses={401: {"description": "Probe authorization required"}},
+        responses={
+            401: {"description": "Probe authorization required"},
+            404: {"description": "Probe disabled"},
+            503: {"model": ReadinessUnavailable, "description": "Database unavailable"},
+        },
     )
     def ready(
+        response: Response,
         credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
-    ) -> ReadinessUnavailable:
+        database: Annotated[Database | None, Depends(get_database)],
+    ) -> Readiness | JSONResponse:
+        response.headers["Cache-Control"] = "no-store"
         token = settings.readiness_token
         if token is None or not token.get_secret_value():
             raise HTTPException(status_code=404, detail="Not Found")
@@ -48,7 +62,12 @@ def health_router(settings: Settings) -> APIRouter:
                 detail="Unauthorized",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        # Database connectivity and migrations belong to Phase 1. Never claim ready.
-        return ReadinessUnavailable()
+        if database is not None and database.is_available():
+            return Readiness()
+        return JSONResponse(
+            status_code=503,
+            content=ReadinessUnavailable().model_dump(),
+            headers={"Cache-Control": "no-store"},
+        )
 
     return router

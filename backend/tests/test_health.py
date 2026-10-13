@@ -1,9 +1,11 @@
 import asyncio
+from unittest.mock import MagicMock
 
 import httpx
 from pydantic import SecretStr
 
 from app.core.config import Settings
+from app.db.session import Database, get_database
 from app.main import create_app
 
 
@@ -72,5 +74,30 @@ def test_contract_and_unimplemented_routes():
     ready = schema["paths"]["/api/v1/health/ready"]["get"]
     assert ready["operationId"] == "API-002"
     assert ready["security"] == [{"InternalReadinessProbe": []}]
+    assert {"200", "401", "404", "503"} <= set(ready["responses"])
     assert probe.post("/api/v1/health/live").status_code == 405
     assert probe.get("/api/v1/public/products").status_code == 404
+
+
+def test_authorized_readiness_uses_database_and_never_probes_for_wrong_token():
+    database = MagicMock(spec=Database)
+    database.is_available.return_value = True
+    app = create_app(Settings(readiness_token=SecretStr("synthetic-probe-token")))
+    app.dependency_overrides[get_database] = lambda: database
+    probe = ASGIClient(app)
+    assert probe.get("/api/v1/health/ready").status_code == 401
+    database.is_available.assert_not_called()
+    response = probe.get(
+        "/api/v1/health/ready",
+        headers={"Authorization": "Bearer synthetic-probe-token"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "database": "ok"}
+    assert response.headers["cache-control"] == "no-store"
+    database.is_available.return_value = False
+    response = probe.get(
+        "/api/v1/health/ready",
+        headers={"Authorization": "Bearer synthetic-probe-token"},
+    )
+    assert response.status_code == 503
+    assert response.json() == {"status": "not_ready", "database": "unavailable"}
