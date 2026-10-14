@@ -2,7 +2,10 @@
 
 from alembic import context
 from app.core.config import Settings
-from app.db import commerce  # noqa: F401 -- register commerce mappings
+from app.db import (
+    commerce,  # noqa: F401 -- register commerce mappings
+    workflows,  # noqa: F401 -- register workflow mappings
+)
 from app.db.models import Base
 from app.db.session import Database
 
@@ -27,7 +30,15 @@ if context.is_offline_mode():
 elif context.config.attributes.get("connection") is not None:
     migrate(context.config.attributes["connection"])
 else:
-    database = Database.from_settings(Settings())
+    settings = Settings()
+    if (
+        settings.migration_database_url is not None
+        and settings.migration_database_url.get_secret_value()
+    ):
+        settings = settings.model_copy(
+            update={"database_url": settings.migration_database_url}
+        )
+    database = Database.from_settings(settings)
     if database is None:
         raise RuntimeError("Load development database environment explicitly")
     try:

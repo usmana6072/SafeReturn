@@ -129,3 +129,83 @@ and broad concurrency tests remain their roadmap tasks. All new tables start
 with RLS and no browser grants/policies. Run migration tests serially against
 one development database; overlapping transactional DDL may hit the lock timeout.
 `commerce_guards.sql` is the readable frozen source embedded in revision 0002.
+
+Task 1.4 adds `0003_workflows_security`: finder messages, encrypted optional
+location, notification outbox/attempts, append-only audit, idempotency, scan
+contexts, activation intents, typed durable jobs, print jobs/private artifacts,
+finance mirror state, retention holds and encrypted support cases. Ciphertext
+columns require positive key versions; encryption, coordinate validation and
+provider calls belong to the later service tasks. No provisional retention
+duration is enabled. A finder-message commit must include its matching durable
+notification event. Ownership transfer never changes its recipient snapshot.
+Forward revision `0004_runtime_privacy` further limits historical shipping
+snapshots to the owner and fulfillment/security staff. Finance retains order
+billing and settlement access, with no other customer's address/contact snapshot.
+
+The revision creates `safereturn_api` and `safereturn_worker` NOLOGIN roles plus
+separate `safereturn_api_login`/`safereturn_worker_login` roles without passwords.
+All are non-superuser, non-bypass-RLS, non-creating roles. Browser roles receive
+no table grants or membership. API RLS uses server-controlled subject/MFA context,
+ownership joins and original message recipients; finance/operations/support
+roles come from non-revoked `staff_roles`, not user-editable profile fields.
+Ordinary API writes cannot assign pair ownership; reviewed atomic activation and
+transfer procedures belong to Task 3.2/3.5. Staff provisioning also remains a
+separate authorized operation, outside ordinary API table grants.
+
+Runtime credentials are provisioned only after the migration is verified:
+
+```powershell
+.venv/Scripts/python.exe -m app.db.provision_runtime --env-file .env
+```
+
+This explicit development command requires a Git-ignored file, assigns initial
+passwords only to the new login roles, verifies both real logins and role
+separation, and stores secrets without printing them. It preserves the previous
+privileged URL as `SAFERETURN_MIGRATION_DATABASE_URL` and test URL unchanged,
+then switches `SAFERETURN_DATABASE_URL` to the restricted API login. The worker
+uses `SAFERETURN_WORKER_DATABASE_URL`. Saved API provisioning configuration uses
+`SAFERETURN_API_DATABASE_URL`; no URL belongs in Git or browser code. Alembic
+explicitly prefers the migration URL. For the shared Supabase pooler, the command
+preserves the inspected project suffix in the custom-role username, following
+[Supabase's custom-role connection guidance](https://supabase.com/docs/guides/troubleshooting/tenant-or-user-not-found).
+Do not rerun to rotate credentials: an interrupted/partial setup needs deliberate
+recovery; an already-provisioned setup verifies existing credentials.
+
+Business services must use `app.db.runtime.api_transaction()` **after** JWT,
+ownership and MFA verification, supplying only server-derived UUIDs and verified
+booleans. Public message creation supplies a freshly generated submission UUID;
+scan continuation supplies a verified session-binding digest. The pending scan
+context does not grant activation entitlement or prove the concealed credential.
+Use `worker_transaction()` with the separate worker connection and an instance
+ID. Context and role are local to the transaction and cleared on pool return.
+The original `Database.transaction()` remains available for privileged migrations
+and synthetic tests; an unscoped runtime login has no business-table privileges.
+JWT verification/request dependency integration is Task 2.1, not implemented here.
+
+Worker grants permit claims/retries/acks and immutable production projections
+only for claimed order jobs. Financial reads expose selected settlement metadata,
+never sender ciphertext. Workers cannot read Auth, shipping addresses, ICE,
+activation verifiers or finder location; notification templates must use the
+encrypted outbox snapshot or a later separately reviewed narrow projection.
+Claims increment attempts and require due/reclaimable events; ack/failure needs
+the worker's unexpired lease. Lease TTL/batch/backoff/provider idempotency and
+typed external handlers remain Task 4.4/5.x. Durable processing is at least once.
+
+Private print metadata requires paid allocation, immutable render configuration,
+correct order/job references and an artifact before `ready`. Render configuration
+and audit JSON are constrained metadata allowlists. Retention tombstones require
+an explicitly approved due date and no resource/order hold; hold placement and
+deletion lock the same resource. Holds are released with recorded identity and
+kept as history. No Storage bucket, upload, deletion, email, Sheet write, print
+rendering, automated allocation or retention period is activated by this schema.
+
+Existing cross-table integrity triggers are hardened as fixed-search-path
+definers so hidden RLS parents cannot skip the pair/order/payment/QA checks.
+All table references are qualified; trigger functions and boolean policy helpers
+are unavailable to browser RPC. Only the designated runtime roles can execute
+their required context/policy helpers. Frozen SQL source snapshots are in
+`workflow_guards.sql`, `runtime_helpers.sql` and `runtime_policies.sql`; previous
+revisions are unchanged. Test migrations serially with rollback-only DDL/data and
+run real-login checks after provisioning. A safe repeat upgrade is a no-op;
+unknown role/table collisions require reconciliation, and destructive downgrade
+is refused. Future cleanup/role changes need reviewed additive revisions.

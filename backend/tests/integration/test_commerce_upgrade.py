@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -55,7 +56,7 @@ END $$;
             assert row == ("Existing profile", 7, "lost-" + marker)
             assert (
                 c.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == "0002_commerce"
+                == ScriptDirectory.from_config(cfg).get_current_head()
             )
             c.rollback()
     finally:

@@ -9,6 +9,8 @@ class Settings(BaseSettings):
 
     readiness_token: SecretStr | None = None
     database_url: SecretStr | None = None
+    migration_database_url: SecretStr | None = None
+    worker_database_url: SecretStr | None = None
     database_pool_size: int = Field(default=5, ge=1, le=50)
     database_pool_timeout_seconds: int = Field(default=5, ge=1, le=30)
     database_connect_timeout_seconds: int = Field(default=3, ge=1, le=30)
