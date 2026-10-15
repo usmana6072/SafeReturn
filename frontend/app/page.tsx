@@ -4,7 +4,7 @@ import { getLanguage, messages } from "../lib/i18n";
 export default async function Home() {
   const language = await getLanguage();
   const t = messages[language];
-  const links = <><a href="#stickers">{t.products}</a><a href="#how-it-works">{t.how}</a><a href="#faq">{t.help}</a></>;
+  const links = <><a href="#stickers">{t.products}</a><a href="#how-it-works">{t.how}</a><a href="#faq">{t.help}</a><a href="/login">{language === "ur" ? "لاگ اِن" : "Log in"}</a></>;
   return <>
     <a href="#main" className="skip-link">{t.skip}</a>
     <header className="site-header">

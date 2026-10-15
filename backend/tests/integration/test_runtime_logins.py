@@ -38,6 +38,54 @@ def scope(kind, db):
     )
 
 
+def test_activation_procedures_preserve_runtime_separation(runtime_login):
+    kind, db = runtime_login
+    with scope(kind, db) as session:
+        assert session.execute(
+            text(
+                "SELECT has_function_privilege(current_user,'public.sr_lock_profile_qr(uuid,text)','EXECUTE')"
+            )
+        ).scalar_one() is (kind == "api")
+        assert session.execute(
+            text(
+                "SELECT has_function_privilege(current_user,'public.sr_confirm_activation(uuid,text,text)','EXECUTE')"
+            )
+        ).scalar_one() is (kind == "api")
+        assert (
+            session.execute(
+                text(
+                    "SELECT has_table_privilege(current_user,'public.activation_intents','INSERT')"
+                )
+            ).scalar_one()
+            is False
+        )
+        for role in ("anon", "authenticated"):
+            assert (
+                session.execute(
+                    text(
+                        "SELECT has_function_privilege(:role,'public.sr_confirm_activation(uuid,text,text)','EXECUTE')"
+                    ),
+                    {"role": role},
+                ).scalar_one()
+                is False
+            )
+    if kind == "api":
+        with scope(kind, db) as session:
+            assert (
+                session.execute(
+                    text(
+                        "SELECT public.sr_activation_context('nonexistent-task32-token')"
+                    )
+                ).scalar_one()
+                is None
+            )
+    else:
+        with pytest.raises(DBAPIError), scope(kind, db) as session:
+            session.execute(
+                text("SELECT public.sr_activation_context('nonexistent-task32-token')")
+            )
+
+
 def test_real_login_attributes_and_no_role_escalation(runtime_login):
     kind, db = runtime_login
     expected = "safereturn_" + kind

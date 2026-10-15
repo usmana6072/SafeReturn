@@ -11,4 +11,7 @@ node_modules/
 *.tsbuildinfo
 test-results/
 playwright-report/
+backend/localhost.*.log
+frontend/localhost.*.log
+frontend/auth-task23-*.log
 

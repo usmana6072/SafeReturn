@@ -69,7 +69,24 @@ def test_authorized_readiness_reports_unavailable_database():
 def test_contract_and_unimplemented_routes():
     probe = client()
     schema = probe.get("/openapi.json").json()
-    assert set(schema["paths"]) == {"/api/v1/health/live", "/api/v1/health/ready"}
+    assert set(schema["paths"]) == {
+        "/api/v1/admin/qr-batches",
+        "/api/v1/health/live",
+        "/api/v1/health/ready",
+        "/api/v1/me",
+        "/api/v1/public/qr/{token}/activation-context",
+        "/api/v1/me/tag-pairs/activation-intents",
+        "/api/v1/me/tag-pairs/activations",
+        "/api/v1/me/qr/{qr_id}/lost-profile",
+        "/api/v1/me/qr/{qr_id}/ice-profile",
+        "/api/v1/me/qr/{qr_id}/ice-contacts",
+        "/api/v1/me/qr/{qr_id}/ice-contacts/{contact_id}",
+        "/api/v1/me/qr/{qr_id}/contact-preferences",
+    }
+    inventory = schema["paths"]["/api/v1/admin/qr-batches"]["post"]
+    assert inventory["operationId"] == "API-090"
+    assert inventory["security"] == [{"SupabaseAccessToken": []}]
+    assert "201" in inventory["responses"]
     assert schema["paths"]["/api/v1/health/live"]["get"]["operationId"] == "API-001"
     ready = schema["paths"]["/api/v1/health/ready"]["get"]
     assert ready["operationId"] == "API-002"

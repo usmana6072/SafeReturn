@@ -116,6 +116,8 @@ class QRBatch(Identity, Timestamps, Base):
     qa_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     qa_approved_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, auth_fk())
     print_manifest_checksum: Mapped[str | None] = mapped_column(String(64))
+    logo_template_key: Mapped[str | None] = mapped_column(String(80))
+    intended_environment: Mapped[str | None] = mapped_column(String(8))
     status: Mapped[str] = mapped_column(String(24), server_default="draft")
     __table_args__ = (
         CheckConstraint("ecc_level IN ('M','Q')", name="ecc"),
@@ -310,6 +312,8 @@ class ICEContact(Identity, Timestamps, Base):
     publication_consent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    publication_consent_version: Mapped[str | None] = mapped_column(String(30))
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         CheckConstraint(
             "phone_key_version > 0 AND octet_length(phone_ciphertext) > 0", name="phone"
@@ -317,6 +321,9 @@ class ICEContact(Identity, Timestamps, Base):
         CheckConstraint("display_order >= 0", name="display_order"),
         CheckConstraint(
             "NOT published OR publication_consent_at IS NOT NULL", name="consent"
+        ),
+        CheckConstraint(
+            "removed_at IS NULL OR NOT published", name="removed_unpublished"
         ),
         Index("ix_ice_contact_display", "ice_qr_id", "published", "display_order"),
     )
@@ -339,7 +346,9 @@ class TagContactPreference(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
+    profile_version: Mapped[int] = mapped_column(Integer, server_default="1")
     __table_args__ = (
+        CheckConstraint("profile_version>0", name="version"),
         CheckConstraint(
             "NOT whatsapp_enabled OR (whatsapp_phone_ciphertext IS NOT NULL AND whatsapp_phone_key_version IS NOT NULL AND whatsapp_phone_key_version > 0 AND whatsapp_consent_at IS NOT NULL AND whatsapp_consent_version IS NOT NULL)",
             name="whatsapp_consent",
