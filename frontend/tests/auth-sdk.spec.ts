@@ -8,13 +8,15 @@ function provider() {
   const writes: { name: string; value: string; options: CookieOptions }[] = [];
   const requests: { path: string; body: Record<string, unknown> }[] = [];
   let expire = false;
+  let aal = "aal1";
+  let used = false;
   let failure: { endpoint: string; status: number } | undefined;
   const user = { id: "00000000-0000-4000-8000-000000000001", aud: "authenticated",
     email: "fixture@example.invalid", role: "authenticated", user_metadata: {},
     app_metadata: {}, created_at: new Date().toISOString() };
   const jwt = () => ["e30", Buffer.from(JSON.stringify({ sub: user.id,
     exp: Math.floor(Date.now() / 1000) + 3600, iat: Math.floor(Date.now() / 1000),
-    session_id: "00000000-0000-4000-8000-000000000002", role: "authenticated", aal: "aal1" })).toString("base64url"), "signature"].join(".");
+    session_id: "00000000-0000-4000-8000-000000000002", role: "authenticated", aal })).toString("base64url"), "signature"].join(".");
   const transport: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
     expect(url.origin).toBe("https://fixture.test");
@@ -25,6 +27,13 @@ function provider() {
     if (failure && url.pathname.endsWith(failure.endpoint)) return Response.json({
       code: "fixture_denied", msg: "Controlled provider failure",
     }, { status: failure.status });
+    if (url.pathname.endsWith("/factors")) return Response.json({ id: "fixture-factor", type: "totp", totp: { secret: "SYNTHETIC", uri: "otpauth://totp/fixture", qr_code: "<svg/>" } });
+    if (url.pathname.endsWith("/challenge")) return Response.json({ id: "fixture-challenge", expires_at: Math.floor(Date.now()/1000)+60 });
+    if (url.pathname.endsWith("/verify")) {
+      if (body.code !== "123456" || used) return Response.json({ msg: "Invalid or expired challenge" }, { status: 400 });
+      used = true; aal = "aal2";
+      return Response.json({ access_token: jwt(), refresh_token: "fixture-mfa-refresh", expires_in: 3600, token_type: "bearer", user });
+    }
     if (url.pathname.endsWith("/signup")) return Response.json({ user, session: null });
     if (url.pathname.endsWith("/recover") || url.pathname.endsWith("/resend")) return Response.json({});
     if (url.pathname.endsWith("/token")) return Response.json({ access_token: jwt(),
@@ -163,4 +172,27 @@ test("production session cookie is Secure and HttpOnly", async () => {
     if (original === undefined) delete environment.NODE_ENV;
     else environment.NODE_ENV = original;
   }
+});
+
+
+test("synthetic SDK TOTP enrollment, invalid/expired challenge, success and replay", async () => {
+  const fixture = provider();
+  const client = fixture.client();
+  await client.auth.signInWithPassword({ email: "fixture@example.invalid", password: "fixture-password" });
+  const enrollment = await client.auth.mfa.enroll({ factorType: "totp" });
+  expect(enrollment.error).toBeNull();
+  expect(enrollment.data?.totp.secret).toBe("SYNTHETIC");
+  expect((await client.auth.mfa.challengeAndVerify({ factorId: "fixture-factor", code: "000000" })).error).not.toBeNull();
+  const challenge = await client.auth.mfa.challenge({ factorId: "fixture-factor" });
+  expect(challenge.error).toBeNull();
+  fixture.fail("/verify", 400);
+  expect((await client.auth.mfa.verify({ factorId: "fixture-factor", challengeId: challenge.data!.id, code: "123456" })).error).not.toBeNull();
+});
+test("synthetic SDK successful MFA installs AAL2; replay fails", async () => {
+  const fixture = provider(); const client = fixture.client();
+  await client.auth.signInWithPassword({ email: "fixture@example.invalid", password: "fixture-password" });
+  expect((await client.auth.mfa.challengeAndVerify({ factorId: "fixture-factor", code: "123456" })).error).toBeNull();
+  const token = (await client.auth.getSession()).data.session!.access_token;
+  expect(JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()).aal).toBe("aal2");
+  expect((await client.auth.mfa.verify({ factorId: "fixture-factor", challengeId: "fixture-challenge", code: "123456" })).error).not.toBeNull();
 });

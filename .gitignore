@@ -15,3 +15,15 @@ backend/localhost.*.log
 frontend/localhost.*.log
 frontend/auth-task23-*.log
 
+
+# Synthetic PDF verification outputs (not production artwork).
+/output/
+/tmp/pdfs/
+
+/tmp/task54-*/
+
+# Preserve local rehearsal/runtime artifacts outside source control.
+/tmp/
+/backend/tests/tmp/
+/backend/task*.log
+/frontend/task*.log

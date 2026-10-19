@@ -29,6 +29,11 @@ async def access_error(request: Request, error: AccessError):
     messages = {
         401: ("AUTH_REQUIRED", "Authentication required.", "تصدیق درکار ہے۔"),
         403: ("FORBIDDEN", "Access denied.", "رسائی کی اجازت نہیں ہے۔"),
+        429: (
+            "RATE_LIMITED",
+            "Please try again later.",
+            "براہ کرم کچھ دیر بعد دوبارہ کوشش کریں۔",
+        ),
         404: ("NOT_FOUND", "Resource not found.", "مطلوبہ معلومات دستیاب نہیں ہیں۔"),
         503: (
             "PROVIDER_UNAVAILABLE",
@@ -37,7 +42,7 @@ async def access_error(request: Request, error: AccessError):
         ),
     }
     code, message, urdu = messages[error.status]
-    request_id = uuid4().hex
+    request_id = getattr(request.state, "request_id", uuid4().hex)
     headers = {"Cache-Control": "no-store", "X-Request-ID": request_id}
     if error.status == 401:
         headers["WWW-Authenticate"] = "Bearer"
@@ -103,6 +108,7 @@ def authorize(session: Session, principal: Principal) -> AuthContext:
 
 
 def get_auth_context(
+    request: Request,
     principal: Annotated[Principal, Depends(get_principal)],
     database: Annotated[Database | None, Depends(get_database)],
     response: Response,
@@ -112,6 +118,7 @@ def get_auth_context(
         raise AccessError(503)
     try:
         with api_transaction(database, principal.user_id) as session:
+            session.info["settings"] = request.app.state.settings
             yield authorize(session, principal)
     except SQLAlchemyError as error:
         original = getattr(error, "orig", None)

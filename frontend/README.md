@@ -94,6 +94,16 @@ web origin must exactly match the browser's origin. Add that origin's
 no provider configuration is changed by the launcher. Production requires HTTPS,
 proper secrets management and the production callback allowlist.
 
+## Deployment (Task 6.3)
+
+`vercel.json` pins the Next.js framework, `npm ci` install, and production
+build command. Only approved public configuration may use `NEXT_PUBLIC_`
+variables; API origins, signing keys, database URLs, provider keys, and storage
+credentials remain server-side in the deployment secret manager. The release
+sequence is backend-compatible migration and smoke checks first, then the
+frontend rollout and progressive feature-flag activation. Do not deploy from a
+workstation with `.env` files or token-bearing test artifacts.
+
 Session decision: maintained `@supabase/ssr` with a **server-only** client.
 HttpOnly, SameSite=Lax cookies are Secure in production; no browser Auth client,
 localStorage tokens or serialized sessions. The Next proxy refreshes cookies;
@@ -135,3 +145,122 @@ servers and cleans the new local session even after a failed UI assertion.
 revocation. Both read the ignored test credentials without displaying them.
 Live signup/email/recovery delivery and Task 2.3's broader authorization/provider
 integration matrix remain separate; no provider redirect settings were changed.
+
+Task 3.4 customer routes: `/dashboard`, `/my-qr`, `/my-qr/[qrId]`, `/kits`,
+`/kits/[pairId]`, and `/activate`. Approved legacy per-kit Lost/ICE/contact paths
+resolve through the owner-authorized pair to the canonical QR editor. The QR
+collection searches and filters on the server, pages without a one-pair limit,
+and never expands physical copies into duplicate identities. Editors use the
+existing profile/contact/preference APIs with quoted versions, explicit consent,
+masked replacement phones, retained medical-note semantics, stale-save errors,
+unsaved-change warnings and independent privacy disabling during key outages.
+
+`/q/[token]` currently implements only the minimal inactive activation entry;
+active Lost/ICE public experiences remain Phase 4. The activation button stores
+a signed short-lived HttpOnly/Secure/Lax scan cookie. Login/signup callback
+returns only to the fixed `/activate` path; actor-bound intent confirmation uses
+one stable idempotency key across retries. Concealed codes are submitted in POST
+bodies and never placed in redirects or cookies. Recovery still takes priority
+over activation return. Expired/forged contexts require a new scan.
+
+The new screens need no Resend credentials. Actual email delivery remains a later
+worker task. `tests/integration/test_qr_browser.py` in the backend launches the
+real built Next application and API with isolated PostgreSQL plus simulated
+Auth; `qr-fixture-fetch.cjs` is loaded only in that test process, never by normal
+development/start scripts. Test outputs remain ignored under `test-results/`.
+# SafeReturn frontend
+
+The frontend includes bilingual English/Urdu rendering with RTL direction,
+responsive customer and public-scan layouts, keyboard skip links, visible
+focus indicators, and no-JavaScript mobile navigation. Release acceptance
+coverage is in `tests/release-accessibility.spec.ts`; it checks mobile and
+desktop overflow, RTL switching, keyboard focus, unauthenticated private-route
+denial, and reduced-motion/forced-colors-compatible shared styling.
+
+Task 4.1 public scan acceptance is driven by the backend's isolated
+`tests/integration/test_public_qr.py` controller after `npm run build`.
+It runs `tests/public-qr.spec.ts` against real Next/API/PostgreSQL, using only
+synthetic tokens; no sign-in or provider call is needed. The public scan keeps
+its own URL on language changes, renders critical English/Urdu instructions,
+and supports contact-only ICE profiles. Initial HTML/RSC contains no phone.
+Screenshots remain ignored under `test-results/`.
+
+Task 4.2 protected actions require a public
+`NEXT_PUBLIC_SAFERETURN_TURNSTILE_SITE_KEY` in
+frontend environment and the corresponding backend secret/expected hostname.
+No key is written automatically. Initial scan HTML/RSC contains no phone;
+a click mounts the compact challenge widget, then a verified POST reveals only
+the selected phone or issues an explicit WhatsApp confirmation link. Failures
+refresh the challenge, and no WhatsApp navigation happens automatically.
+The backend `test_public_contacts.py` controller runs `public-contacts.spec.ts`
+and the existing public scan regression with real Next/API/PostgreSQL and a
+controlled widget/Siteverify simulator. It never sends WhatsApp/email messages.
+
+
+### Task 5.1 catalog
+
+`/` reads the backend featured endpoint without caching. `/shop` provides URL-backed
+search/category filters and SKU detail links; cards show the server's Decimal price
+strings. Products, variants and public media are validated before rendering. Empty
+catalogs and API failures have different bilingual messages. Featured scrolling is
+manual, keyboard accessible and direction-aware; it never autoplays.
+
+`/admin/products` requires a verified Auth session; the API independently checks the
+existing staff role, account, MFA and RLS for every request. Draft/create/edit/archive,
+categories, variant edits and public-image attach/unlink are available. Browser writes
+use a same-origin server relay so API bearer credentials stay server-side. Versions
+and Idempotency-Key protect concurrent updates and unchanged retries.
+
+Public images can be selected from existing approved Cloudinary assets or uploaded
+via API-225's signed authorization, browser upload and server-verified finalization.
+Configure the backend's controlled Cloudinary account/folder and signed upload preset
+with raster formats and 5 MB maximum; missing provider config fails closed. Signing
+never returns the API secret. The grant uses generated product-scoped public IDs,
+no overwrite and a one-hour provider validity. Upload failures leave the form intact;
+if upload succeeds but finalization fails, the returned public ID can be retried.
+Only public product photos belong here; private proofs and print artifacts do not.
+Provider-side preset/account acceptance remains a release check.
+
+Build with `npm run build`; the isolated PostgreSQL controller runs
+`tests/catalog.spec.ts` against real local Next/API and simulated Auth/Cloudinary.
+Run through `backend/tests/integration/test_catalog.py`, with explicit development
+DB configuration and `SAFERETURN_CATALOG_BASE_REVISION=0015_public_catalog` after
+migration installation. Never point its provider fixtures at a live account.
+`ops/run-task51-local.py` starts fresh API/web processes on free loopback ports
+without stopping existing applications and reports the verified URL.
+
+
+### Task 5.2 cart and checkout
+
+The SKU detail configurator collects independent Lost/ICE copy counts by active
+variant. `/cart` stores only variant IDs/counts in localStorage, validates them again
+and preserves the cart through sign-in; no price, token, address or credential is
+stored there. The backend is authoritative for prices, publication and stock.
+`/checkout` requires a verified session, collects private shipping details and an
+explicit contact confirmation, then obtains an encrypted server quote. Review shows
+exact server money strings and expiry; explicit total acceptance is required to
+confirm. Same-origin server relay keeps bearer tokens server-only. Unchanged failed
+requests retain their idempotency key; expired quotes can be refreshed with a fresh
+key. Failed stock/provider/validation responses preserve counts and private fields.
+A saved order awaits separate payment verification; this flow makes no payment claim.
+
+Controlled acceptance: `tests/checkout.spec.ts` runs through the isolated PostgreSQL
+controller in `backend/tests/integration/test_checkout.py`, with simulated Auth and
+real Next/API/database. It covers guest cart continuity, independent counts, quote,
+confirm, lost-response retry, expiry, no stock, CSRF and mobile/Urdu/RTL keyboard flow.
+
+For the completed local app use `ops/run-task52-local.py`. It reads existing ignored
+backend/frontend configuration and bridges only the public Supabase URL/publishable
+key into the web process when needed; database, Cloudinary and email secrets are not
+forwarded by this bridge. Files remain unchanged. Startup checks home/catalog/shop/cart;
+final anonymous checkout smoke returns 307 to login (not a generic configuration 500).
+
+
+For the current local staff console, preserve the explicit origins and use the
+configured launcher (plain `next start` does not load backend Auth settings):
+
+```powershell
+$env:SAFERETURN_WEB_ORIGIN="http://localhost:3031"
+$env:SAFERETURN_API_ORIGIN="http://127.0.0.1:8030"
+../backend/.venv/Scripts/python.exe scripts/run-configured.py start --hostname 127.0.0.1 --port 3031
+```

@@ -1,0 +1,18 @@
+import Link from "next/link";
+import { ownerApi, ownerSession } from "../../../../lib/qr-server";
+import { getLanguage } from "../../../../lib/i18n";
+import { Unavailable } from "../../../../components/customer";
+import { orderStatus } from "../../../../lib/order-status";
+type Order = { order_number:string; order_status:string; payment_status:string; fulfillment_status:string; currency_code:string; total_pkr:string; pair_count:number; print_status:string; items:{id:string;product_name_snapshot:string;variant_name_snapshot:string;sku_snapshot:string;size_mm_snapshot:string;material_snapshot:string|null;quantity:number;unit_price_snapshot:string;line_total:string}[]; qr_uses:{id:string;order_item_id:string;tag_type_snapshot:string;copies:number}[]; shipping_snapshot:{recipient_name:string;phone:string;address:string;city:string;province:string|null;postal_code:string|null} };
+type Shipment = {id:string;carrier:string|null;tracking_reference:string|null;status:string;packed_at:string|null;dispatched_at:string|null;delivered_at:string|null};
+export default async function OrderPage({params}:{params:Promise<{orderId:string}>}) {
+ const ur=await getLanguage()==="ur",session=await ownerSession(),{orderId}=await params;
+ let order:Order,shipments:Shipment[];
+ try { const api=ownerApi(session.token); [order,{items:shipments}]=await Promise.all([api<Order>(`/me/orders/${encodeURIComponent(orderId)}`),api<{items:Shipment[]}>(`/me/orders/${encodeURIComponent(orderId)}/shipments`)]); }
+ catch {return <><h1>{ur?"آرڈر":"Order"}</h1><Unavailable ur={ur}/></>;}
+ return <><Link className="text-link" href="/orders">{ur?"واپس آرڈرز":"Back to orders"}</Link><h1><bdi>{order.order_number}</bdi></h1>
+ <section className="qr-card"><h2>{ur?"آرڈر کی حالت":"Order status"}</h2><p>{orderStatus(order.order_status,ur)}</p><p>{orderStatus(order.payment_status,ur)}</p><p>{orderStatus(order.fulfillment_status,ur)}</p><p>{orderStatus(order.print_status,ur)}</p><p>{ur?"کل":"Total"}: <bdi>{order.currency_code} {order.total_pkr}</bdi></p><p>{ur?"مختلف QR جوڑے":"Distinct QR pairs"}: {order.pair_count}</p></section>
+ <h2>{ur?"اشیا اور کاپیاں":"Items and copies"}</h2><div className="order-list">{order.items.map(item=><article className="qr-card" key={item.id}><h3>{item.product_name_snapshot}</h3><p>{item.variant_name_snapshot} · <bdi>{item.sku_snapshot}</bdi></p><p><bdi>{item.size_mm_snapshot} mm</bdi> {item.material_snapshot}</p><p>{ur?"کل جسمانی کاپیاں":"Physical copies"}: {item.quantity}</p>{order.qr_uses.filter(u=>u.order_item_id===item.id).map(u=><p key={u.id}><bdi>{u.tag_type_snapshot.toUpperCase()}</bdi>: {u.copies} {ur?"کاپیاں":"copies"}</p>)}<p>{ur?"فی کاپی":"Unit price"}: <bdi>{order.currency_code} {item.unit_price_snapshot}</bdi></p><p><bdi>{order.currency_code} {item.line_total}</bdi></p></article>)}</div>
+ <section className="qr-card"><h2>{ur?"خریداری کے وقت کا پتہ":"Purchase shipping address"}</h2><p>{order.shipping_snapshot.recipient_name}</p><p><bdi>{order.shipping_snapshot.phone}</bdi></p><p>{order.shipping_snapshot.address}</p><p>{order.shipping_snapshot.city} {order.shipping_snapshot.province} <bdi>{order.shipping_snapshot.postal_code}</bdi></p></section>
+ <h2>{ur?"ترسیل":"Shipping"}</h2>{shipments.length===0?<p>{ur?"ابھی ترسیل شروع نہیں ہوئی۔":"No shipment yet."}</p>:shipments.map(sh=><article className="qr-card" key={sh.id}><h3>{orderStatus(sh.status,ur)}</h3><p>{sh.carrier}</p><p>{ur?"ٹریکنگ حوالہ":"Tracking reference"}: <bdi>{sh.tracking_reference||"—"}</bdi></p>{[["Packed", "پیک ہوا", sh.packed_at],["Dispatched","روانہ ہوا",sh.dispatched_at],["Delivered","پہنچ گیا",sh.delivered_at]].map(([en,urdu,value])=>value&&<p key={en}>{ur?urdu:en}: <bdi>{value.slice(0,10)}</bdi></p>)}</article>)}</>;
+}

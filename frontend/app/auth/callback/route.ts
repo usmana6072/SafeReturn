@@ -3,6 +3,7 @@ import { authClient } from "../../../lib/auth/server";
 import { authConfig } from "../../../lib/auth/config";
 import { recoveryTicket } from "../../../lib/auth/recovery";
 import { cookies } from "next/headers";
+import { readTicket, ScanTicket, ActivationTicket } from "../../../lib/scan-ticket";
 
 export async function GET(request: NextRequest) {
   let target = "/login?confirmation=failed";
@@ -17,7 +18,8 @@ export async function GET(request: NextRequest) {
       const { data, error } = await client.auth.exchangeCodeForSession(codes[0]);
       subscription.unsubscribe();
       if (!error && data.session) {
-        target = "/account";
+        const jar = await cookies();
+        target = readTicket<ScanTicket>(jar.get("sr-scan")?.value, "scan") || readTicket<ActivationTicket>(jar.get("sr-activation")?.value, "activation") ? "/activate" : "/auth/continue";
         if (recovery) {
           (await cookies()).set("sr-recovery", recoveryTicket(data.session.access_token), {
             httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 600,

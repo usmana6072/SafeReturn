@@ -106,6 +106,7 @@ The existing v1.1 API-001…API-0xx endpoints in Part B remain authoritative **u
 | API-242 | `GET /admin/storage/artifacts` | Ops/Security | New metadata only |
 | API-243 | `POST /admin/storage/artifacts/{artifact_id}/retention-holds` | Approved staff | New audited hold |
 | API-244 | `DELETE /admin/storage/artifacts/{artifact_id}/retention-holds` | Approved staff | New audited removal |
+| API-245 | `POST /admin/storage/artifacts/{artifact_id}/cleanup-retry` | Security + MFA | Additive audited recovery |
 
 **Registry correction:** The original `API-090 POST /admin/qr-batches` remains the single inventory generation command; do not introduce a second endpoint. API-083 remains a compatibility path for legacy `payment_submissions` until safely migrated; API-241 is the canonical v1.2 review path. No conflicting second QR generation or payment approval implementation should exist.
 
@@ -1075,11 +1076,13 @@ Only owner management endpoints may return masked contact. Public scan returns e
 
 ### API-022 `GET /me/privacy-consents`
 
-**Auth:** bearer. **200:** own consent records with purpose, version, timestamp, and active state; never another user's consents.
+**Auth:** bearer. **200:** own consent records with purpose, version, timestamp, and active state; never another user's consents. Current projection returns the latest 100 immutable actor-scoped QR consent/publication events plus `has_more`; `state_scope=recorded_event` means `active` describes the state at that event, not a claim that a historical consent remains active today. Full contacts, medical content and unrelated audit details are excluded.
 
 ### API-023 `POST /me/account-deletion-requests`
 
 **Auth:** bearer + recent reauthentication for high-risk action. **Request:** confirmation, reason optional. **202:** request ID/status. Deletion is a reviewed workflow because orders, pairs, audit, and legal retention may require staged handling. Do not immediately cascade-delete `auth.users`.
+
+Current request body is `{ "confirm": true, "reason": "optional, at most 1000 characters" }`, with unknown fields rejected. Require verified email and signed provider AMR authentication within the existing 300-second high-risk window; token refresh alone is insufficient. Persist a `privacy` support case and minimal `account.deletion.requested` audit marker atomically. Optional reason is encrypted with the profile keyring, bound to actor UUID and `account_deletion_reason`; never copy it to audit/response. Per-actor transaction locking returns the same open/investigating request on retries. This endpoint does not erase, transfer, disable or email any account; approved manual retention/security review and actual erasure remain separate release gates.
 
 ---
 
@@ -1248,7 +1251,7 @@ Only owner management endpoints may return masked contact. Public scan returns e
 
 ### API-050 `GET /me/finder-messages`
 
-**Auth:** bearer. **Query:** `cursor`, `limit`, optional `status`, `qr_id`. **200:** paginated messages where `recipient_owner_user_id = JWT subject`, not merely current pair owner. Summary excludes precise coordinates and full contact unless necessary; sensitive values decrypted only for authorized owner.
+**Auth:** bearer. **Query:** opaque bounded `cursor` (UTC timestamp + UUID tie-breaker), `limit`, optional `status`, `qr_id`. Fetch one extra row to determine continuation; invalid cursors return 422. **200:** paginated messages where `recipient_owner_user_id = JWT subject`, not merely current pair owner. Summary excludes precise coordinates and full contact unless necessary; sensitive values decrypted only for authorized owner.
 
 ### API-051 `GET /me/finder-messages/{message_id}`
 
@@ -1283,6 +1286,8 @@ If finder did not consent, `location: null`. **Cache:** no-store. **Privacy:** l
 ### API-053 `DELETE /me/finder-messages/{message_id}`
 
 **Auth:** recipient. **204:** delete or schedule deletion subject to retention/legal hold. If hard deleted, `finder_message_locations` cascades. Return safe success without leaking retention exceptions; document actual deletion timing in privacy policy.
+
+**Current implementation:** idempotently set `status=deleted` to persist the customer deletion request and hide it from recipient list/detail/status edits. Preserve encrypted contents, consent, location, outbox and holds; do not set the physical `deleted_at` tombstone or invent an erasure deadline. Both held and unheld requests return 204; other recipients receive concealed 404. Message erasure approval and an approved purge workflow/privacy-policy timing remain explicit release gates. This operation performs no storage deletion or email delivery.
 
 ---
 
@@ -1918,3 +1923,207 @@ The DB references private `evidence_storage_path`, but this API document offers 
 - [ ] Staging end-to-end pilot tests completed.
 
 **End of Document 3 — API Contract & OpenAPI Specification.** The next document should be **AI Agent Instructions & Coding Standards** or the agreed next technical artifact. The comprehensive UI/UX screen and navigation specification remains **last**, as requested.
+
+
+### Task 5.3 implementation clarification — development acceptance, 2026-10-16
+
+API-241 verification explicitly supplies `bank_verified`, `bank_match_reference`, `settled_amount` (two-place decimal string), `settled_currency` and nonempty `reason`. These are authorized finance assertions following an independent ledger check, never customer settlement evidence. API-211 takes `filename`, `content_type`, `bytes_size` and `sha256`; API-212 uses the documented `upload_token` and `sha256`. The configured private bucket enforces a 5 MB maximum. Response distinguishes `upload_expires_in_seconds=7200` (Supabase capability lifetime) from `finalize_expires_in_seconds=300` (application receipt deadline); provider acceptance remains separately gated.
+
+API-240 returns minimal private payer details and evidence IDs to finance+MFA, with audited access. The additive `GET /admin/payment-evidence/{evidence_id}` retrieval extension implements the required separately authorized evidence access: finance+MFA is rechecked on every request, actual object hash/content is checked, and an audited no-store attachment is returned rather than a public URL. OpenAPI operation ID: `payment-evidence-read`. This endpoint does not alter retention or authorize deletion. Screenshots remain optional and cannot approve payments. Unconfigured storage fails closed; malware scanning, bucket ACLs and live provider checks are not implied by simulated acceptance.
+
+
+### Task 5.4 implementation clarification — development verification, 2026-10-17
+
+API-233 and API-213 implement staff print history and owner-only summaries. API-234 uses `{reason, expected_revision}` with idempotency; first explicit enqueue uses revision 0, retry/reprint uses the current revision. Bindings, copy counts, assets/copy/dimensions and HTTPS QR URLs are frozen in the encrypted durable render payload, with its digest stored on the immutable print job. `render_config` retains its existing safe scalar fields; no cleartext token/credential manifest is added there. Reprints never change QR identities. Automated paid-order enqueue is gated by disabled-by-default printing configuration and remains independent of finance sync.
+
+API-236 implements the short-lived private access requirement with a five-minute, actor-bound application grant (`grant_id`, `download_token`, `download_url`, `expires_at`, `filename`). The additive `POST /admin/print-downloads` (`print-download-redeem`) accepts `{grant_id, download_token}` and requires current operations+MFA authorization on every redemption. The grant is single-use and audited; object/hash/retention/payment/current QR checks precede a no-store PDF attachment. No persistent/public Storage URL is returned. Grant creation does not mark the file downloaded or shipped.
+
+API-237 uses `{approved, artifact_sha256, observed:[{tag_type,symbol_mm,copies}], scan_passed, logo_quiet_zone_passed, bilingual_passed, cutting_packaging_passed, actual_scale_passed, reason}`. Sizes are decimal strings; positive counts aggregate by type/size and must exactly match the frozen order on approval. All confirmations are explicit human physical observations; synthetic fixtures do not approve retail artwork/materials. History is append-only and artifact-specific. API-094 remains the distinct pair/concealed-credential QA path. Staff job/QA UI follows ADM-26 `/admin/print-jobs/[jobId]`; arbitrary template design/publishing remains P1 disabled.
+
+
+### Task 5.5 contract clarification — fulfillment implementation
+
+API-061 cursor is opaque base64url JSON `[created_at,id]`, descending by both fields, bounded limit 1–100. API-062 includes `items`, `qr_uses`, `pair_units`, `pair_count`, `print_status` and owner-only `shipping_snapshot`; monetary values are decimal strings. API-066 contains safe carrier/tracking/server timestamps without internal notes or private print URLs.
+
+API-232 requires operations+MFA. Default/allocated/packed filters include only current paid-allocation and latest artifact-specific physical QA plus latest pair-QA eligibility. Each result distinguishes `packing_pending` from `ready_to_ship`; explicit dispatched/delivered/exception/returned filters return `shipment_history`. Results are cursor-paged and expose destination reference/city, immutable line/copy summaries and safe shipment state, not full recipient data.
+
+API-095 requires canonical Idempotency-Key, `order_id`, `shipping_address_id`, complete unique `pair_ids`, bounded `carrier` and `reason`. Returns shipment ID, order ID, preparing status and authorized immutable shipping snapshot. Duplicate same-key payload replays; changed payload is 409; another-key duplicate order shipment is 409. The P0 complete-order path does not support partial shipments or inferred subset contents.
+
+API-096 requires canonical Idempotency-Key, `expected_status`, `status`, `reason`, and optional `tracking_reference`/`packing_confirmed`. Stale expected state is 412; unordered transition is 409; packing without explicit confirmation and dispatch without tracking are 422. preparing→packed/exception; packed→dispatched/exception; dispatched→delivered/exception/returned; exception→returned; terminal delivered/returned. Server creates immutable stage timestamps. Delivery is reasoned audited manual confirmation; carrier webhooks and automatic policy-bound cleanup are not enabled.
+
+Canonical API-081 `GET /admin/orders/{order_id}` returns safe order/line/copy/status detail to operations/finance+MFA. Only operations receives the purchase shipping snapshot, with an address-read audit in the same transaction. The existing approved order route supports address retrieval; no new shipment GET endpoint is introduced. All reads/receipts are no-store; no shipment endpoint returns payment evidence, QR tokens, activation inserts, persistent storage URLs or finance identifiers.
+
+The operations eligibility decision runs through the API-only, pinned-search-path `sr_fulfillment_eligible(uuid)` boolean function in 0018. Operations actors still cannot read finance payment-attempt rows through RLS. The function exposes no settlement identifiers and is not executable by anonymous/authenticated browser roles or the worker. Deferred shipment/membership triggers independently reject incomplete allocated contents or missing current QA/settlement at commit. Existing payment, immutable shipping and physical pair-QA guards remain intact.
+
+The exception filter also exposes already-created preparing/packed/dispatched shipments whose current eligibility is false, so paid/QA changes cannot silently hide paused packages. A narrowly scoped existing shipment-guard correction permits only downward exception/return transitions after refund/dispute; it never permits packing/dispatch/delivery without matching verified settlement.
+
+
+### Task 5.6 recovery contract clarification (2026-10-18)
+
+API-243/244 approved staff means security_admin or superadmin with verified MFA,
+aligned with existing database RLS; operations and finance can inspect permitted
+artifact metadata but cannot place/release legal holds. Hold placement after a
+committed deletion intent returns 409, before any hold mutation. Existing
+multiple active hold reasons are preserved until explicitly released. API-242
+includes `cleanup_job` metadata (job ID, status, attempts, safe error code) and
+reflects parent-order holds without disclosing their private details. API-238
+also exposes exhausted/crashed finance jobs as failed; API-239 reuses an existing
+active job and never mutates settlement or fulfillment.
+
+**API-245 `POST /admin/storage/artifacts/{artifact_id}/cleanup-retry`** requires
+security_admin/superadmin + MFA, strict JSON `{ "reason_code": "APPROVED_REPLAY" }`.
+Returns 202 `{ "job_id": "uuid" }`, or 404 when no cleanup job exists. An exhausted
+job is rearmed with an append-only audit recording the reason and previous
+attempt count; repeating while active does not create another job/audit. Normal
+policy, holds and workflow checks remain mandatory on every newly authorized
+cleanup. A previously committed remote-delete intent is recovered idempotently
+against the same immutable key; it cannot admit a new conflicting hold/reprint.
+No retention duration, approval or external Sheet configuration is implied.
+
+### Task 2.3A — staff MFA bootstrap contract
+`GET /api/v1/me/staff-security` (`staffSecurity`): requires verified email and
+existing authenticated live-session guard. Returns only caller active explicit
+`roles: string[]` and `mfa_verified: boolean` from signed JWT plus live session
+AAL. AAL1 permits setup only; no staff 403, invalid/revoked session 401,
+unavailable verification 503. Always no-store. No credential/factor/role writes.
+Privileged endpoints keep explicit role lists and MFA requirements. Supabase
+TOTP server actions require exact Origin, fresh staff state before mutation and
+after verification. Fixed return paths only; destination APIs retain permission
+checks. Lost-factor entry provides controlled security-owner escalation only.
+
+### Task 5.7A — staff console capability contract
+Extends `GET /api/v1/me/staff-security` with `capabilities: string[]`. The existing
+live session, verified email, active-role and signed/live AAL checks remain.
+AAL1 has an empty capability list. AAL2 receives the union of these explicit
+role permissions, with no superadmin inheritance:
+
+| Capability | Exact active roles | Existing endpoints/pages |
+| --- | --- | --- |
+| `catalog.manage` | operations, security_admin, superadmin | catalog administration; /admin/products |
+| `payments.review` | finance | payment review; /admin/payments |
+| `fulfillment.manage` | operations | ready-to-ship and shipping; /admin/ready-to-ship, /admin/shipments |
+| `printing.manage` | operations | contextual print detail; /admin/print-jobs/[jobId] |
+
+Support can enter the console with MFA but has no implemented module links yet.
+Every console page checks current capabilities server-side before rendering its
+module, including direct URL/RSC requests. Existing endpoint role checks remain
+authoritative on every read/write. Capability responses are never persisted.
+Post-login /auth/continue revalidates provider/session, keeps signed activation
+returns, sends customers to /account and staff to MFA then /admin. Recovery
+callbacks keep /auth/reset-password precedence. No arbitrary return URL, new
+staff grants, dashboard aggregates or new database access is introduced.
+
+### Task 3.5A — inventory read projections (API-084/085/091/092/230)
+All five reads require the existing verified live session, email, signed/live
+MFA and **explicit operations role** on every request. Finance, support,
+security_admin and superadmin do not inherit operations. Existing RLS remains.
+Every success/denial is no-store. No activation verifier/key, sealed insert,
+public token/URL, customer profile/contact/address or QA free text is projected.
+No generation/allocation/release/export/QA writer is added or changed.
+
+- API-084 accepts exact `pair_reference`, `batch_id`, `inventory_status`,
+  `ownership_status`, `limit` (1–100, default 20) and `cursor`. Returns
+  `{items:[PairMetadata],next_cursor}` ordered by immutable `(created_at,id)`
+  descending. PairMetadata: pair_id/reference, batch_id, inventory/ownership
+  statuses, created_at, current_tags, latest_qa (round/approved/inspected_at or null).
+- API-085 returns PairMetadata plus `live_allocation` (unit_id, order_id, status,
+  reserved_until, allocated_at, or null) and `historical_tags:{items,next_cursor}`.
+  Replacement history uses `history_limit` (1–100/default 20), `history_cursor`.
+  Tag metadata is qr_id/type/serial/public_status/replaces_qr_id/created_at only.
+  Current tags are separate from historical replacements; no owner ID required.
+- API-091 accepts exact `batch_label`, batch `status`, `limit`, `cursor`. Returns
+  `{items:[BatchMetadata],next_cursor}` with the same stable descending ordering.
+- API-092 returns BatchMetadata: batch_id/label/status, created_at/generated_at,
+  printed_at/qa_approved_at, ecc_level/material/template/environment and
+  pair_count/current_tag_count/historical_tag_count/qa_passed_pair_count.
+  Printed/QA timestamps are existing records, not a claim of physical release.
+  No export job/status is invented for the still-unimplemented API-093.
+- API-230 returns `as_of`, pair_count, current_tag_count, historical_tag_count,
+  available_pairs, reserved_pairs, allocated_pairs, qa_held_pairs, active_pairs,
+  low_stock_threshold, low_stock, last_batch (id/label/status/generated_at or null).
+  Pair counts never multiply by tags/QA/allocation-history rows. Available means
+  exactly the existing `sr_checkout_reserve` predicate: unclaimed + qa_passed,
+  no reserved/allocated order_pair_unit, exactly two current unactivated tags,
+  unused activation credential. It is the full count, not the customer capacity
+  helper's capped 100. A reservation stays reserved even after its timer until
+  the existing reviewed release workflow actually changes its state. Allocated
+  counts live allocated units; qa_held means generated/printed/rejected inventory;
+  active means ownership_status=active. These are independent counts, not a
+  partition to sum. No stock is inferred from physical printed-copy quantities.
+
+`SAFERETURN_INVENTORY_LOW_STOCK_THRESHOLD` is optional, default unset. Unset means
+both threshold and indicator are null (unknown); an approved configured value
+sets `low_stock = available_pairs < threshold`. No production threshold is
+chosen or alert/notification writer added. Threshold approval remains a gate.
+Malformed/bounded queries/cursors return safe 422, missing detail 404, role/MFA
+403, invalid/revoked session 401, verification/database failure 503. Cursors are
+bounded opaque timestamp/UUID locators, not authorizations or snapshot tokens;
+concurrent committed additions sort ahead, and each statement uses one database
+snapshot. Current fields remain current on later pages. No migration is needed
+unless measured query plans justify one; review and rehearse it first.
+
+### Task 5.5A contract amendment — order and shipment discovery
+The prior 5.5 record intentionally introduced no shipment GET contract. This
+amendment supplies the missing metadata reads identified in UI §11.3, reviewed
+against existing shipment state/role/eligibility rules for Task 5.5A. It does not
+change API-095/096 writers, address access or role grants.
+
+- **API-080 GET /admin/orders**: existing operations/finance + verified live
+  session/email/MFA. Fixed `sort=newest|oldest` (default newest), `limit=1..100`
+  (20), cursor; exact `order_number`, order_status, payment_status,
+  fulfillment_status and UTC-aware `created_from` inclusive / `created_before`
+  exclusive. Date range must be ordered. All search values bound parameters.
+  Returns `{items,next_cursor}` sorted by immutable `(created_at,id)` with
+  matching direction. Common fields: order_id/number/statuses, currency_code,
+  exact decimal-string total_pkr, created_at, placed_at, projection discriminator.
+  Finance projection contains only common fields. Operations adds shipment_count,
+  latest_shipment metadata (or null) and current fulfillment_eligible. No customer
+  identifier/contact/address, bank identifier, evidence or print URL is returned.
+- **API-246 GET /admin/shipments**: explicit operations + verified live MFA.
+  Same limit/cursor/sort and created-date boundaries (shipment creation date),
+  exact order_id/order_number, shipment status, carrier and tracking_reference;
+  optional requires_review filters only active preparing/packed/dispatched
+  packages whose order currently fails existing sr_fulfillment_eligible.
+  Returns `{items,next_cursor}` of ShipmentSummary: shipment_id, order_id/number,
+  status, carrier/tracking, created_at, packed_at/dispatched_at/delivered_at,
+  pair_count, fulfillment_eligible, requires_review. Stored state is never
+  rewritten to a derived exception. Every package is independently paginated;
+  multiple packages for an order cannot multiply order summaries.
+- **API-247 GET /admin/shipments/{shipment_id}**: same operations guard; returns
+  ShipmentSummary plus `pairs:{items,next_cursor}`. Pair metadata is pair_id,
+  packed_qa_confirmed, packed_at only. `pair_limit=1..100` (20) and opaque UUID
+  pair_cursor paginate immutable pair IDs ascending. No packed-by identity,
+  QR tokens/profiles, payment/bank/evidence/storage fields or shipping address.
+  Existing API-081 remains the only operations purchase-address read, with its
+  existing atomic audit. Finance cannot call API-246/247 even for its own order.
+
+All reads are no-store. Admission guards and current SQL role predicates retain
+explicit roles (no security_admin/superadmin inheritance); operations+finance
+gets operations projection. Cursor locators are bounded, typed and never grant
+access; each request rechecks authorization. New writes committed ahead of a
+cursor do not disturb older-page ties; mutable statuses/eligibility remain
+current, not snapshot claims. Invalid filters/cursors/date ranges 422, missing
+shipment 404, wrong role/MFA 403, invalid/revoked session 401, unavailable
+verification/database 503. Existing state vocabulary is preparing/packed/
+dispatched/delivered/exception/returned; no carrier calls, actual dispatch,
+notifications or physical approval are authorized by reading these projections.
+
+### Task 5.7H implementation clarification — canonical API-101/102 (2026-10-19)
+
+This clarification implements the existing ops/security contracts, not new endpoints or roles. Both routes require explicit `operations` OR `security_admin`, verified email, live session and genuine MFA; finance/support/superadmin alone are denied. No implicit role inheritance.
+
+API-101 accepts `limit=1..100` (20), descending immutable `(created_at,id)` cursor, exact `status=pending|leased|retry|sent|dead`, and exact `id` UUID. Exact-ID results may include descending bounded attempts (`attempt_limit=1..100`, default 20, `attempt_before` positive integer). The response is `{items,next_cursor,current_template}`. Each item is fixed metadata: id, event_type, status, attempt_count, created_at, next_attempt_at, lease_until, sent_at, safe allowlisted error code, first_attempt_at, due_lag_seconds, retry_blocked_reason and (exact-ID only) bounded attempts/next_attempt_before. Attempts expose number/outcome/timestamps/safe code only. Provider acceptance (`sent`) does not prove inbox receipt or physical item return. No recipient/aggregate/customer/message IDs, email, body, coordinates, ciphertext, provider message ID, provider key, lease-owner identity or private links. Unknown provider codes become `provider_failure`. Lag is per-event due age, not invented worker-health telemetry or an alert threshold.
+
+API-102 requires Idempotency-Key (8..160 approved characters) and closed JSON `{expected_attempt_count: integer >= 1, reason: "provider_recovered"|"recipient_reverified", confirmed: true}`. Returns 202 `{id,status:"retry",expected_attempt_count}` as a command receipt, not current delivery state. Atomically lock event, recheck current role/recipient/message eligibility, require dead state and matching attempt count, remaining configured attempt budget, known recoverable code, no successful historical attempt, and first attempt strictly less than 23 hours old. Active/leased/sent events, missing/deleted/ineligible recipient/message, unknown event/payload, exhausted budget, unknown failure, old/ambiguous sends are refused (409); stale attempt count 412; missing event 404; reused key with changed request 409; invalid input 400/422; auth/role 401/403; unavailable DB/crypto 503. Audit and acknowledgment are atomic and same-key replay is scoped to actor/event; retry preserves attempt history, original provider key, recipient snapshot and counters. No send occurs in an API request. Worker revalidates eligibility and the same original provider key before its fenced send. No budget reset or bulk retry.
+
+Template operations are read-only: expose the current fixed worker template identifier and content fingerprint, with historical template version explicitly `not_recorded`. Payload schema version is not a template version. Copy/domain review remains 4.4C; no template editor, publication, selectable replacement, or retrospective claim of review is introduced. No separate detail API: `/admin/notifications/[id]` consumes exact-ID API-101.
+
+### Task 5.7I — canonical case scope clarification (2026-10-19)
+
+The owner approved: support sees redacted unassigned queue metadata, may atomically claim an unassigned case for itself, and reads/writes private notes only on its own assigned cases; other agents' cases return 404. Reassignment, security-only holds and high-risk resolutions remain unavailable until separately authorized. Legacy account-deletion reasons remain restricted. Closing a case performs no erasure, ownership or payment action.
+
+Implement existing API-097/098/099 only, with explicit support role, verified email/live session and MFA. Security_admin/superadmin/operations/finance alone have no inherited support access. API-097 accepts limit 1..100 (20), descending immutable created_at+UUID cursor, exact case_id/type/status/priority and queue=unassigned|mine|all (all means only mine plus redacted unassigned). Exact-ID read is the documented detail transport; no new detail API. Unassigned detail is metadata only and permits a self-claim for open/investigating cases. Assigned-other and absent IDs both produce 404 for exact read/update. Queue never includes descriptions, notes, subject IDs or private context. Exact assigned detail may include existing order/pair/opener references, new-format description, bounded append-only event/actor metadata and decrypted own-case notes (event_limit 1..100, before_revision positive integer). Legacy descriptions/account-deletion reasons are never decrypted by this console; source is identified from the existing audit marker without exposing its body. Historical gaps are explicit, not fabricated.
+
+API-098 closed JSON: case_type=activation|lost_tag|payment|privacy|ownership_dispute|other, priority=low|normal|high|urgent (normal), optional pair_id/order_id, description 4..2000 characters. New intake is assigned to the creating support agent. Validate optional references and pair/order relationship without exposing unrelated customer data. API-099 closed JSON: expected_revision positive integer, action=claim|update; update may contain next status, priority and/or note 4..2000 characters, with explicit confirmed=true. Claim only assigns the current actor; no arbitrary assignee or reference rewrite. Normal transitions are open→investigating→resolved→closed; notes/priority may change without a status transition while nonterminal. Closed cases are immutable; no reopening. Payment/privacy/ownership-dispute cases may be investigated/noted but cannot be resolved/closed through this console; escalation is a recorded requirement, not a new privileged operation. Active legal holds block resolution/closure; the console cannot create/release holds. Related order locks preserve existing retention/print/deletion admission and hold serialization. No new shipping/finance/QR reader or physical/retention approval is introduced.
+
+Writes require actor-scoped Idempotency-Key, stable encrypted command receipts and atomic case/event/minimal audit commits. Case revision fences concurrent claim/edit/stale forms; append-only notes remain AEAD encrypted and bound to event UUIDs. No prior note/history deletion or plaintext logging. Missing/foreign case 404, stale revision 412, closed/illegal/high-risk/held transitions or conflicting context 409, invalid JSON/extra fields/bounds 422, missing/invalid key 400, auth/role 401/403, unavailable crypto/database 503. Safe validation errors never echo notes. Reads are private/no-store; private detail reads are audited. Existing API-023 encryption and its original records remain unchanged; actual export/erasure remains 5.7J/K.
