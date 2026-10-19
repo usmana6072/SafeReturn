@@ -26,10 +26,12 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const initialName = typeof session.user.user_metadata.display_name === "string"
     ? session.user.user_metadata.display_name.slice(0, 120) : "";
   return <AuthShell ur={ur}><h1>{ur ? "آپ کا اکاؤنٹ" : "Your account"}</h1>
+    <Link className="text-link" href="/dashboard">{ur ? "میرے QR کوڈز" : "My QR dashboard"}</Link>
     <p>{account.email_verified ? (ur ? "ای میل کی تصدیق ہو چکی ہے۔" : "Email confirmed.")
       : (ur ? "حساس تبدیلیوں سے پہلے ای میل کی تصدیق کریں۔" : "Confirm your email before sensitive changes.")}</p>
     {params.saved === "1" && <p role="status">{ur ? "تبدیلیاں محفوظ ہو گئیں۔" : "Changes saved."}</p>}
     {params.logout === "failed" && <p role="status">{ur ? "لاگ آؤٹ نہیں ہو سکا۔ دوبارہ کوشش کریں۔" : "Logout could not be completed. Please try again."}</p>}
+    <p><Link href="/admin/security/mfa">Staff security / MFA</Link></p>
     <AccountForm account={account} initialName={initialName} ur={ur} />
     <form action={logout} className="logout-form"><button className="button secondary">{ur ? "لاگ آؤٹ" : "Log out"}</button></form>
   </AuthShell>;

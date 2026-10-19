@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { authClient, verifiedSession, accountRequest } from "../../lib/auth/server";
 import { authConfig } from "../../lib/auth/config";
 import { recoveryAllowed } from "../../lib/auth/recovery";
+import { readTicket, ScanTicket, ActivationTicket } from "../../lib/scan-ticket";
 
 export type FormState = { status: "idle" | "error" | "confirmation" | "saved";
   reason?: "invalid" | "denied" | "unavailable" | "limited" | "email_limited" | "stale" };
@@ -57,7 +58,11 @@ export async function submitIdentity(mode: "login" | "signup", _previous: FormSt
     signedIn = !!result.data.session;
     if (!signedIn) return { status: "confirmation" };
   } catch { return { status: "error", reason: "unavailable" }; }
-  if (signedIn) redirect("/account");
+  if (signedIn) {
+    const scan = readTicket<ScanTicket>((await cookies()).get("sr-scan")?.value, "scan");
+    const activation = readTicket<ActivationTicket>((await cookies()).get("sr-activation")?.value, "activation");
+    redirect(scan || activation ? "/activate" : "/auth/continue");
+  }
   return { status: "error", reason: "unavailable" };
 }
 

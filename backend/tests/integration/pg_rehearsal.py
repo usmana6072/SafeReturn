@@ -41,7 +41,22 @@ def metadata(c, expected_revision=None):
             "SELECT rolname,rolsuper,rolbypassrls,rolcreatedb,rolcreaterole FROM pg_roles WHERE rolname LIKE 'safereturn_%' ORDER BY rolname"
         )
     ).all()
-    assert len(tables) == 40 and all(row[1] for row in tables)
+    expected_tables = (
+        44
+        if revision == "0021_support_case_console"
+        else 43
+        if revision
+        in {
+            "0017_print_download_grants",
+            "0018_fulfillment_eligibility",
+            "0019_retention_recovery",
+            "0020_notification_operations",
+        }
+        else 41
+        if revision == "0016_checkout_quotes"
+        else 40
+    )
+    assert len(tables) == expected_tables and all(row[1] for row in tables)
     runtime = [
         row
         for row in roles
@@ -122,7 +137,7 @@ class Rehearsal:
 
 
 @contextmanager
-def rehearsal():
+def rehearsal(*, expected_revision=None):
     url = os.environ.get("SAFERETURN_TEST_DATABASE_URL")
     if not url:
         raise RuntimeError(
@@ -131,6 +146,8 @@ def rehearsal():
     engine = create_engine(
         database_url(url),
         hide_parameters=True,
+        pool_pre_ping=True,
+        pool_recycle=120,
         pool_size=4,
         max_overflow=0,
         connect_args={
@@ -159,7 +176,7 @@ def rehearsal():
     created = False
     try:
         with engine.begin() as c:
-            baseline = metadata(c)
+            baseline = metadata(c, expected_revision=expected_revision)
             installed_catalog = catalog(c)
             assert not c.execute(
                 text(
@@ -175,7 +192,7 @@ def rehearsal():
             c.execute(text(f"CREATE SCHEMA {auth}"))
             c.execute(
                 text(
-                    f"CREATE TABLE {auth}.users(id uuid PRIMARY KEY,email_confirmed_at timestamptz,deleted_at timestamptz,banned_until timestamptz,is_anonymous boolean DEFAULT false)"
+                    f"CREATE TABLE {auth}.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,deleted_at timestamptz,banned_until timestamptz,is_anonymous boolean DEFAULT false)"
                 )
             )
             c.execute(
@@ -235,9 +252,9 @@ def rehearsal():
                             c.execute(text(f"DROP ROLE {name}"))
                 with engine.connect() as c:
                     c.execute(text("SET search_path=public,pg_catalog"))
-                    assert metadata(c) == baseline, (
-                        "Installed metadata/data changed during rehearsal"
-                    )
+                    assert (
+                        metadata(c, expected_revision=expected_revision) == baseline
+                    ), "Installed metadata/data changed during rehearsal"
                     assert catalog(c) == installed_catalog
                     assert (
                         c.execute(
