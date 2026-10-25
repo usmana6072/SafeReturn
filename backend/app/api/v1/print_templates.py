@@ -848,6 +848,8 @@ class QAStateView(Closed):
     review_version: int = Field(ge=0)
     status: Literal["pending", "approved", "rejected"]
     can_review: bool
+    publication_status: Literal["draft", "pending_qa", "published", "retired"]
+    published_at: datetime | None
     history: list[QAReviewView] = Field(max_length=20)
 
 
@@ -869,7 +871,7 @@ class QADecision(Confirmed):
 
 
 def review_available(context):
-    if not context.session.execute(text("SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('public.template_qa_reviews') AND attname='evidence_kind' AND NOT attisdropped) AS template_qa_reviews_available")).scalar_one():
+    if not context.session.execute(text("SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('public.print_template_revisions') AND attname='manual_review_id' AND NOT attisdropped) AS template_qa_reviews_available")).scalar_one():
         fail(503, "PROVIDER_UNAVAILABLE")
 
 
@@ -889,4 +891,7 @@ def qa_decision(template_id: UUID, revision_id: UUID, body: QADecision, request:
     if request.headers.getlist("origin") != [request.app.state.settings.print_template_web_origin]:
         fail(403, "TEMPLATE_ORIGIN_MISMATCH")
     review_available(context)
-    return command(context, request, "manual_review_decide", body, template_id=str(template_id), revision_id=str(revision_id))
+    result = command(context, request, "manual_review_decide", body, template_id=str(template_id), revision_id=str(revision_id))
+    from app.db.template_registry import RegistryRepository
+    result["result"] = RegistryRepository(context).call("manual_review_status", {"template_id": str(template_id), "revision_id": str(revision_id)})
+    return result

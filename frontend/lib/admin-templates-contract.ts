@@ -258,9 +258,9 @@ export function templateQuery(action: Action, p: URLSearchParams): URLSearchPara
 }
 
 export type QAReview = { review_id: string; revision_id: string; revision_row_version: number; review_version: number; decision: 'approved' | 'rejected'; review_note: string; reviewer_user_id: string; reviewer_human_id: string | null; evidence_kind: 'signed_evidence' | 'manual_print'; preview_fingerprint: string | null; approval_id: string | null; decided_at: string };
-export type QAState = { revision_id: string; revision_row_version: number; review_version: number; status: 'pending' | 'approved' | 'rejected'; can_review: boolean; history: QAReview[] };
+export type QAState = { revision_id: string; revision_row_version: number; review_version: number; status: 'pending' | 'approved' | 'rejected'; can_review: boolean; publication_status: Revision['status']; published_at: string | null; history: QAReview[] };
 export function qaRecord(value: unknown): QAState {
-    const o = object(value); exact(o, ['revision_id', 'revision_row_version', 'review_version', 'status', 'can_review', 'history']);
+    const o = object(value); exact(o, ['revision_id', 'revision_row_version', 'review_version', 'status', 'can_review', 'publication_status', 'published_at', 'history']);
     if (typeof o.can_review !== 'boolean' || !Number.isSafeInteger(o.review_version) || Number(o.review_version) < 0 || !Array.isArray(o.history) || o.history.length > 20) bad('qa');
     const revision_id = uuid(o.revision_id);
     const history = (o.history as unknown[]).map(value => {
@@ -272,5 +272,8 @@ export function qaRecord(value: unknown): QAState {
     });
     const status = one(o.status, ['pending', 'approved', 'rejected']);
     if ((history[0]?.review_version ?? 0) !== o.review_version || (history[0]?.decision ?? 'pending') !== status) bad('qa');
-    return { revision_id, revision_row_version: positive(o.revision_row_version), review_version: o.review_version as number, status, can_review: o.can_review, history };
+    const publication_status = one(o.publication_status, ['draft', 'pending_qa', 'published', 'retired']);
+    const published_at = o.published_at === null ? null : stamp(o.published_at);
+    if (['published', 'retired'].includes(publication_status) !== (published_at !== null)) bad('publication');
+    return { publication_status, published_at, revision_id, revision_row_version: positive(o.revision_row_version), review_version: o.review_version as number, status, can_review: o.can_review, history };
 }
