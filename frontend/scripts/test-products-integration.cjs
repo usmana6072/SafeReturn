@@ -32,7 +32,7 @@ async function main(){const h=createHarness(),{state,relay}=h;const contract=h.l
  for(const method of ['HEAD','OPTIONS','PUT','PATCH','DELETE'])await status(relay[method](),405);
  assert.throws(()=>contract.productBody({...product,lifecycle_status:'published'},true));assert.throws(()=>contract.variantBody({...variant,unit_price:'1.00'}));
  const partial=contract.parseProduct({...state.product,price_per_copy:null,variants:[{...v,unit_price:null}],images:[]});assert.equal(partial.price_per_copy,null);assert.equal(partial.variants[0].unit_price,null);
- for(const call of state.calls){contract.target(call.path.replace('/api/v1',''),call.method);assert.equal(call.options.cache,'no-store');assert.equal(call.options.redirect,'error');}
+ for(const call of state.calls){if(call.path.startsWith('/api/v1/admin/print-templates')){assert.equal(call.method,'GET');h.load(require('node:path').resolve(__dirname,'../lib/admin-templates-contract.ts')).templateTarget(call.path.replace('/api/v1',''),call.method);}else contract.target(call.path.replace('/api/v1',''),call.method);assert.equal(call.options.cache,'no-store');assert.equal(call.options.redirect,'error');}
  console.log('PASS '+checks+' relay/contract checks; all 13 product routes, role/MFA/CSRF, sizes, replay/conflicts, media phases, bounds/redaction and default-deny. No network/DB requests.');
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

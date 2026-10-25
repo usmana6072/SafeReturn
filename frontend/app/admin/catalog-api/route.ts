@@ -1,3 +1,5 @@
+import { publishedTemplateChoices, PublishedTemplateError } from '../../../lib/api/published-template-choices';
+import { parseTemplateChoices, templatePath } from '../../../lib/catalog-template-choices';
 import {guardedBackendFetch} from '../../../lib/api/quarantine';
 import { NextRequest, NextResponse } from 'next/server';
 import { verifiedSession } from '../../../lib/auth/server';
@@ -128,7 +130,9 @@ async function relay(request: NextRequest) {
                 return fail(422);
             }
         }
-        const response = await guardedBackendFetch(validateOrigin(process.env.SAFERETURN_API_ORIGIN ?? '') + '/api/v1' + path + (query.size ? '?' + query : ''), { method, cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${session.token}`, Accept: 'application/json', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(key ? { 'Idempotency-Key': key } : {}), ...(version ? { 'If-Match': `"${version}"` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+        const backendOrigin = validateOrigin(process.env.SAFERETURN_API_ORIGIN ?? '');
+        const signal = AbortSignal.timeout(15000);
+        const response = await guardedBackendFetch(backendOrigin + '/api/v1' + path + (query.size ? '?' + query : ''), { method, cache: 'no-store', redirect: 'error', signal, headers: { Authorization: `Bearer ${session.token}`, Accept: 'application/json', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(key ? { 'Idempotency-Key': key } : {}), ...(version ? { 'If-Match': `"${version}"` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
         if (!response.ok) {
             const status = [400, 401, 403, 404, 409, 412, 413, 415, 422, 429].includes(response.status) ? response.status : 503;
             let code: string | undefined;
@@ -148,11 +152,12 @@ async function relay(request: NextRequest) {
             catch { }
             return fail(status, code);
         }
-        const value = parseResult(path, method, await bounded(response, 2 * 1024 * 1024), upload);
+        let value = parseResult(path, method, await bounded(response, 2 * 1024 * 1024), upload);
+        if (method === 'GET' && path === templatePath) value = await publishedTemplateChoices(backendOrigin, session.token, parseTemplateChoices(value), signal);
         return NextResponse.json(value, { status: response.status, headers });
     }
     catch (error) {
-        return fail(error instanceof StaffAccessError && [401, 403].includes(error.status) ? error.status : 503);
+        return fail((error instanceof StaffAccessError || error instanceof PublishedTemplateError) && [401, 403].includes(error.status) ? error.status : 503);
     }
 }
 export const GET = relay;

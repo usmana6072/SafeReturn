@@ -34,7 +34,8 @@ export function useTemplateChoices(enabled: boolean, editor: number) {
   useEffect(()=>{
     const visible=()=>{if(enabled&&document.visibilityState==='visible')void refresh();};
     document.addEventListener('visibilitychange',visible);
-    return ()=>document.removeEventListener('visibilitychange',visible);
+    window.addEventListener('focus',visible);
+    return ()=>{document.removeEventListener('visibilitychange',visible);window.removeEventListener('focus',visible);};
   },[enabled,refresh]);
   const fresh = state.mode==='ready' && performance.now()-received.current<60000;
   return {...state, fresh,refresh};
@@ -44,9 +45,9 @@ type ChoiceState = ReturnType<typeof useTemplateChoices>;
 export function CatalogTemplatePicker({state,templateKey,version,canClear,busy,onChange,ur}:{state:ChoiceState;templateKey:string|null;version:number;canClear:boolean;busy:boolean;onChange:(key:string|null,version:number)=>void;ur:boolean}) {
   const selected=templateKey?choiceId({template_key:templateKey,template_version:version}):'';
   const listed=state.fresh&&state.data?.items.some(i=>choiceId(i)===selected);
-  const message=state.mode==='loading' ? (ur?'ٹیمپلیٹس لوڈ ہو رہے ہیں۔':'Loading configured templates…') : state.mode==='unavailable' ? (ur?'ٹیمپلیٹس کی فہرست دستیاب نہیں۔ دوبارہ کوشش کریں؛ اندراج برقرار ہے۔':'Template list unavailable. Retry; your entries remain.') : !state.fresh ? (ur?'فہرست پرانی ہے۔ انتخاب سے پہلے تازہ کریں۔':'Template list is stale. Refresh before choosing.') : !state.data?.items.length ? (ur?'کوئی کیٹلاگ ٹیمپلیٹ ترتیب نہیں دیا گیا۔':'No catalog templates are configured.') : (ur?'ترتیب شدہ ٹیمپلیٹس دستیاب ہیں۔':'Configured templates available.');
+  const message=state.mode==='loading' ? (ur?'ٹیمپلیٹس لوڈ ہو رہے ہیں۔':'Loading published templates…') : state.mode==='unavailable' ? (ur?'ٹیمپلیٹس کی فہرست دستیاب نہیں۔ دوبارہ کوشش کریں؛ اندراج برقرار ہے۔':'Template list unavailable. Retry; your entries remain.') : !state.fresh ? (ur?'فہرست پرانی ہے۔ انتخاب سے پہلے تازہ کریں۔':'Template list is stale. Refresh before choosing.') : !state.data?.items.length ? (ur?'کوئی کیٹلاگ ٹیمپلیٹ ترتیب نہیں دیا گیا۔':'No published or configured templates are available.') : (ur?'ترتیب شدہ ٹیمپلیٹس دستیاب ہیں۔':'Published templates and configured references available.');
   return <section aria-label={ur?'کیٹلاگ ٹیمپلیٹ کا انتخاب':'Catalog template selection'}>
-    <p>{ur?'ترتیب شدہ کیٹلاگ ٹیمپلیٹس — رینڈرر اور اصل پرنٹ کی جانچ الگ ہیں۔':'Configured catalog templates — physical/renderer checks are separate.'}</p>
+    <p>{ur?'ترتیب شدہ کیٹلاگ ٹیمپلیٹس — رینڈرر اور اصل پرنٹ کی جانچ الگ ہیں۔':'Published templates and configured references — product assignment and rendering checks are separate.'}</p>
     <p role="status" aria-live="polite">{message}</p>
     <label htmlFor="catalog-template-choice">{ur?'کیٹلاگ ٹیمپلیٹ':'Catalog template'}</label>
     <select id="catalog-template-choice" aria-describedby="catalog-template-help" disabled={busy||!state.fresh||!state.data?.items.length} value={listed?selected:''} onChange={e=>{const item=state.data?.items.find(i=>choiceId(i)===e.target.value);if(item&&state.fresh)onChange(item.template_key,item.template_version);}}>
