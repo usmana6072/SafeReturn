@@ -600,15 +600,19 @@ def test_precise_disabled_and_origin_errors(env):
     assert response.json()['error']['code'] == 'TEMPLATE_ORIGIN_MISMATCH'
     assert not db.helper_calls
 
-@pytest.mark.parametrize('age,status',[(301,201),(850,201),(901,403)])
-def test_draft_fifteen_minute_window(env,age,status):
+@pytest.mark.parametrize('age,status',[(301,201),(850,201),(1150,201),(1201,403)])
+def test_draft_twenty_minute_window(env,age,status):
     client,_db,headers,_=env
     response=client.post(BASE,json={'key':'window-test','name':'Window test','purpose':'lost'},headers=headers(amr=[{'method':'totp','timestamp':int(time.time())-age}]))
     assert response.status_code==status
 
 
-def test_sensitive_template_actions_keep_five_minutes(env):
+@pytest.mark.parametrize('age,denied', [(400,False),(1150,False),(1201,True)])
+def test_sensitive_template_actions_twenty_minutes(env,age,denied):
     client,_db,headers,_=env
-    response=client.post(BASE+f'/{TID}/revisions/{RID}/submit-qa',json={'reason':'Reviewed draft'},headers=headers(amr=[{'method':'totp','timestamp':int(time.time())-400}]))
-    assert response.status_code==403
-    assert response.json()['error']['code']=='REAUTH_REQUIRED'
+    response=client.post(BASE+f'/{TID}/revisions/{RID}/submit-qa',json={'reason':'Reviewed draft'},headers=headers(amr=[{'method':'totp','timestamp':int(time.time())-age}]))
+    if denied:
+        assert response.status_code==403
+        assert response.json()['error']['code']=='REAUTH_REQUIRED'
+    else:
+        assert response.json().get('error',{}).get('code')!='REAUTH_REQUIRED'

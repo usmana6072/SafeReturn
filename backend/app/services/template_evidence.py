@@ -10,8 +10,9 @@ from sqlalchemy import text
 
 from app.api.auth import AccessError, authorize, require_staff
 from app.api.v1.catalog import fail
-from app.api.v1.privacy_exports import Confirmed, recent
+from app.api.v1.privacy_exports import Confirmed
 from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt, encrypt
+from app.core.template_auth import recent_template_auth
 from app.core.template_evidence import EvidenceInvalid, envelope_digest, parse, verify
 from app.db.template_registry import RegistryRepository, gate
 
@@ -35,7 +36,7 @@ class EvidenceWithdrawal(Confirmed):
 
 def custody(context, settings):
     require_staff(context, "security_admin")
-    recent(context)
+    recent_template_auth(context)
     if not settings.print_template_management_enabled:
         raise AccessError(503)
     return RegistryRepository(context).call("custody_check", {})
@@ -43,7 +44,7 @@ def custody(context, settings):
 
 def publisher(context):
     require_staff(context, "operations")
-    recent(context)
+    recent_template_auth(context)
     return RegistryRepository(context).call("publisher_check", {})
 
 
