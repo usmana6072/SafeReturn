@@ -324,7 +324,10 @@ def mutation(context, request, operation, body, work):
                 },
             )
             return result
-    except IntegrityError:
+    except IntegrityError as error:
+        original = getattr(error, 'orig', None)
+        if getattr(original, 'sqlstate', None) == '23505' and getattr(getattr(original, 'diag', None), 'constraint_name', None) == 'uq_product_variants_sku':
+            fail(409, 'SKU_ALREADY_USED')
         fail(409, "CATALOG_CONFLICT")
     except ProfileCryptoUnavailable:
         raise AccessError(503) from None

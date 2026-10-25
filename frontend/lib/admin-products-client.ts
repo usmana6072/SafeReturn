@@ -12,6 +12,9 @@ export function productError(error: unknown, ur = false): string {
         return ur ? 'موجودہ کردار یا MFA اس کارروائی کی اجازت نہیں دیتا۔' : 'Your role or MFA does not permit this action.';
     if (status === 404)
         return ur ? 'مصنوعہ دستیاب نہیں۔' : 'The requested record was not found.';
+    if (status === 409 && error instanceof ProductApiError && !['VERSION_MISMATCH', 'IDEMPOTENCY_KEY_REUSED'].includes(error.code)) {
+        return catalogCodeMessage(error.code, ur) ?? 'The variant could not be saved because a SKU or template-binding prerequisite conflicts. Your fields are retained; this does not necessarily mean the product version changed.';
+    }
     if (status === 412 || status === 409)
         return ur ? 'ریکارڈ تبدیل ہو گیا یا درخواست متصادم ہے۔ ان پٹ محفوظ ہے؛ تازہ ورژن لوڈ کر کے دوبارہ تصدیق کریں۔' : 'The record changed or the request conflicts with its current state. Your input is preserved. Load the latest version, review it and confirm before saving again.';
     if (error instanceof ProductApiError && status < 500) {

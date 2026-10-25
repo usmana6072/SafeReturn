@@ -17,7 +17,7 @@ function useCommand() {
     }
     catch (e) {
         setError(productError(e));
-        if (e instanceof ProductApiError && [409, 412].includes(e.status))
+        if (e instanceof ProductApiError && (e.status === 412 || e.status === 409 && ['VERSION_MISMATCH', 'IDEMPOTENCY_KEY_REUSED'].includes(e.code)))
             setStale(true);
     }
     finally {
@@ -74,7 +74,8 @@ export function ProductVariants({ product, reload }: {
 }) {
     const state = useCommand(), [editing, setEditing] = useState(false), [selected, setSelected] = useState<Variant | null>(null), [form, setForm] = useState<VariantBody>({ ...blankVariant }), [epoch, setEpoch] = useState(0), [version, setVersion] = useState<number | null>(null), [parentVersion, setParentVersion] = useState<number | null>(null), base = useRef<VariantBody>({ ...blankVariant });
     const choices = useTemplateChoices(editing, epoch);
-    function select(v: Variant | null) { setSelected(v); const fields = v ? varFields(v) : { ...blankVariant }; base.current = fields; setForm(fields); setVersion(v?.catalog_version ?? null); setParentVersion(product.catalog_version); state.setStale(false); setEditing(true); setEpoch(n => n + 1); }
+    const parentSnapshot = useRef<Product>(product);
+    function select(v: Variant | null) { parentSnapshot.current = product; setSelected(v); const fields = v ? varFields(v) : { ...blankVariant }; base.current = fields; setForm(fields); setVersion(v?.catalog_version ?? null); setParentVersion(product.catalog_version); state.setStale(false); setEditing(true); setEpoch(n => n + 1); }
     async function save() {
         if (state.stale)
             return;
@@ -88,7 +89,24 @@ export function ProductVariants({ product, reload }: {
         }
         if (selected?.is_active && !body.is_active && !window.confirm('Deactivate this size? Existing purchases retain their saved attributes.'))
             return;
-        await state.run(async () => { const saved = await state.command<Variant>(selected ? '/admin/product-variants/' + selected.id : '/admin/products/' + product.id + '/variants', selected ? 'PATCH' : 'POST', body, selected ? (version ?? selected.catalog_version) : (parentVersion ?? product.catalog_version)); setSelected(saved); setVersion(saved.catalog_version); base.current = body; state.setNotice('Size saved by the server.'); setEditing(false); try {
+        await state.run(async () => {
+            if (!selected) {
+                const fresh = await productRequest<Product>('/admin/products/' + product.id);
+                const previous = parentSnapshot.current;
+                if (fresh.lifecycle_status !== previous.lifecycle_status || fresh.qr_type !== previous.qr_type || fresh.commerce_model !== previous.commerce_model || fresh.price_per_copy !== previous.price_per_copy) {
+                    setParentVersion(fresh.catalog_version); parentSnapshot.current = fresh;
+                    state.setStale(true); state.setError('Product type, price or status changed while you were adding this variant. Load the latest variant context and review before saving. Your fields are retained.'); return;
+                }
+                setParentVersion(fresh.catalog_version);
+                parentSnapshot.current = fresh;
+                // The create command is sent once with the freshly read parent
+                // version. The backend still rejects any later concurrent change.
+                const saved = await state.command<Variant>('/admin/products/' + product.id + '/variants', 'POST', body, fresh.catalog_version);
+                setSelected(saved); setVersion(saved.catalog_version); base.current = body; state.setNotice('Size saved by the server.'); setEditing(false);
+                try { await reload(); } catch { state.setError('Size was saved, but refreshing failed. Refresh the page before another change.'); state.setStale(true); }
+                return;
+            }
+            const saved = await state.command<Variant>(selected ? '/admin/product-variants/' + selected.id : '/admin/products/' + product.id + '/variants', selected ? 'PATCH' : 'POST', body, selected ? (version ?? selected.catalog_version) : (parentVersion ?? product.catalog_version)); setSelected(saved); setVersion(saved.catalog_version); base.current = body; state.setNotice('Size saved by the server.'); setEditing(false); try {
             await reload();
         }
         catch {
