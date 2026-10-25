@@ -8,7 +8,7 @@ import { authConfig } from '../../../lib/auth/config';
 import { validateOrigin } from '../../../lib/api/transport';
 import { target, productBody, categoryBody, variantBody, imageBody, parseResult, uuid } from '../../../lib/admin-products-contract';
 const headers = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
-const codes = new Set(['IDEMPOTENCY_KEY_REUSED', 'IDEMPOTENCY_KEY_REQUIRED', 'VERSION_MISMATCH', 'CATALOG_CONFLICT', 'CREATE_AS_DRAFT', 'QR_TYPE_REQUIRED', 'LEGACY_PRODUCT_TYPE', 'ARCHIVED_PRODUCT', 'PRODUCT_PRICE_REQUIRED', 'DUPLICATE_SIZE', 'FUTURE_PRODUCT_DISABLED', 'PHYSICAL_CATALOG_APPROVAL_REQUIRED', 'QR_TYPE_TEMPLATE_APPROVAL_REQUIRED', 'VERIFIED_PUBLIC_IMAGE_REQUIRED', 'INVALID_PUBLIC_ASSET', 'PUBLIC_ASSET_FOLDER_REQUIRED']);
+const codes = new Set(['REAUTH_REQUIRED','TEMPLATE_VARIANT_MISMATCH','TEMPLATE_BINDING_UNAVAILABLE','TEMPLATE_QR_ORIGIN_REQUIRED','IDEMPOTENCY_KEY_REUSED', 'IDEMPOTENCY_KEY_REQUIRED', 'VERSION_MISMATCH', 'CATALOG_CONFLICT', 'CREATE_AS_DRAFT', 'QR_TYPE_REQUIRED', 'LEGACY_PRODUCT_TYPE', 'ARCHIVED_PRODUCT', 'PRODUCT_PRICE_REQUIRED', 'DUPLICATE_SIZE', 'FUTURE_PRODUCT_DISABLED', 'PHYSICAL_CATALOG_APPROVAL_REQUIRED', 'QR_TYPE_TEMPLATE_APPROVAL_REQUIRED', 'VERIFIED_PUBLIC_IMAGE_REQUIRED', 'INVALID_PUBLIC_ASSET', 'PUBLIC_ASSET_FOLDER_REQUIRED']);
 async function bounded(message: Request | Response, max: number): Promise<unknown> {
     if (message.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json')
         throw Error('media');

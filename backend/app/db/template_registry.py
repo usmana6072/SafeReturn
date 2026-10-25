@@ -45,6 +45,8 @@ def result(value):
         raise AccessError(403)
     if isinstance(value, dict) and "error" in value:
         code = value["error"]
+        if code in {'TEMPLATE_VARIANT_MISMATCH', 'TEMPLATE_BINDING_UNAVAILABLE'}:
+            fail(422, code)
         if code in {"FORBIDDEN", "NOT_FOUND", "PROVIDER_UNAVAILABLE"}:
             raise AccessError(
                 {"FORBIDDEN": 403, "NOT_FOUND": 404, "PROVIDER_UNAVAILABLE": 503}[code]

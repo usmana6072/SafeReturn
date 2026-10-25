@@ -1,7 +1,10 @@
 /** Fixed local messages only: never render provider bodies or validation inputs. */
 const messages: Record<string, [string, string]> = {
+  TEMPLATE_VARIANT_MISMATCH: ['The selected template does not match this variant. QR type, exact symbol size and material must match the published design.', 'منتخب ڈیزائن کی QR قسم، سائز اور مواد ویریئنٹ سے ملنا چاہیے۔'],
+  TEMPLATE_BINDING_UNAVAILABLE: ['The published design could not be bound. Refresh the template and variant before retrying.', 'منظور شدہ ڈیزائن منسلک نہیں ہو سکا۔ دوبارہ لوڈ کریں۔'],
+  TEMPLATE_QR_ORIGIN_REQUIRED: ['The public QR page address is not configured for printing. Configure the hosted portal address; the QR opens the owner-selected public details page.', 'پرنٹ کے لیے عوامی QR صفحے کا پتہ درکار ہے۔'],
   LEGACY_PRODUCT_TYPE: ["Legacy pair products retain their original QR model. Create a new product for an independent QR.", "پرانے جوڑے کی قسم برقرار ہے۔ آزاد QR کے لیے نئی مصنوعہ بنائیں۔"],
-  QR_TYPE_TEMPLATE_APPROVAL_REQUIRED: ["Each size needs an approved print design for the selected QR type.", "ہر سائز کے لیے منتخب QR قسم کا منظور شدہ پرنٹ ڈیزائن درکار ہے۔"],
+  QR_TYPE_TEMPLATE_APPROVAL_REQUIRED: ["Each active size needs a valid template binding for its QR type. Select a published design and save the variant; matching size and material are required.", "ہر سائز کے لیے منتخب QR قسم کا منظور شدہ پرنٹ ڈیزائن درکار ہے۔"],
   QR_TYPE_REQUIRED: ['Select Lost or Emergency for this product.', 'مصنوعہ کے لیے Lost یا ایمرجنسی منتخب کریں۔'],
   DUPLICATE_SIZE: ['Each available size must appear only once.', 'ہر دستیاب سائز صرف ایک بار درج کریں۔'],
 

@@ -186,7 +186,9 @@ def test_worker_lease_and_withdrawal_fences_remain_distinct(monkeypatch):
     monkeypatch.setattr(printing, "order_specs", withdrawn)
 
     class DB:
-        def execute(self, sql, params):
+        def execute(self, sql, params=None):
+            if 'to_regprocedure' in str(sql):
+                return Result(False)
             calls.append("lease")
             return Result({"id": "synthetic-lease"})
 

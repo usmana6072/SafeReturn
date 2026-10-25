@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     print_template_management_enabled: bool = False
     print_template_web_origin: str | None = None
     print_template_asset_root: str | None = None
+    print_template_public_origin: str | None = None
     dashboard_enabled: bool = False
     staff_directory_enabled: bool = False
     qr_lifecycle_enabled: bool = False
