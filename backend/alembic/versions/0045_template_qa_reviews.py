@@ -1,11 +1,11 @@
-"""Durable template QA review overlay; source only until separately authorized."""
+"""Durable template QA review overlay; independent of the protected Support branch."""
 from pathlib import Path
 
 from alembic import op
 
 revision = "0045_template_qa_reviews"
-down_revision = "0044_support_dev_exception"
-branch_labels = None
+down_revision = "0043_standalone_activation"
+branch_labels = ("template_qa",)
 depends_on = None
 
 
