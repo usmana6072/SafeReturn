@@ -7,7 +7,7 @@ import { ItemCheckoutCart, ItemConfigurator } from "./item-checkout";
 import { readItemCart } from "../lib/item-cart";
 type Lang="en"|"ur";
 export function KitConfigurator({product,language}:{product:CatalogProduct;language:Lang}) {
- if(product.checkout_available===false)return <section><p role="status">{language==="ur"?"یہ مصنوعہ شائع ہو چکی ہے۔ آن لائن آرڈر ابھی دستیاب نہیں۔":"This product is published. Online ordering is not available yet."}</p><a href="/shop">{language==="ur"?"مصنوعات دیکھیں":"Back to Shop"}</a></section>;
+ if(product.checkout_available===false)return <section><h2>{language==='ur'?'اپنا آرڈر':'Your order'}</h2><button type="button" className="button" disabled>{language==='ur'?'آرڈر کریں':'Order now'}</button><p role="status">{language==="ur"?"یہ مصنوعہ شائع ہو چکی ہے۔ آن لائن آرڈر ابھی دستیاب نہیں۔":"This product is published. Online ordering is not available yet."}</p><a href="/shop">{language==="ur"?"مصنوعات دیکھیں":"Back to Shop"}</a></section>;
  return product.commerce_model==="single_qr"?<ItemConfigurator product={product} language={language}/>:<LegacyKitConfigurator product={product} language={language}/>;
 }
 function LegacyKitConfigurator({product,language}:{product:CatalogProduct;language:Lang}) {
