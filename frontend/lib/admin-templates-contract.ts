@@ -121,9 +121,11 @@ export function design(v: unknown): Design {
 }
 export function createBody(v: unknown) { const o = object(v); exact(o, ['key', 'name', 'purpose']); const key = text(o.key, 'key', 80, 3); if (!/^[A-Za-z0-9._-]+$/.test(key))
     bad('key'); return { key, name: plain(o.name, 'name', 100), purpose: one(o.purpose, ['lost', 'ice'], 'purpose') }; }
-export type Action = 'list' | 'create' | 'detail' | 'revision' | 'edit' | 'preview' | 'submit' | 'retire' | 'bindings' | 'bind' | 'products' | 'product';
+export type Action = 'qa' | 'qa-decision' | 'list' | 'create' | 'detail' | 'revision' | 'edit' | 'preview' | 'submit' | 'retire' | 'bindings' | 'bind' | 'products' | 'product';
 const id = '[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}';
 export function templateTarget(path: string, method: string): Action {
+    const qa = path.match(new RegExp('^/admin/print-templates/' + id + '/revisions/' + id + '/(qa|qa-decision)$'));
+    if (qa && method === (qa[1] === 'qa' ? 'GET' : 'POST')) return qa[1] as Action;
     if (path === '/admin/print-templates' && ['GET', 'POST'].includes(method))
         return method === 'GET' ? 'list' : 'create';
     if (path === '/admin/print-template-bindings' && ['GET', 'POST'].includes(method))
@@ -145,6 +147,13 @@ export function templateTarget(path: string, method: string): Action {
 export function templateBody(action: Action, v: unknown) {
     if (action === 'create')
         return createBody(v);
+    if (action === 'qa-decision') {
+        const o = object(v); exact(o, ['decision', 'reason', 'expected_review_version', 'envelope', 'confirmed']);
+        if (o.confirmed !== true || !Number.isSafeInteger(o.expected_review_version) || Number(o.expected_review_version) < 0) bad('confirmation');
+        const decision = one(o.decision, ['approved', 'rejected']);
+        if (decision === 'approved' ? !o.envelope : o.envelope !== null) bad('evidence');
+        return { decision, reason: plain(o.reason, 'reason', 500, 4), expected_review_version: o.expected_review_version, envelope: o.envelope === null ? null : object(o.envelope), confirmed: true };
+    }
     const o = object(v);
     if (action === 'revision' || action === 'edit') {
         exact(o, action === 'revision' ? ['content', 'version_note', 'base_revision_id'] : ['content', 'version_note']);
@@ -183,6 +192,8 @@ function list<T>(v: unknown, parse: (v: unknown) => T): T[] { if (!Array.isArray
     bad('items'); return v.map(parse); }
 export function templateResult(action: Action, v: unknown): unknown {
     const o = object(v);
+    if (action === 'qa') return qaRecord(v);
+    if (action === 'qa-decision') { exact(o, ['command_id', 'result']); return { command_id: uuid(o.command_id), result: qaRecord(o.result) }; }
     if (action === 'list' || action === 'bindings') {
         exact(o, ['items', 'next_cursor', 'as_of']);
         return { items: action === 'list' ? list(o.items, templateRecord) : list(o.items, bindingRecord), next_cursor: cursor(o.next_cursor), as_of: stamp(o.as_of) };
@@ -244,4 +255,21 @@ export function templateQuery(action: Action, p: URLSearchParams): URLSearchPara
         out.set(key, value);
     }
     return out;
+}
+
+export type QAReview = { review_id: string; revision_id: string; revision_row_version: number; review_version: number; decision: 'approved' | 'rejected'; review_note: string; reviewer_user_id: string; reviewer_human_id: string; approval_id: string | null; decided_at: string };
+export type QAState = { revision_id: string; revision_row_version: number; review_version: number; status: 'pending' | 'approved' | 'rejected'; can_review: boolean; history: QAReview[] };
+export function qaRecord(value: unknown): QAState {
+    const o = object(value); exact(o, ['revision_id', 'revision_row_version', 'review_version', 'status', 'can_review', 'history']);
+    if (typeof o.can_review !== 'boolean' || !Number.isSafeInteger(o.review_version) || Number(o.review_version) < 0 || !Array.isArray(o.history) || o.history.length > 20) bad('qa');
+    const revision_id = uuid(o.revision_id);
+    const history = (o.history as unknown[]).map(value => {
+        const r = object(value); exact(r, ['review_id', 'revision_id', 'revision_row_version', 'review_version', 'decision', 'review_note', 'reviewer_user_id', 'reviewer_human_id', 'approval_id', 'decided_at']);
+        const decision = one(r.decision, ['approved', 'rejected']);
+        if (r.revision_id !== revision_id || (decision === 'approved') !== (r.approval_id !== null)) bad('qa');
+        return { review_id: uuid(r.review_id), revision_id, revision_row_version: positive(r.revision_row_version), review_version: positive(r.review_version), decision, review_note: plain(r.review_note, 'review_note', 500, 4), reviewer_user_id: uuid(r.reviewer_user_id), reviewer_human_id: uuid(r.reviewer_human_id), approval_id: r.approval_id === null ? null : uuid(r.approval_id), decided_at: stamp(r.decided_at) };
+    });
+    const status = one(o.status, ['pending', 'approved', 'rejected']);
+    if ((history[0]?.review_version ?? 0) !== o.review_version || (history[0]?.decision ?? 'pending') !== status) bad('qa');
+    return { revision_id, revision_row_version: positive(o.revision_row_version), review_version: o.review_version as number, status, can_review: o.can_review, history };
 }

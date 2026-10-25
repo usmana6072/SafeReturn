@@ -10,6 +10,18 @@ function createHarness(){
  function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file).exports;const module={exports:{}};cache.set(file,module);const sandbox={module,exports:module.exports,URL,URLSearchParams,AbortSignal,TextDecoder,TextEncoder,Request,Response,Uint8Array,Number,Set,Map,Date,JSON,process:{env:{SAFERETURN_API_ORIGIN:'https://api.templates.invalid'}},crypto:globalThis.crypto,require(name){if(name==='next/server')return require(name);if(name.endsWith('/auth/server'))return {verifiedSession:async()=>state.authorized?{token:'synthetic-token'}:null};if(name.endsWith('/auth/staff')){class StaffAccessError extends Error{}return {StaffAccessError,staffState:async()=>({mfa_verified:state.mfa,roles:[state.role],capabilities:['printing.manage']})};}if(name.endsWith('/auth/config'))return {authConfig:()=>({origin:'https://templates.test'})};if(name.startsWith('.'))return load(path.resolve(path.dirname(file),name)+'.ts');throw Error('Unapproved import '+name);},fetch:upstream};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,sandbox,{filename:file});return module.exports;}
  async function upstream(url,options){const u=new URL(url),p=u.pathname.replace('/api/v1',''),m=options.method,c=load(path.resolve(__dirname,'../lib/admin-templates-contract.ts'));c.templateTarget(p,m);state.calls.push({path:p,method:m,options});
  if(state.status)return Response.json({error:{code:state.errorCode??(state.status===412?'VERSION_MISMATCH':state.status===403?'REAUTH_REQUIRED':'PROVIDER_UNAVAILABLE')},private:'NEVER_RENDER'},{status:state.status});if(state.malformed)return Response.json({private:'NEVER_RENDER'});
+
+ if (p.endsWith('/qa') || p.endsWith('/qa-decision')) {
+  if (!state.reviewState) return Response.json({error:{code:'PROVIDER_UNAVAILABLE'}},{status:503});
+  if (m==='GET') return Response.json(state.reviewState);
+  if (state.role!=='security_admin' || !state.reviewState.can_review) return Response.json({error:{code:'FORBIDDEN'}},{status:403});
+  const body=JSON.parse(options.body);
+  if (state.reviewConflict || body.expected_review_version!==state.reviewState.review_version) return Response.json({error:{code:'VERSION_MISMATCH'}},{status:412});
+  const review_version=state.reviewState.review_version+1;
+  const review={review_id:'00000000-0000-0000-0000-000000000601',revision_id:rid,revision_row_version:1,review_version,decision:body.decision,review_note:body.reason,reviewer_user_id:'00000000-0000-0000-0000-000000000602',reviewer_human_id:'00000000-0000-0000-0000-000000000603',approval_id:body.decision==='approved'?'00000000-0000-0000-0000-000000000604':null,decided_at:stamp};
+  state.reviewState={...state.reviewState,review_version,status:body.decision,can_review:body.decision!=='rejected',history:[review,...state.reviewState.history]};
+  return Response.json({command_id:'00000000-0000-0000-0000-000000000605',result:state.reviewState});
+ }
  if(m==='GET'){
  if(p==='/admin/print-templates')return Response.json({items:u.searchParams.has('cursor')?[]:[state.template],next_cursor:u.searchParams.has('cursor')?null:'opaque_next',as_of:stamp});
  if(p==='/admin/print-templates/'+tid)return Response.json({template:state.template,revisions:state.revisions,next_cursor:null},{headers:{ETag:'"'+state.template.row_version+'"'}});

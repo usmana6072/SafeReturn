@@ -561,7 +561,7 @@ def test_contract_openapi_is_explicit_and_339_unchanged(env):
         if "print-template" in path
         for op in methods.values()
     }
-    assert ids == {f"API-{n}" for n in range(300, 311)}
+    assert ids == {f"API-{n}" for n in range(300, 313)}
     assert (
         paths["/api/v1/admin/catalog/approved-templates"]["get"]["operationId"]
         == "API-339"

@@ -58,13 +58,13 @@ export async function templateRelay(request: NextRequest) {
             else {
                 if (request.nextUrl.search || request.headers.get('content-encoding'))
                     throw Error();
-                const v = object(await json(request, 32768));
+                const v = object(await json(request, 164000));
                 if (Object.keys(v).some(k => !['path', 'method', 'body', 'key', 'version'].includes(k)) || typeof v.path !== 'string' || typeof v.method !== 'string' || v.method === 'GET')
                     throw Error();
                 path = v.path;
                 method = v.method;
                 action = templateTarget(path, method);
-                if (!security.roles.includes('operations') || !security.capabilities.includes('printing.manage'))
+                if (action === 'qa-decision' ? !security.roles.includes('security_admin') : !security.roles.includes('operations') || !security.capabilities.includes('printing.manage'))
                     return fail(403);
                 if (typeof v.key !== 'string' || !/^[A-Za-z0-9._:-]{8,160}$/.test(v.key))
                     throw Error();
