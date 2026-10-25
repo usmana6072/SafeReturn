@@ -147,7 +147,7 @@ def controlled_command(context, settings, operation, idempotency_key, payload, w
                     "kv": kv,
                 },
             )
-            target = UUID(value.get("approval_id", value.get("revocation_id")))
+            target = UUID(value.get("approval_id", value.get("revocation_id", value.get("revision_id"))))
             session.execute(
                 text("""INSERT INTO public.audit_events(actor_user_id,actor_kind,action,target_type,target_id,reason,safe_details)
               VALUES(:actor,'staff',:op,'template_qa',:target,'controlled template evidence command',jsonb_build_object('event_id',CAST(:event AS text),'outcome','success'))"""),

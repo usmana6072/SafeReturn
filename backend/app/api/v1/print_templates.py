@@ -54,7 +54,7 @@ class TemplateRoute(APIRoute):
                     chunks = []
                     async for chunk in request.stream():
                         size += len(chunk)
-                        if size > 32768:
+                        if size > (164000 if request.url.path.endswith("/qa-decision") else 32768):
                             fail(413, "FILE_TOO_LARGE")
                         chunks.append(chunk)
                     request._body = b"".join(chunks)
@@ -826,3 +826,97 @@ def install(application):
             response.headers["Cache-Control"] = "private, no-store"
             response.headers["X-Content-Type-Options"] = "nosniff"
         return response
+
+class QAReviewView(Closed):
+    review_id: UUID
+    revision_id: UUID
+    revision_row_version: int = Field(ge=1)
+    review_version: int = Field(ge=1)
+    decision: Literal["approved", "rejected"]
+    review_note: str = Field(min_length=4, max_length=500)
+    reviewer_user_id: UUID
+    reviewer_human_id: UUID
+    approval_id: UUID | None
+    decided_at: datetime
+
+
+class QAStateView(Closed):
+    revision_id: UUID
+    revision_row_version: int = Field(ge=1)
+    review_version: int = Field(ge=0)
+    status: Literal["pending", "approved", "rejected"]
+    can_review: bool
+    history: list[QAReviewView] = Field(max_length=20)
+
+
+class QADecisionReceipt(Closed):
+    command_id: UUID
+    result: QAStateView
+
+
+class QADecision(Reason, Confirmed):
+    decision: Literal["approved", "rejected"]
+    expected_review_version: int = Field(ge=0, strict=True)
+    envelope: dict | None = None
+
+    @model_validator(mode="after")
+    def evidence_required(self):
+        if (self.decision == "approved") != (self.envelope is not None):
+            raise ValueError("Approval requires signed evidence; rejection excludes it")
+        return self
+
+
+def review_available(context):
+    if not context.session.execute(text("SELECT to_regclass('public.template_qa_reviews') IS NOT NULL AS template_qa_reviews_available")).scalar_one():
+        fail(503, "PROVIDER_UNAVAILABLE")
+
+
+@router.get("/admin/print-templates/{template_id}/revisions/{revision_id}/qa", operation_id="API-311", response_model=QAStateView)
+def qa_status(template_id: UUID, revision_id: UUID, request: Request, context: Authenticated):
+    from app.db.template_registry import RegistryRepository
+    guard(context, request)
+    recent_template_auth(context)
+    query(request, set())
+    review_available(context)
+    return RegistryRepository(context).call("review_status", {"template_id": str(template_id), "revision_id": str(revision_id)})
+
+
+@router.post("/admin/print-templates/{template_id}/revisions/{revision_id}/qa-decision", operation_id="API-312", response_model=QADecisionReceipt)
+def qa_decision(template_id: UUID, revision_id: UUID, body: QADecision, request: Request, context: Authenticated):
+    from app.core.template_evidence import EvidenceInvalid, parse
+    from app.db.template_registry import RegistryRepository
+    from app.services.template_evidence import (
+        controlled_command,
+        custody,
+        import_evidence,
+    )
+    custody(context, request.app.state.settings)
+    origins = request.headers.getlist("origin")
+    if len(origins) != 1 or origins[0] != request.app.state.settings.print_template_web_origin:
+        fail(403, "TEMPLATE_ORIGIN_MISMATCH")
+    version = match(request)
+    keys = request.headers.getlist("idempotency-key")
+    if len(keys) != 1:
+        fail(400, "VALIDATION_ERROR")
+    review_available(context)
+    if body.envelope is not None:
+        try:
+            envelope = parse(json.dumps(body.envelope).encode())
+        except EvidenceInvalid:
+            fail(422, "VALIDATION_ERROR")
+        if envelope.payload.template_id != template_id or envelope.payload.revision_id != revision_id or envelope.payload.revision_row_version != version:
+            fail(412, "VERSION_MISMATCH")
+    payload = body.model_dump(mode="json") | {"template_id": str(template_id), "revision_id": str(revision_id), "expected": version}
+
+    def work():
+        proof = {}
+        if body.envelope is not None:
+            imported = import_evidence(context, request.app.state.settings, json.dumps(body.envelope).encode(), keys[0])
+            proof = {"approval_id": imported["result"]["approval_id"], "verified_evidence_sha256": imported["result"]["evidence_sha256"]}
+        return RegistryRepository(context).call("review_decide", {
+            "template_id": str(template_id), "revision_id": str(revision_id), "expected": version,
+            "decision": body.decision, "review_note": body.reason, "confirmed": body.confirmed,
+            "expected_review_version": body.expected_review_version, **proof,
+        })
+
+    return controlled_command(context, request.app.state.settings, "template.qa.decision", keys[0], payload, work)
