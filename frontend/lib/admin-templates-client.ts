@@ -14,7 +14,7 @@ export function templateError(e: unknown, ur = false) {
         return ur ? 'دوبارہ سائن ان کریں؛ درج شدہ ڈیزائن برقرار ہے۔' : 'Sign in again. Your unsaved design is retained.';
     if (error.code === 'REAUTH_REQUIRED')
         return ur ? 'حساس کارروائی کے لیے دوبارہ تصدیق درکار ہے۔' : 'Recent authentication is required: drafting and synthetic preview allow 15 minutes; QA submission, publication, binding and retirement require 5 minutes. Reauthenticate using the existing sign-in/MFA flow, then review and retry. Your input is retained.';
-    if (error.code === 'PREVIEW_TIMEOUT') return 'The isolated preview worker exceeded its five-second limit. Retry the same intent once; if repeated, inspect Render CPU/memory and worker logs. No preview or approval was produced.';
+    if (error.code === 'PREVIEW_TIMEOUT') return 'The isolated preview worker exceeded its 60-second elapsed-time limit. Retry the same intent once; if repeated, inspect Render CPU/memory and worker logs. No preview or approval was produced.';
     if (error.code === 'PREVIEW_BUSY') return 'Another preview is running. Wait for it to finish, then retry the same intent.';
     if (error.code === 'PREVIEW_WORKER_FAILED') return 'The isolated preview worker failed. Check the deployed worker/assets and Render logs; no preview or approval was produced.';
     if (error.code === 'TEMPLATE_MANAGEMENT_DISABLED')
@@ -53,7 +53,7 @@ export async function templateRequest<T>(path: string, options: {
         templateBody(action, options.body);
     let response: Response;
     try {
-        response = await fetch('/admin/templates/api' + (write ? '' : '?' + q), { method: write ? 'POST' : 'GET', cache: 'no-store', redirect: 'error', signal: options.signal ?? AbortSignal.timeout(25000), headers: write ? { 'Content-Type': 'application/json' } : { Accept: 'application/json' }, body: write ? JSON.stringify({ path, method, body: options.body, key: options.key, version: options.version }) : undefined });
+        response = await fetch('/admin/templates/api' + (write ? '' : '?' + q), { method: write ? 'POST' : 'GET', cache: 'no-store', redirect: 'error', signal: options.signal ?? AbortSignal.timeout(action === 'preview' || action === 'submit' ? 90000 : 25000), headers: write ? { 'Content-Type': 'application/json' } : { Accept: 'application/json' }, body: write ? JSON.stringify({ path, method, body: options.body, key: options.key, version: options.version }) : undefined });
     }
     catch {
         throw new TemplateApiError(503);

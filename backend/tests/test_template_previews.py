@@ -184,6 +184,7 @@ def test_timeout_kills_worker_releases_capacity_and_scrubs_env(
     def communicate(data=None, timeout=None):
         process.count += 1
         if timeout:
+            assert timeout == 60
             raise subprocess.TimeoutExpired("synthetic", timeout)
         return b"", None
 
