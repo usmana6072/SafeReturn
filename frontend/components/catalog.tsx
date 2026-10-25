@@ -3,7 +3,9 @@ import { useRef } from "react";
 import type { Catalog, CatalogProduct } from "../lib/catalog";
 export function ProductCard({ product, language }: { product: CatalogProduct; language: "en" | "ur" }) {
  const image = product.images.find(i => i.is_primary) ?? product.images[0];
- return <article className="catalog-card">{image && <img src={image.url} alt={image.alt_text} width="480" height="320" loading="lazy" />}<h3>{product.name}</h3>{product.description && <p>{product.description}</p>}<ul>{product.variants.map(v => <li key={v.sku}>{v.name}: <bdi>{v.currency_code} {v.unit_price_pkr}</bdi></li>)}</ul><a className="button secondary" href={`/shop/${encodeURIComponent(product.variants[0].sku)}`}>{language === "ur" ? "تفصیلات دیکھیں" : "View details"}</a></article>;
+ const detail = `/shop/${encodeURIComponent(product.variants[0].sku)}`;
+ const ordering = product.checkout_available !== false;
+ return <article className="catalog-card">{image && <img src={image.url} alt={image.alt_text} width="480" height="320" loading="lazy" />}<h3>{product.name}</h3>{product.description && <p>{product.description}</p>}<ul>{product.variants.map(v => <li key={v.sku}>{v.name}: <bdi>{v.currency_code} {v.unit_price_pkr}</bdi></li>)}</ul><a className="button secondary" href={detail}>{language === "ur" ? "تفصیلات دیکھیں" : "View details"}</a><div className="catalog-order-action">{ordering ? <a className="button" href={detail + '#order'}>{language === 'ur' ? 'آرڈر کریں' : 'Order now'}</a> : <><button type="button" className="button" disabled>{language === 'ur' ? 'آرڈر کریں' : 'Order now'}</button><p>{language === 'ur' ? 'آن لائن آرڈر ابھی دستیاب نہیں۔' : 'Online ordering is not available yet.'}</p></>}</div></article>;
 }
 export function FeaturedCatalog({ catalog, language }: { catalog: Catalog; language: "en" | "ur" }) {
  const ref = useRef<HTMLDivElement>(null), ur = language === "ur";
