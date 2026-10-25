@@ -13,7 +13,7 @@ class TemplateRepository:
         self.context = context
 
     def call(self, action, payload):
-        if action in {"publish", "bind", "retire", "bindings"}:
+        if action in {"publish", "bind", "retire", "bindings", "manual_review_decide"}:
             from app.db.template_registry import RegistryRepository
 
             return RegistryRepository(self.context).call(action, payload)

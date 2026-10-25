@@ -14,11 +14,11 @@ function createHarness(){
  if (p.endsWith('/qa') || p.endsWith('/qa-decision')) {
   if (!state.reviewState) return Response.json({error:{code:'PROVIDER_UNAVAILABLE'}},{status:503});
   if (m==='GET') return Response.json(state.reviewState);
-  if (state.role!=='security_admin' || !state.reviewState.can_review) return Response.json({error:{code:'FORBIDDEN'}},{status:403});
+  if (state.role!=='operations' || !state.reviewState.can_review) return Response.json({error:{code:'FORBIDDEN'}},{status:403});
   const body=JSON.parse(options.body);
   if (state.reviewConflict || body.expected_review_version!==state.reviewState.review_version) return Response.json({error:{code:'VERSION_MISMATCH'}},{status:412});
   const review_version=state.reviewState.review_version+1;
-  const review={review_id:'00000000-0000-0000-0000-000000000601',revision_id:rid,revision_row_version:1,review_version,decision:body.decision,review_note:body.reason,reviewer_user_id:'00000000-0000-0000-0000-000000000602',reviewer_human_id:'00000000-0000-0000-0000-000000000603',approval_id:body.decision==='approved'?'00000000-0000-0000-0000-000000000604':null,decided_at:stamp};
+  const review={review_id:'00000000-0000-0000-0000-000000000601',revision_id:rid,revision_row_version:1,review_version,decision:body.decision,review_note:body.reason,reviewer_user_id:'00000000-0000-0000-0000-000000000602',reviewer_human_id:null,evidence_kind:'manual_print',preview_fingerprint:body.preview_fingerprint,approval_id:null,decided_at:stamp};
   state.reviewState={...state.reviewState,review_version,status:body.decision,can_review:body.decision!=='rejected',history:[review,...state.reviewState.history]};
   return Response.json({command_id:'00000000-0000-0000-0000-000000000605',result:state.reviewState});
  }

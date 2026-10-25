@@ -64,7 +64,7 @@ export async function templateRelay(request: NextRequest) {
                 path = v.path;
                 method = v.method;
                 action = templateTarget(path, method);
-                if (action === 'qa-decision' ? !security.roles.includes('security_admin') : !security.roles.includes('operations') || !security.capabilities.includes('printing.manage'))
+                if (!security.roles.includes('operations') || !security.capabilities.includes('printing.manage'))
                     return fail(403);
                 if (typeof v.key !== 'string' || !/^[A-Za-z0-9._:-]{8,160}$/.test(v.key))
                     throw Error();
