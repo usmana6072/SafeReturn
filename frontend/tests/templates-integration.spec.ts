@@ -9,6 +9,7 @@ async function setup(page:Page,component='list',h=createHarness()){
  await page.goto('https://templates.test/admin/templates'+(component==='new'?'/new':component==='detail'?'/'+tid:''));
  await page.evaluate(({component,tid})=>Object.assign(window,{qaSecurity:{roles:['operations'],mfa_verified:true,capabilities:['printing.manage']},qaProps:component==='detail'?{keyParam:tid}:{}}),{component,tid});
  await page.addScriptTag({content:bundle({componentPath:component==='list'?'../components/admin-templates-list.tsx':component==='new'?'../components/admin-create-template-key.tsx':'../components/admin-template-details.tsx',exportName:component==='list'?'PrintTemplatesList':component==='new'?'CreatePrintTemplatePage':'AdminTemplateDetails',wrapperPath:'../components/admin-shell.tsx'})});
+ if(component==='detail')await page.getByText('Advanced design JSON',{exact:true}).click();
  return {h,check:()=>{expect(unexpected).toEqual([]);expect(errors).toEqual([]);for(const c of h.state.calls)expect(c.path).not.toMatch(/qr-inventory|qr-pairs|qr-batches|qr-allocation|independent-qr|credential|reservation|assignment|export|\/publish/);}};
 }
 test('list paging filters refresh and UUID navigation',async({page})=>{const s=await setup(page);await expect(page.getByText('Synthetic design',{exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'View revisions'})).toHaveAttribute('href','/admin/templates/'+tid);await page.getByRole('button',{name:'Next page'}).click();await expect(page.getByText('No templates match these filters.')).toBeVisible();s.h.state.template.name='Fresh design';await page.getByLabel('Purpose filter').selectOption('ice');await page.getByRole('button',{name:'Apply filters / Refresh'}).click();await expect(page.getByText('Fresh design',{exact:true})).toBeVisible();s.check();});
@@ -65,4 +66,16 @@ test('recent-authentication recovery uses a separate MFA tab and retains draft i
 
 for(const [code,message] of [['TEMPLATE_MANAGEMENT_DISABLED','Print Template Management is disabled'],['TEMPLATE_ASSETS_UNAVAILABLE','Preview requires an enrolled font/logo asset set'],['PREVIEW_ISOLATION_UNAVAILABLE','Synthetic preview requires the supported isolated Linux worker'],['TEMPLATE_ORIGIN_MISMATCH','backend template web origin does not match']])test('precise configuration diagnosis '+code,async({page})=>{
  const h=createHarness();h.state.status=code==='TEMPLATE_ORIGIN_MISMATCH'?403:503;h.state.errorCode=code;const s=await setup(page,'list',h);await expect(page.getByRole('alert')).toContainText(message);await expect(page.getByRole('alert')).not.toContainText('Recent authentication');s.check();
+});
+
+test('selected sticker design uses fields and the real enrolled asset ID without manual JSON',async({page})=>{
+ const s=await setup(page,'detail');await page.getByText('Advanced design JSON',{exact:true}).click();
+ await expect(page.getByLabel('Content JSON')).not.toBeVisible();await page.getByRole('button',{name:'Use selected 40 × 60 mm design',exact:true}).click();
+ await expect(page.getByLabel('Sticker width (mm)',{exact:true})).toHaveValue('40.00');await expect(page.getByLabel('Sticker height (mm)',{exact:true})).toHaveValue('60.00');await expect(page.getByLabel('QR size (mm)',{exact:true})).toHaveValue('30.00');
+ await expect(page.getByLabel('Enrolled asset set ID',{exact:true})).toHaveValue('0a7c508b-fc96-42d6-ba58-e367dbb8d08b');await page.getByLabel('English sticker text').fill('Found? Scan me.');await page.getByLabel('Version note').fill('Selected sticker layout');await page.getByRole('button',{name:'Save draft',exact:true}).click();await expect(page.getByText('Draft saved.',{exact:true})).toBeVisible();
+ expect(s.h.state.revisions[0].content.width_mm).toBe('40.00');expect(s.h.state.revisions[0].content.asset_set_id).toBe('0a7c508b-fc96-42d6-ba58-e367dbb8d08b');expect(s.h.state.revisions[0].status).toBe('draft');s.check();
+});
+
+test('malformed advanced field types are retained without crashing the design form',async({page})=>{
+ const s=await setup(page,'detail');const invalid='{"header":{},"english_lines":"wrong type","urdu_lines":[3],"material_codes":false}';await page.getByLabel('Content JSON').fill(invalid);await expect(page.getByLabel('Sticker heading')).toHaveValue('');await expect(page.getByLabel('English sticker text')).toHaveValue('');await expect(page.getByLabel('Content JSON')).toHaveValue(invalid);expect(s.h.state.calls.filter((c:any)=>c.method!=='GET')).toHaveLength(0);s.check();
 });
