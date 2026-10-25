@@ -599,3 +599,16 @@ def test_precise_disabled_and_origin_errors(env):
     assert response.status_code == 403
     assert response.json()['error']['code'] == 'TEMPLATE_ORIGIN_MISMATCH'
     assert not db.helper_calls
+
+@pytest.mark.parametrize('age,status',[(301,201),(850,201),(901,403)])
+def test_draft_fifteen_minute_window(env,age,status):
+    client,_db,headers,_=env
+    response=client.post(BASE,json={'key':'window-test','name':'Window test','purpose':'lost'},headers=headers(amr=[{'method':'totp','timestamp':int(time.time())-age}]))
+    assert response.status_code==status
+
+
+def test_sensitive_template_actions_keep_five_minutes(env):
+    client,_db,headers,_=env
+    response=client.post(BASE+f'/{TID}/revisions/{RID}/submit-qa',json={'reason':'Reviewed draft'},headers=headers(amr=[{'method':'totp','timestamp':int(time.time())-400}]))
+    assert response.status_code==403
+    assert response.json()['error']['code']=='REAUTH_REQUIRED'

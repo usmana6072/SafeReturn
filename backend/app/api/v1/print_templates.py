@@ -103,6 +103,9 @@ class ErrorBody(Closed):
         "RATE_LIMITED",
         "PROVIDER_UNAVAILABLE",
         "METHOD_NOT_ALLOWED",
+        "PREVIEW_TIMEOUT",
+        "PREVIEW_BUSY",
+        "PREVIEW_WORKER_FAILED",
         "TEMPLATE_MANAGEMENT_DISABLED",
         "TEMPLATE_ASSETS_UNAVAILABLE",
         "PREVIEW_ISOLATION_UNAVAILABLE",
@@ -298,13 +301,20 @@ class RetiredTemplateReceipt(Closed):
     result: RetiredTemplateResult
 
 
-def guard(context, request, *, write=False):
+def guard(context, request, *, write=False, draft=False):
     require_staff(
         context,
         *(["operations"] if write else ["operations", "security_admin", "superadmin"]),
     )
     if write:
-        recent(context)
+        if draft:
+            from app.api.auth import require_verified_account
+            require_verified_account(context)
+            stamp = context.principal.authentication_time
+            if stamp is None or not 0 <= datetime.now(UTC).timestamp() - stamp <= 900:
+                fail(403, "REAUTH_REQUIRED")
+        else:
+            recent(context)
         origins = request.headers.getlist("origin")
         if origins and (
             len(origins) != 1
@@ -323,7 +333,8 @@ def match(request):
 
 
 def command(context, request, action, body, *, prepare=None, **ids):
-    guard(context, request, write=True)
+    draft_action = action in {"create", "revision", "edit"}
+    guard(context, request, write=True, draft=draft_action)
     payload = body.model_dump(mode="json") | ids
     if action != "create":
         payload["expected"] = match(request)
@@ -370,7 +381,7 @@ def command(context, request, action, body, *, prepare=None, **ids):
         if old:
             if old["request_hash"] != hashed:
                 fail(409, "IDEMPOTENCY_KEY_REUSED")
-            guard(authorize(context.session, context.principal), request, write=True)
+            guard(authorize(context.session, context.principal), request, write=True, draft=draft_action)
             return json.loads(
                 decrypt(
                     settings,
@@ -382,7 +393,7 @@ def command(context, request, action, body, *, prepare=None, **ids):
             )
         with session.begin_nested():
             result = TemplateRepository(context).call(action, payload | proof)
-            guard(authorize(context.session, context.principal), request, write=True)
+            guard(authorize(context.session, context.principal), request, write=True, draft=draft_action)
             envelope = {"command_id": str(uuid4()), "result": result}
             cipher, kv = encrypt(
                 settings, actor, "template:" + reference, json.dumps(envelope)
@@ -612,8 +623,8 @@ def preview(
     )
 
 
-def proof(context, request, template_id, revision_id, expected):
-    guard(context, request, write=True)
+def proof(context, request, template_id, revision_id, expected, *, draft=True):
+    guard(context, request, write=True, draft=draft)
     if match(request) != expected:
         fail(412, "VERSION_MISMATCH")
     keys = request.headers.getlist("idempotency-key")
@@ -643,7 +654,7 @@ def proof(context, request, template_id, revision_id, expected):
         request.app.state.database, context.principal.user_id
     ) as session:
         admitted_context = authorize(session, context.principal)
-        guard(admitted_context, request, write=True)
+        guard(admitted_context, request, write=True, draft=draft)
         admission = session.execute(
             text("SELECT public.sr_template_preview_admit(:sid,:amr,:k,:h)"),
             {
@@ -661,10 +672,13 @@ def proof(context, request, template_id, revision_id, expected):
             fail(409, "IDEMPOTENCY_KEY_REUSED")
     try:
         data = isolated_preview(spec, root)
-    except (PrintUnavailable, OSError, ValueError, KeyError):
+    except PrintUnavailable as exc:
+        code = {"preview_timeout": "PREVIEW_TIMEOUT", "preview_busy": "PREVIEW_BUSY", "asset_unavailable": "TEMPLATE_ASSETS_UNAVAILABLE", "unsafe_asset": "TEMPLATE_ASSETS_UNAVAILABLE", "asset_registry_unavailable": "TEMPLATE_ASSETS_UNAVAILABLE", "preview_failed": "PREVIEW_WORKER_FAILED"}.get(str(exc), "PREVIEW_WORKER_FAILED")
+        fail(503, code)
+    except (OSError, ValueError, KeyError):
         raise AccessError(503) from None
     current_context = authorize(context.session, context.principal)
-    guard(current_context, request, write=True)
+    guard(current_context, request, write=True, draft=draft)
     current = TemplateRepository(current_context).call("preview_input", payload)
     if current != spec:
         fail(409, "CONFLICT")
@@ -685,7 +699,7 @@ def submit(
 ):
     def prepare():
         _, fingerprint, spec = proof(
-            context, request, template_id, revision_id, match(request)
+            context, request, template_id, revision_id, match(request), draft=False
         )
         return {
             "proof_content": spec["content"],
