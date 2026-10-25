@@ -7,6 +7,7 @@ export function productError(error: unknown, ur = false): string {
     const status = error instanceof ProductApiError ? error.status : 503;
     if (status === 401)
         return ur ? 'دوبارہ سائن ان کریں۔' : 'Your session expired. Sign in again.';
+    if (status === 403 && error instanceof ProductApiError && error.code === 'REAUTH_REQUIRED') return 'Template binding requires sign-in/MFA within 20 minutes. Sign in again, then retry; your entries are retained.';
     if (status === 403)
         return ur ? 'موجودہ کردار یا MFA اس کارروائی کی اجازت نہیں دیتا۔' : 'Your role or MFA does not permit this action.';
     if (status === 404)

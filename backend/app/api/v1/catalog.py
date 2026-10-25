@@ -240,7 +240,8 @@ def mutation(context, request, operation, body, work):
     guard(context)
     if operation.startswith(("catalog.product.","catalog.variant.")):
         from app.db.template_registry import gate
-        gate(context.session)
+        exclusive = operation.startswith('catalog.variant.') or operation == 'catalog.product.edit' and body.get('lifecycle_status') == 'published'
+        gate(context.session, exclusive=exclusive)
     key = request.headers.get("idempotency-key", "")
     if not re.fullmatch(r"[A-Za-z0-9._:-]{8,160}", key):
         fail(400, "IDEMPOTENCY_KEY_REQUIRED")
@@ -387,6 +388,9 @@ def publishable(context, request, product):
         .mappings()
         .all()
     )
+    if single:
+        from app.services.manual_template_binding import ensure_variant_template
+        variants = [ensure_variant_template(context, request.app.state.settings, variant, product) for variant in variants]
     approved = request.app.state.settings.catalog_approved_templates
     from app.db.template_registry import catalog_eligibility
     eligible={str(v["id"]):catalog_eligibility(session,v["id"], product["qr_type"]) if single else catalog_eligibility(session,v["id"]) for v in variants}
@@ -656,6 +660,8 @@ def create_variant(
             context, "product_variants", {**body.model_dump(), "unit_price": parent["price_per_copy"], "product_id": product_id}
         )
         update(context, "products", product_id, {"name": parent["name"]})
+        from app.services.manual_template_binding import ensure_variant_template
+        row = ensure_variant_template(context, request.app.state.settings, row, parent)
         publishable(context, request, parent)
         return row, None
 
@@ -696,6 +702,8 @@ def edit_variant(
             fail(422, "PRODUCT_PRICE_REQUIRED")
         row = update(context, "product_variants", variant_id, {**body.model_dump(), "unit_price": parent["price_per_copy"]})
         update(context, "products", pid, {"name": parent["name"]})
+        from app.services.manual_template_binding import ensure_variant_template
+        row = ensure_variant_template(context, request.app.state.settings, row, parent)
         publishable(context, request, parent)
         return row, jsonable_encoder(old)
 

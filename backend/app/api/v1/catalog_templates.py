@@ -111,6 +111,7 @@ def install(application):
             if response.status_code == 405:
                 response = safe_error(request, 405, "METHOD_NOT_ALLOWED")
                 response.headers["Allow"] = "GET"
+            response.headers["X-Template-Binding-Policy"] = "manual-print-v1"
             response.headers["Cache-Control"] = "private, no-store"
             response.headers["X-Content-Type-Options"] = "nosniff"
             request_id = getattr(request.state, "request_id", None)
