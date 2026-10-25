@@ -119,7 +119,18 @@ class QRBatch(Identity, Timestamps, Base):
     logo_template_key: Mapped[str | None] = mapped_column(String(80))
     intended_environment: Mapped[str | None] = mapped_column(String(8))
     status: Mapped[str] = mapped_column(String(24), server_default="draft")
+    generation_mode: Mapped[str] = mapped_column(
+        String(16), server_default="legacy_pair"
+    )
+    qr_type: Mapped[str | None] = mapped_column(String(8))
+    requested_quantity: Mapped[int | None] = mapped_column(Integer)
     __table_args__ = (
+        CheckConstraint(
+            "(generation_mode='legacy_pair' AND qr_type IS NULL AND requested_quantity IS NULL) OR "
+            "(generation_mode='standalone' AND qr_type IS NOT NULL AND qr_type IN ('lost','ice') "
+            "AND requested_quantity IS NOT NULL AND requested_quantity BETWEEN 1 AND 1000)",
+            name="generation_shape",
+        ),
         CheckConstraint("ecc_level IN ('M','Q')", name="ecc"),
         CheckConstraint(
             "status IN ('draft','generated','printed','qa_passed','rejected','closed')",
@@ -171,8 +182,11 @@ class TagPair(Identity, Timestamps, Base):
 
 class QRCode(Identity, Timestamps, Base):
     __tablename__ = "qr_codes"
-    pair_id: Mapped[uuid.UUID] = mapped_column(
+    pair_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("tag_pairs.id", ondelete="RESTRICT")
+    )
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("qr_batches.id", ondelete="RESTRICT")
     )
     tag_type: Mapped[str] = mapped_column(String(8))
     serial_number: Mapped[str] = mapped_column(String(50), unique=True)
@@ -187,6 +201,15 @@ class QRCode(Identity, Timestamps, Base):
     printed_size_mm: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
+        CheckConstraint(
+            "(pair_id IS NOT NULL AND batch_id IS NULL) OR "
+            "(pair_id IS NULL AND batch_id IS NOT NULL)",
+            name="identity_shape",
+        ),
+        CheckConstraint(
+            "pair_id IS NOT NULL OR (replaces_qr_id IS NULL AND is_current)",
+            name="standalone_no_replacement",
+        ),
         CheckConstraint("tag_type IN ('lost','ice')", name="type"),
         CheckConstraint(
             "public_status IN ('unactivated','active','owner_disabled','admin_suspended','revoked')",
@@ -212,6 +235,55 @@ class QRCode(Identity, Timestamps, Base):
             unique=True,
             postgresql_where=text("replaces_qr_id IS NOT NULL"),
         ),
+        Index(
+            "ix_standalone_qr_batch_type",
+            "batch_id",
+            "tag_type",
+            "id",
+            postgresql_where=text("pair_id IS NULL"),
+        ),
+    )
+
+
+class StandaloneQRState(Timestamps, Base):
+    """Independent lifecycle; runtime access is closed during Phase 1."""
+
+    __tablename__ = "standalone_qr_states"
+    qr_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("qr_codes.id", ondelete="RESTRICT"), primary_key=True
+    )
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, auth_fk())
+    inventory_status: Mapped[str] = mapped_column(
+        String(16), server_default="available"
+    )
+    ownership_status: Mapped[str] = mapped_column(
+        String(16), server_default="unclaimed"
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    row_version: Mapped[int] = mapped_column(Integer, server_default="1")
+    __table_args__ = (
+        CheckConstraint(
+            "inventory_status IN ('available','allocated','retired')", name="inventory"
+        ),
+        CheckConstraint(
+            "ownership_status IN ('unclaimed','active','revoked')", name="ownership"
+        ),
+        CheckConstraint(
+            "ownership_status <> 'unclaimed' OR (owner_user_id IS NULL AND activated_at IS NULL)",
+            name="unclaimed",
+        ),
+        CheckConstraint(
+            "ownership_status <> 'active' OR (owner_user_id IS NOT NULL AND activated_at IS NOT NULL "
+            "AND inventory_status='allocated')",
+            name="active_owner",
+        ),
+        CheckConstraint(
+            "(ownership_status='revoked') = (revoked_at IS NOT NULL)", name="revocation"
+        ),
+        CheckConstraint("row_version > 0", name="version"),
+        Index("ix_standalone_owner", "owner_user_id", "ownership_status"),
+        Index("ix_standalone_inventory", "inventory_status", "qr_id"),
     )
 
 

@@ -1,12 +1,70 @@
 from decimal import Decimal
 from typing import Literal
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # v1.1 development-only owner exception. No credential/trust is auto-provisioned.
+    support_dev_enabled: bool = False
+    support_dev_backend_origin: str = "http://127.0.0.1:3031"
+    support_dev_subject_id: UUID | None = None
+    support_dev_database_url: SecretStr | None = None
+    support_dev_trust_file: str | None = None
+    support_dev_trust_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+    abuse_reports_enabled: bool = False
+    abuse_report_policy_id: UUID | None = None
+    abuse_report_policy_version: int = Field(default=1, ge=1, le=2147483647)
+    abuse_report_hmac_key: SecretStr | None = None
+    abuse_report_hmac_key_version: int = Field(default=1, ge=1, le=2147483647)
+    print_template_management_enabled: bool = False
+    print_template_web_origin: str | None = None
+    print_template_asset_root: str | None = None
+    print_template_public_origin: str | None = None
+    dashboard_enabled: bool = False
+    staff_directory_enabled: bool = False
+    qr_lifecycle_enabled: bool = False
+    qr_lifecycle_web_origin: str | None = None
+    account_lifecycle_enabled: bool = False
+    account_lifecycle_web_origin: str | None = None
+    manufacturing_exports_enabled: bool = False
+    manufacturing_export_web_origin: str | None = None
+    finance_reconciliation_enabled: bool = False
+    financial_review_enabled: bool = False
+    financial_review_web_origin: str | None = None
+    cancellation_enabled: bool = False
+    cancellation_web_origin: str | None = None
+    shipping_address_web_origin: str | None = None
+    # Separate opt-in transport origin; existing Auth/localhost configuration is unchanged.
+    privacy_export_web_origin: str | None = None
+
+    @field_validator("account_lifecycle_web_origin", "qr_lifecycle_web_origin")
+    @classmethod
+    def validate_lifecycle_origin(cls, value):
+        if value is None:
+            return value
+        origin = urlsplit(value)
+        if (
+            not origin.hostname
+            or origin.username
+            or origin.password
+            or origin.path
+            or origin.query
+            or origin.fragment
+            or origin.scheme not in ("https", "http")
+            or (
+                origin.scheme == "http"
+                and origin.hostname not in ("localhost", "127.0.0.1", "::1")
+            )
+        ):
+            raise ValueError("Lifecycle requires a fixed secure web origin")
+        return value
+
     model_config = SettingsConfigDict(
         env_prefix="SAFERETURN_", extra="ignore", hide_input_in_errors=True
     )

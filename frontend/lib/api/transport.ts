@@ -1,3 +1,4 @@
+import {assertBackendOperation} from './quarantine';
 export type ApiFailureKind = "configuration" | "network" | "timeout" | "http" | "contract";
 
 export class ApiError extends Error {
@@ -42,6 +43,7 @@ export function createApiClient(options: {
   const fetchImpl = options.fetchImpl ?? fetch;
 
   async function getJson<T>(path: string, parse: (value: unknown) => T): Promise<T> {
+    assertBackendOperation('GET',path);
     const signal = AbortSignal.timeout(timeoutMs);
     let response: Response;
     try {

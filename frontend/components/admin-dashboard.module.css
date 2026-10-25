@@ -1,0 +1,16 @@
+.dashboard { margin-block: 2rem; overflow-wrap: anywhere; min-width: 0; }
+.controls { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin-block: 1rem; }
+.controls select { padding: .6rem; max-width: 100%; }
+.groups { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,19rem),1fr)); gap: 1rem; }
+.group { border: 1px solid #bdd6d4; border-radius: .75rem; padding: 1rem; margin-block: 1rem; min-width: 0; background: #fff; }
+.metric { display: grid; grid-template-columns: 1fr auto; gap: .5rem; padding-block: .75rem; border-block-start: 1px solid #d7e6e2; }
+.metric dd { margin: 0; font-weight: 700; }
+.metric .warning { grid-column: 1 / -1; color: #793e0a; font-size: .9rem; }
+.time,.note { font-size: .9rem; line-height: 1.9; }
+.bars { display: flex; gap: 2px; align-items: end; height: 7rem; margin-block: 1rem; border-block-end: 1px solid #456; }
+.bars span { flex: 1; min-width: 0; background: #0a756e; }
+.group table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.group th,.group td { padding: .5rem .2rem; border-block-end: 1px solid #d7e6e2; text-align: start; overflow-wrap: anywhere; }
+.group summary { cursor: pointer; padding-block: .75rem; }
+.dashboard :focus-visible { outline: 3px solid #0a756e; outline-offset: 3px; }
+@media (forced-colors: active) { .bars span { background: CanvasText; } }

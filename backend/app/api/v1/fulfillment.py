@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.encoders import jsonable_encoder
-from pydantic import Field
+from pydantic import Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -20,6 +20,14 @@ from app.api.v1.checkout import Closed
 from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt, encrypt
 
 router = APIRouter(tags=["orders and fulfillment"], route_class=CatalogRoute)
+
+
+def cancellation_projection(context, request, order_id):
+    if not request.app.state.settings.cancellation_enabled:
+        return {}
+    from app.api.v1.cancellations import projection
+
+    return projection(context, order_id)
 
 
 def rows(session, sql, **params):
@@ -88,6 +96,19 @@ def list_orders(context: Authenticated, limit: int = 20, cursor: str | None = No
 
 
 def detail(session, oid):
+    model = session.execute(text("SELECT to_jsonb(o)->>'commerce_model' FROM public.orders o WHERE id=:id"), {"id": oid}).scalar_one_or_none()
+    if model == "single_qr":
+        items = rows(session, """SELECT id,product_id,identity_group,product_name_snapshot,qr_type_snapshot,
+            quantity,unit_price_snapshot,line_total,currency_code FROM public.order_logical_items WHERE order_id=:id ORDER BY created_at,id""", id=oid)
+        sizes = rows(session, """SELECT s.id,s.logical_item_id,s.variant_id,s.variant_name_snapshot,s.sku_snapshot,
+            s.size_mm_snapshot,s.material_snapshot,s.copies FROM public.order_item_sizes s
+            JOIN public.order_logical_items i ON i.id=s.logical_item_id WHERE i.order_id=:id ORDER BY s.logical_item_id,s.id""", id=oid)
+        for item in items:
+            item["sizes"] = [size for size in sizes if size["logical_item_id"] == item["id"]]
+        allocation = session.execute(text("SELECT public.sr_typed_allocation_status(:id)"), {"id": oid}).scalar_one()
+        job = rows(session, "SELECT status FROM public.print_jobs WHERE order_id=:id ORDER BY job_revision DESC LIMIT 1", id=oid)
+        return {"commerce_model": "single_qr", "logical_items": items, "items": [], "qr_uses": [], "allocation": allocation,
+                "pair_units": [], "pair_count": 0, "identity_count": len(items), "print_status": job[0]["status"] if job else "not_requested"}
     items = rows(
         session,
         """SELECT id,product_id,variant_id,product_name_snapshot,variant_name_snapshot,
@@ -162,6 +183,7 @@ def get_order(order_id: UUID, context: Authenticated, request: Request):
     )[0]
     return {
         **order,
+        **cancellation_projection(context, request, order_id),
         **detail(context.session, order_id),
         "shipping_snapshot": shipping(
             context.session, request.app.state.settings, order_id
@@ -242,9 +264,26 @@ def ready_to_ship(
 class ShipmentRequest(Closed):
     order_id: UUID
     shipping_address_id: UUID
-    pair_ids: list[UUID] = Field(min_length=1, max_length=100)
+    pair_ids: list[UUID] = Field(default_factory=list, max_length=100)
+    logical_item_ids: list[UUID] = Field(default_factory=list, max_length=50)
     carrier: str = Field(min_length=1, max_length=80)
     reason: str = Field(min_length=4, max_length=500)
+
+    @model_validator(mode="after")
+    def membership_model(self):
+        if bool(self.pair_ids) == bool(self.logical_item_ids):
+            raise ValueError("Supply exactly one membership model")
+        return self
+
+
+@router.get("/admin/shipments/{shipment_id}/items", operation_id="typed-shipment-items")
+def shipment_items(shipment_id: UUID, context: Authenticated):
+    require_staff(context, "operations")
+    shipment = rows(context.session, "SELECT o.commerce_model FROM public.shipments s JOIN public.orders o ON o.id=s.order_id WHERE s.id=:id", id=shipment_id)
+    if not shipment:
+        raise AccessError(404)
+    return {"commerce_model": shipment[0]["commerce_model"], "items": rows(context.session,
+        "SELECT logical_item_id,print_job_id,packed_qa_confirmed,packed_at FROM public.shipment_items WHERE shipment_id=:id ORDER BY logical_item_id", id=shipment_id)}
 
 
 class ShipmentUpdate(Closed):
@@ -260,6 +299,8 @@ class ShipmentUpdate(Closed):
 def command(context, request, operation, payload, work):
     # Recheck roles/MFA before even replaying an old receipt.
     require_staff(context, "operations")
+    from app.db.template_registry import gate
+    gate(context.session)
     key = request.headers.get("Idempotency-Key", "")
     import re
 
@@ -350,7 +391,13 @@ def lock_order(s, oid):
     return found[0]
 
 
-def eligible(s, oid):
+def eligible(s, oid, *, template_clear=True):
+    from app.db.template_registry import order_specs
+    if template_clear:
+        order_specs(s,oid)
+    from app.api.v1.financial_disputes import require_order_clear
+
+    require_order_clear(s, oid)
     s.execute(
         text(
             "SELECT p.id FROM public.tag_pairs p JOIN public.order_pair_units u ON u.pair_id=p.id WHERE u.order_id=:id ORDER BY p.id FOR UPDATE OF p"
@@ -373,6 +420,14 @@ def create_shipment(body: ShipmentRequest, context: Authenticated, request: Requ
         snap = shipping(s, settings, body.order_id)
         if str(snap["shipping_address_id"]) != str(body.shipping_address_id):
             fail(409, "SHIPPING_SNAPSHOT_MISMATCH")
+        typed = s.execute(text("SELECT commerce_model='single_qr' FROM public.orders WHERE id=:id"), {"id": body.order_id}).scalar_one() is True
+        item_ids = []
+        if typed:
+            item_ids = [r["id"] for r in rows(s, "SELECT id FROM public.order_logical_items WHERE order_id=:id", id=body.order_id)]
+            if body.pair_ids or not item_ids or len(body.logical_item_ids) != len(set(body.logical_item_ids)) or set(item_ids) != set(body.logical_item_ids):
+                fail(409, "SHIPMENT_ITEM_MISMATCH")
+        elif body.logical_item_ids or not body.pair_ids:
+            fail(409, "SHIPMENT_PAIR_MISMATCH")
         pairs = [
             r["pair_id"]
             for r in rows(
@@ -408,6 +463,10 @@ def create_shipment(body: ShipmentRequest, context: Authenticated, request: Requ
                 ),
                 {"id": sid, "pair": pid},
             )
+        for item_id in item_ids:
+            s.execute(text("""INSERT INTO public.shipment_items(shipment_id,logical_item_id,print_job_id)
+                SELECT :sid,:iid,id FROM public.print_jobs WHERE order_id=:oid ORDER BY job_revision DESC LIMIT 1"""),
+                {"sid": sid, "iid": item_id, "oid": body.order_id})
         return {
             "shipment_id": sid,
             "order_id": body.order_id,
@@ -448,7 +507,7 @@ def update_shipment(
         if body.status not in TRANSITIONS[row["status"]]:
             fail(409, "INVALID_SHIPMENT_TRANSITION")
         if body.status in {"packed", "dispatched", "delivered"}:
-            eligible(s, oid)
+            eligible(s, oid, template_clear=body.status != "delivered")
         if body.status == "packed":
             if not body.packing_confirmed:
                 fail(422, "PACKING_CONFIRMATION_REQUIRED")
@@ -458,6 +517,10 @@ def update_shipment(
                 ),
                 {"uid": context.principal.user_id, "id": shipment_id},
             )
+            typed = s.execute(text("SELECT commerce_model='single_qr' FROM public.orders WHERE id=:id"), {"id": oid}).scalar_one() is True
+            if typed:
+                s.execute(text("UPDATE public.shipment_items SET packed_qa_confirmed=true,packed_by=:uid,packed_at=clock_timestamp() WHERE shipment_id=:id"),
+                          {"uid": context.principal.user_id, "id": shipment_id})
         tracking = body.tracking_reference or row["tracking_reference"]
         if body.status == "dispatched" and not tracking:
             fail(422, "TRACKING_REQUIRED")
@@ -497,7 +560,11 @@ def operations_order_detail(order_id: UUID, context: Authenticated, request: Req
     )
     if not found:
         raise AccessError(404)
-    result = {**found[0], **detail(context.session, order_id)}
+    result = {
+        **found[0],
+        **detail(context.session, order_id),
+        **cancellation_projection(context, request, order_id),
+    }
     operations = rows(
         context.session,
         "SELECT id FROM public.staff_roles WHERE user_id=:uid AND role='operations' AND revoked_at IS NULL",

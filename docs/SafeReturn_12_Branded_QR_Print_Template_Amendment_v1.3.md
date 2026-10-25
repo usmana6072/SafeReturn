@@ -1,5 +1,10 @@
 # SafeReturn — Document 12: Branded QR Wrapper & Print Template Amendment
 
+> **Task5.1B partial implementation update, 2026-10-20:** Owner approved the A–E backend review, then approved synthetic preview token length43 to match the inventory issuer. Doc04's Task5.1B addendum records exact delivered300–306 contracts (keys, draft revisions, private bounded proof, pending-QA submission). API307–310 are registered unavailable boundaries, with no successful physical publication/binding/retirement implementation or evidence issuer. Proposed full tables/layouts/permissions below are not automatically implemented by that partial delivery.339 stays configuration-only; existing catalog/printing APIs and historical snapshots remain unchanged. Pending0033 is offline/unapplied; no real artwork/assets/physical evidence have been enrolled or approved.
+
+> **Owner-delegated contract review, 2026-10-19:** [BTR-20261019](SafeReturn_13_Blocked_Task_Contract_Review_2026-10-19.md) records reviewed/corrected decisions for all thirteen formerly blocked task cards. Its explicit design approvals amend conflicting proposals for those tasks only; runtime roles, live/destructive authorization and existing acceptance evidence are unchanged. Provider/legal/physical/recovery gates remain explicit. Reserved API IDs are contracts, not implemented endpoints.
+
+
 **Document ID:** SR-AMD-PRINT-012  
 **Version:** 1.3 proposed | **Date:** 12 October 2026 | **Scope:** Incremental amendment to SafeReturn Documents 01–11 v1.2  
 **Status:** Implementation contract proposed for founder, print-operations, and security approval; not a deployed feature  
@@ -207,21 +212,21 @@ CREATE UNIQUE INDEX uq_active_variant_tag_template
 
 ## 6. API amendment (Document 04)
 
-**Do not change existing API IDs `API-090`, `API-232`–`API-237`, `API-242`–`API-244`, or payments/catalog routes.** Extend new `API-245` onwards only after verifying Doc 04 registry for clashes; these are **proposed reserved identifiers**, not automatically implemented endpoints. All routes are under `/api/v1` and require RBAC/MFA as appropriate. Sensitive mutations require request tracing, audit and idempotency.
+**Do not change existing API IDs `API-090`, `API-232`–`API-237`, `API-242`–`API-244`, or payments/catalog routes.** Reserve only `API-300`–`API-310` for the unimplemented template proposals. Implemented `API-245` cleanup recovery and `API-246/247` shipment reads are unchanged; these are **proposed reserved identifiers**, not automatically implemented endpoints. All routes are under `/api/v1` and require RBAC/MFA as appropriate. Sensitive mutations require request tracing, audit and idempotency.
 
 | ID | Method and proposed path | Access | Contract |
 |---|---|---|---|
-| API-245 | `GET /admin/print-templates` | Ops/catalog staff | Filter by purpose/status, pagination, label sizes, published revision |
-| API-246 | `POST /admin/print-templates` | Print-design admin + MFA | Create draft template key/purpose; reject duplicate key |
-| API-247 | `GET /admin/print-templates/{template_id}` | Authorized staff | Metadata + revision list, publication state; no confidential customer data |
-| API-248 | `POST /admin/print-templates/{template_id}/revisions` | Print-design admin + MFA | Create a NEW draft revision from approved base, never modify published revision |
-| API-249 | `PATCH /admin/print-templates/{template_id}/revisions/{revision_id}` | Print-design admin + MFA | Optimistic version (`If-Match`), permitted draft fields only |
-| API-250 | `POST /admin/print-templates/{template_id}/revisions/{revision_id}/preview` | Authorized designer/QA | Validated synthetic data only; short-lived staff-only preview, no public URL |
-| API-251 | `POST /admin/print-templates/{template_id}/revisions/{revision_id}/submit-qa` | Designer/QA roles | Validate geometry, locale text, scan report and material matrix |
-| API-252 | `POST /admin/print-templates/{template_id}/revisions/{revision_id}/publish` | Approver + MFA | QA-approved revision becomes immutable published revision; audit |
-| API-253 | `POST /admin/print-template-bindings` | Ops/catalog admin + MFA | Bind approved revision to `(variant_id, tag_type)` with conflict protection |
-| API-254 | `GET /admin/print-template-bindings` | Ops/catalog staff | Effective bindings, variants, types, sizes, invalid mapping alerts |
-| API-255 | `POST /admin/print-templates/{template_id}/revisions/{revision_id}/retire` | Approver + MFA | Prevent future usage; existing order snapshots retained; verify replacement mapping |
+| API-300 | `GET /admin/print-templates` | Ops/catalog staff | Filter by purpose/status, pagination, label sizes, published revision |
+| API-301 | `POST /admin/print-templates` | Print-design admin + MFA | Create draft template key/purpose; reject duplicate key |
+| API-302 | `GET /admin/print-templates/{template_id}` | Authorized staff | Metadata + revision list, publication state; no confidential customer data |
+| API-303 | `POST /admin/print-templates/{template_id}/revisions` | Print-design admin + MFA | Create a NEW draft revision from approved base, never modify published revision |
+| API-304 | `PATCH /admin/print-templates/{template_id}/revisions/{revision_id}` | Print-design admin + MFA | Optimistic version (`If-Match`), permitted draft fields only |
+| API-305 | `POST /admin/print-templates/{template_id}/revisions/{revision_id}/preview` | Authorized designer/QA | Validated synthetic data only; short-lived staff-only preview, no public URL |
+| API-306 | `POST /admin/print-templates/{template_id}/revisions/{revision_id}/submit-qa` | Designer/QA roles | Validate geometry, locale text, scan report and material matrix |
+| API-307 | `POST /admin/print-templates/{template_id}/revisions/{revision_id}/publish` | Approver + MFA | QA-approved revision becomes immutable published revision; audit |
+| API-308 | `POST /admin/print-template-bindings` | Ops/catalog admin + MFA | Bind approved revision to `(variant_id, tag_type)` with conflict protection |
+| API-309 | `GET /admin/print-template-bindings` | Ops/catalog staff | Effective bindings, variants, types, sizes, invalid mapping alerts |
+| API-310 | `POST /admin/print-templates/{template_id}/revisions/{revision_id}/retire` | Approver + MFA | Prevent future usage; existing order snapshots retained; verify replacement mapping |
 
 ### 6.1 Endpoint examples
 
@@ -287,7 +292,7 @@ backend/
       print_renderer.py      # compose wrapper + instructions + QR into vector PDF
       print_manifest.py      # immutable order usage, copies, sizes, frozen revision
     routers/
-      admin_print_templates.py  # proposed API-245..255
+      admin_print_templates.py  # proposed API-300..310
     workers/
       print_jobs.py         # existing durable job handler, no separate service mandated
     db/
@@ -425,7 +430,7 @@ Implement these additional tests with synthetic data. They supplement, not repla
 | 01 PRD | WRAP-FR-001..018 + size/wrapper distinction + bilingual purpose copy | Paired kit, activation, payments, ownership, commerce |
 | 02 Technical Design | Constrained template resolver, geometry/layout and render pipeline | FastAPI monolith, worker, Supabase/Cloudinary assignments |
 | 03 Database | `print_templates`, revision/bindings, per-usage snapshot extension | Existing pairs, QR IDs, order lines, print jobs and artifacts |
-| 04 API Contract | Proposed API-245..255, preview/publish, existing route extensions | Auth, checkout/payment, API-090, API-232..244 |
+| 04 API Contract | Proposed API-300..310, preview/publish, existing route extensions | Auth, checkout/payment, API-090, API-232..244 |
 | 05 Agent Instructions | Read this amendment and never silently change published template/QR security rules | Existing agent review and production boundaries |
 | 06 Implementation Plan | WRAP-01..13 tasks, dependency and release gates | Other v1.2 milestones/tickets |
 | 07 Security & Privacy | Template injection/upload threat, access and immutable revision audit | Existing ICE, payment, ownership, evidence rules |
@@ -483,3 +488,10 @@ Add and run PostgreSQL integration and API tests; report files/commands/results.
 - [ ] Deployment, retention and rollback have founder approval.
 
 **End of Document 12 (v1.3 amendment).** The eleven v1.2 documents remain the baseline; this file is the narrowly scoped authoritative change overlay.
+# Task5.1B approved backend continuation — 2026-10-21
+
+This implementation addendum distinguishes the original proposed300–310 design from delivered code.300–306 remain implemented application draft/preview/submission services. Owner-approved C1–C5 now deliver actual307–310 publication/binding/metadata/retirement capability, controlled offline-signed evidence import/revocation, permanent source adoption and immutable per-use purchase/print specs in pending0034. Empty authority registries keep real import/publication unavailable; no named issuer, physical/native/licensing acceptance, approved assets/policy or enrollment procedure is invented. Status stays IMPLEMENTED, not VERIFIED or launched.339 remains existing configuration-only discovery.
+
+Operations publication needs independent registered human authority and current signed evidence, beyond existing roles/API237/configuration/booleans. Published content/assets/revisions remain immutable. Bind only compatible published key/version/purpose/size/material/pdf_label; owner explicitly approved308 null revision_id deactivation on an inactive variant with expected binding ID, versions, confirmation and idempotency. The source marker remains permanent and orders stay blocked until replacement binding. Quotes reject stale mapping or mixed legacy/registry assets/origin before payment; renderer retains one immutable font/logo/origin policy per order. Old purchases/jobs retain legacy or frozen registry content as originally admitted, never current/latest designs.
+
+Synthetic private previews retain43-character tokens and existing renderer/asset constraints. Separate security withdrawal holds block affected unshipped render/release/packing/dispatch without history/QR/finance rewrite or shipped recall; ordinary retirement still permits legitimate frozen purchases. No current frontend screen is changed/tested; ADM30–34 redesign remains separately deferred. Exact approved DTOs, implementation, focused synthetic evidence and incomplete PostgreSQL/Linux/physical/enrollment gates are in `output/task51b/CONTINUATION_REVIEW.md` and CONTINUATION_IMPLEMENTATION.md. Existing physical/launch checklist items remain unfulfilled until their actual evidence exists.

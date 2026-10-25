@@ -1,0 +1,10 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { templateRelay } from '../../../../lib/api/template-relay';
+export const GET = (r: NextRequest) => templateRelay(r);
+export const POST = (r: NextRequest) => templateRelay(r);
+const blocked = () => NextResponse.json({ error: { code: 'METHOD_NOT_ALLOWED' } }, { status: 405, headers: { Allow: 'GET, POST', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
+export const PUT = blocked;
+export const PATCH = blocked;
+export const DELETE = blocked;
+export const HEAD = blocked;
+export const OPTIONS = blocked;

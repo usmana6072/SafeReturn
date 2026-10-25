@@ -1,0 +1,2 @@
+import {AdminCard,AdminPageContainer,AdminPageHeader} from './admin-ui';
+export function AdminQuarantined(){return <AdminPageContainer><AdminPageHeader title="Operation unavailable" description="This legacy workspace is disabled under the current security policy."/><AdminCard><div className="p-6"><p>Inventory, batch, pair QA, reconciliation and legacy fulfillment operations cannot be performed here. Use the separately authorized metadata workspaces where available.</p></div></AdminCard></AdminPageContainer>;}

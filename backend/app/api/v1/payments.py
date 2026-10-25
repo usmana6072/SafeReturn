@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Request, Response
 from fastapi.encoders import jsonable_encoder
-from pydantic import Field
+from pydantic import Field, field_validator
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -29,6 +29,16 @@ from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt, encrypt
 from app.integrations.payment_storage import storage
 
 router = APIRouter(tags=["payments"], route_class=CatalogRoute)
+
+
+@router.get("/me/orders/{order_id}/payment-instructions", operation_id="order-payment-instructions")
+def payment_instructions(order_id: UUID, context: Authenticated):
+    require_verified_account(context)
+    require_order_owner(context, order_id)
+    value = context.session.execute(text("SELECT to_jsonb(o)->'payment_instructions_snapshot' FROM public.orders o WHERE id=:id"), {"id": order_id}).scalar_one_or_none()
+    if value is None:
+        fail(503, "PAYMENT_INSTRUCTIONS_UNAVAILABLE")
+    return value
 
 
 class PaymentRequest(Closed):
@@ -57,6 +67,28 @@ class ReviewRequest(Closed):
     settled_amount: str | None = Field(default=None, pattern=r"^[0-9]{1,10}\.[0-9]{2}$")
     settled_currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
     reason: str = Field(min_length=4, max_length=1000)
+
+
+class AllocationRetry(Closed):
+    confirmed: bool = Field(strict=True)
+
+    @field_validator("confirmed")
+    @classmethod
+    def confirmation(cls, value):
+        if not value:
+            raise ValueError("Explicit allocation confirmation required")
+        return value
+
+
+def typed_result(value):
+    if value is None:
+        raise AccessError(404)
+    if "error" in value:
+        code = value["error"]
+        if code in {"FORBIDDEN", "NOT_FOUND"}:
+            raise AccessError(403 if code == "FORBIDDEN" else 404)
+        fail(422 if code == "BANK_VERIFICATION_REQUIRED" else 409, code)
+    return value
 
 
 def lock_order(context, order_id):
@@ -94,6 +126,8 @@ def record(context, request, operation, payload, work):
     require_verified_account(context)
     s = request.app.state.settings
     session = context.session
+    from app.db.template_registry import gate
+    gate(session)
     actor = context.principal.user_id
     key = request.headers.get("idempotency-key", "")
     if not re.fullmatch(r"[A-Za-z0-9._:-]{8,160}", key):
@@ -154,10 +188,11 @@ def record(context, request, operation, payload, work):
             )
             session.execute(
                 text("""INSERT INTO public.audit_events(actor_user_id,actor_kind,action,target_type,target_id,request_id,reason,safe_details)
-   VALUES(:actor,:kind,:op,'payment',:target,:rid,'payment command',jsonb_build_object('event_id',CAST(:reference AS text),'outcome','success'))"""),
+   VALUES(:actor,:kind,:op,:target_type,:target,:rid,'payment command',jsonb_build_object('event_id',CAST(:reference AS text),'outcome','success'))"""),
                 {
                     "actor": actor,
-                    "kind": "staff" if operation == "payment.review" else "customer",
+                    "kind": "staff" if operation in {"payment.review", "allocation.retry"} else "customer",
+                    "target_type": "order" if operation == "allocation.retry" else "payment",
                     "op": operation,
                     "target": target,
                     "rid": getattr(request.state, "request_id", None),
@@ -404,6 +439,11 @@ def review_payment(
             fail(409, "PAYMENT_CLOSED")
         fingerprint = None
         if body.decision == "verify":
+            typed = order.get("commerce_model", "legacy_pair") == "single_qr"
+            from app.api.v1.financial_disputes import require_order_clear
+
+            if not typed:
+                require_order_clear(context.session, order["id"], s)
             if order["order_status"] != "placed":
                 fail(409, "ORDER_RECONCILIATION_REQUIRED")
             if (
@@ -428,6 +468,18 @@ def review_payment(
                 body.bank_match_reference.casefold().strip().encode(),
                 hashlib.sha256,
             ).digest()
+            if typed:
+                value = typed_result(context.session.execute(text("""SELECT public.sr_typed_settle(
+                    :sid,:aid,:bank_verified,:amount,:currency,:fingerprint,:reason)"""),
+                    {"sid": context.principal.session_id, "aid": attempt_id, "bank_verified": body.bank_verified,
+                     "amount": Decimal(body.settled_amount), "currency": body.settled_currency,
+                     "fingerprint": fingerprint, "reason": body.reason}).scalar_one())
+                # Existing legacy worker cannot consume the typed handoff. The
+                # DB helper persists bank truth, all claims, audit and durable
+                # events atomically; print admission stays closed in Phase 5.
+                context.session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+                context.session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
+                return value, UUID(value["review_id"])
             units = context.session.execute(
                 text(
                     "SELECT id,status FROM public.order_pair_units WHERE order_id=:id ORDER BY id FOR UPDATE"
@@ -518,6 +570,26 @@ def review_payment(
         dict(attempt_id=str(attempt_id), **body.model_dump()),
         work,
     )
+
+
+@router.get("/admin/orders/{order_id}/qr-allocation", operation_id="typed-allocation-status")
+def allocation_status(order_id: UUID, context: Authenticated):
+    require_staff(context, "finance", "operations")
+    return typed_result(context.session.execute(text("SELECT public.sr_typed_allocation_status(:id)"), {"id": order_id}).scalar_one())
+
+
+@router.post("/admin/orders/{order_id}/qr-allocation/retry", operation_id="typed-allocation-retry")
+def retry_allocation(order_id: UUID, body: AllocationRetry, context: Authenticated, request: Request):
+    require_staff(context, "finance", "operations")
+
+    def work(settings):
+        value = typed_result(context.session.execute(text("SELECT public.sr_typed_allocation_retry(:sid,:id)"),
+                            {"sid": context.principal.session_id, "id": order_id}).scalar_one())
+        context.session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+        context.session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
+        return value, order_id
+
+    return record(context, request, "allocation.retry", {"order_id": str(order_id), **body.model_dump()}, work)
 
 
 @router.get(

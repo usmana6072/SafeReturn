@@ -1,0 +1,54 @@
+<svg width="256" height="256" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="shieldGrad" x1="24" y1="20" x2="176" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0EA5A4"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shield -->
+  <path
+    d="M100 16
+       C124 28 148 32 168 34
+       V88
+       C168 128 140 161 100 176
+       C60 161 32 128 32 88
+       V34
+       C52 32 76 28 100 16Z"
+    fill="url(#shieldGrad)"
+  />
+
+  <!-- Inner circle -->
+  <circle cx="100" cy="92" r="36" fill="white" fill-opacity="0.98"/>
+
+  <!-- Return arrow -->
+  <path
+    d="M117 79
+       C111 71 102 66 92 66
+       C76 66 63 79 63 95
+       C63 111 76 124 92 124
+       C105 124 116 116 120 104"
+    stroke="url(#shieldGrad)"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Arrow head -->
+  <path
+    d="M105 80H118V67"
+    stroke="url(#shieldGrad)"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Check -->
+  <path
+    d="M82 94L92 104L112 84"
+    stroke="#10B981"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

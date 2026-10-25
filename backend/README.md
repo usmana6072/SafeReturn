@@ -1,5 +1,11 @@
 # SafeReturn backend
 
+For the current independent-QR frontend integration status, local startup command,
+read-only schema preflight and pending database upgrade, see
+[`LOCAL_FRONTEND_BACKEND_PHASE8.md`](../docs/LOCAL_FRONTEND_BACKEND_PHASE8.md).
+The inspected development database is at 0021 while source is at 0043; do not
+interpret liveness as readiness for the new flows.
+
 Task 2.3 auth/security verification: explicitly load the ignored environment and
 run `tests/integration/test_auth_negative.py`, `test_auth_guards.py`, and
 `test_account_api.py` together with pytest, `-p no:cacheprovider -W error`.

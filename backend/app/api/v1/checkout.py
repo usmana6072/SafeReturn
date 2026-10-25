@@ -67,10 +67,25 @@ class CartLine(Closed):
         return self
 
 
-class QuoteRequest(Closed):
-    lines: list[CartLine] = Field(min_length=1, max_length=50)
-    address: Address
+class DeliveryRequest(Closed):
+    address: Address | None = None
+    shipping_address_id: UUID | None = None
+    shipping_address_version: int | None = Field(
+        default=None, ge=1, le=2147483646, strict=True
+    )
     contact_phone_confirmation: bool = Field(strict=True)
+
+    @model_validator(mode="after")
+    def address_source(self):
+        if self.address is not None:
+            if (
+                self.shipping_address_id is not None
+                or self.shipping_address_version is not None
+            ):
+                raise ValueError("Choose one address source")
+        elif self.shipping_address_id is None or self.shipping_address_version is None:
+            raise ValueError("Saved address and version required")
+        return self
 
     @field_validator("contact_phone_confirmation")
     @classmethod
@@ -78,6 +93,10 @@ class QuoteRequest(Closed):
         if not value:
             raise ValueError("Confirm shipping contact")
         return value
+
+
+class QuoteRequest(DeliveryRequest):
+    lines: list[CartLine] = Field(min_length=1, max_length=50)
 
 
 class ConfirmRequest(Closed):
@@ -100,6 +119,8 @@ def record(context, request, operation, payload, work):
     require_verified_account(context)
     s = configured(request)
     session = context.session
+    from app.db.template_registry import gate
+    gate(session)
     actor = context.principal.user_id
     key = request.headers.get("idempotency-key", "")
     if not re.fullmatch(r"[A-Za-z0-9._:-]{8,160}", key):
@@ -171,6 +192,7 @@ def catalog_lines(context, lines, settings):
     groups = {}
     snapshots = []
     total = Decimal("0.00")
+    product_copies = {}
     rows = session.execute(
         text("SELECT public.sr_checkout_catalog(:ids)"),
         {"ids": [l.variant_id for l in lines]},
@@ -180,10 +202,12 @@ def catalog_lines(context, lines, settings):
         row = by_id.get(str(line.variant_id))
         if row is None:
             fail(422, "VARIANT_UNAVAILABLE")
+        from app.db.template_registry import resolve
+        registry_specs=resolve(session,{"variant_id":str(line.variant_id),"qr_uses":[u.model_dump(mode="json") for u in line.qr_uses]})
         if (
             f"{row['template_key']}@{row['template_version']}"
             not in settings.catalog_approved_templates
-        ):
+        ) and registry_specs is None:
             fail(422, "PHYSICAL_CATALOG_APPROVAL_REQUIRED")
         for use in line.qr_uses:
             if use.mode == "existing_owned":
@@ -209,7 +233,15 @@ def catalog_lines(context, lines, settings):
                 if not row["allows_new_pair"]:
                     fail(422, "NEW_PAIR_DISABLED")
                 groups.setdefault(use.client_pair_group, set()).add(use.tag_type)
-        amount = Decimal(str(row["unit_price"])) * line.quantity
+        # Every size of a product uses the authoritative product price. Never
+        # accept a client price or fall back to a legacy variant price.
+        if row.get("price_per_copy") is None:
+            fail(422, "PRODUCT_PRICE_REQUIRED")
+        product_id = str(row["product_id"])
+        product_copies[product_id] = product_copies.get(product_id, 0) + line.quantity
+        if product_copies[product_id] > row["max_order_copies"]:
+            fail(422, "MAX_ORDER_COPIES_EXCEEDED")
+        amount = Decimal(str(row["price_per_copy"])) * line.quantity
         total += amount
         snapshots.append(
             {
@@ -223,7 +255,7 @@ def catalog_lines(context, lines, settings):
                 "fulfillment_method": row["fulfillment_method"],
                 "template_key": row["template_key"],
                 "template_version": row["template_version"],
-                "unit_price": f"{Decimal(str(row['unit_price'])):.2f}",
+                "unit_price": f"{Decimal(str(row['price_per_copy'])):.2f}",
                 "currency_code": "PKR",
                 "quantity": line.quantity,
                 "line_total": f"{amount:.2f}",
@@ -240,12 +272,29 @@ def catalog_lines(context, lines, settings):
         "9999999999.99"
     ):
         fail(422, "TOTAL_OUT_OF_RANGE")
+    from app.db.template_registry import attach_quote_specs
+    attach_quote_specs(session,snapshots)
     return snapshots, total, len(groups)
 
 
 @router.post("/me/checkout/quotes", operation_id="API-203", status_code=201)
 def create_quote(body: QuoteRequest, context: Authenticated, request: Request):
+    if body.shipping_address_id is not None:
+        from app.api.v1.shipping_addresses import guard
+
+        guard(context, request, True)
+
     def work(settings):
+        address = body.address
+        if body.shipping_address_id is not None:
+            from app.api.v1.shipping_addresses import resolve
+
+            address = resolve(
+                context,
+                settings,
+                body.shipping_address_id,
+                body.shipping_address_version,
+            )
         lines, subtotal, pairs = catalog_lines(context, body.lines, settings)
         if (
             pairs
@@ -258,7 +307,7 @@ def create_quote(body: QuoteRequest, context: Authenticated, request: Request):
         total = subtotal + settings.checkout_shipping_pkr + settings.checkout_tax_pkr
         qid = uuid4()
         cipher, version = encrypt(
-            settings, qid, "checkout_address", body.address.model_dump_json()
+            settings, qid, "checkout_address", address.model_dump_json()
         )
         payload = {
             "lines": lines,
@@ -284,7 +333,7 @@ def create_quote(body: QuoteRequest, context: Authenticated, request: Request):
             {
                 k: v
                 for k, v in line.items()
-                if k not in {"template_key", "template_version"}
+                if k not in {"template_key", "template_version", "registry_specs"}
             }
             for line in lines
         ]
@@ -300,8 +349,8 @@ def create_quote(body: QuoteRequest, context: Authenticated, request: Request):
             "lines": public_lines,
             "new_pair_count": pairs,
             "shipping_confirmation": {
-                "city": body.address.city,
-                "phone_masked": "••••" + body.address.phone[-4:],
+                "city": address.city,
+                "phone_masked": "••••" + address.phone[-4:],
             },
             "reservation_policy": {
                 "minutes": settings.checkout_reservation_minutes,
@@ -345,10 +394,15 @@ def confirm_quote(
         ):
             fail(409, "QUOTE_TOTAL_MISMATCH")
         payload = row["payload"]
+        if payload.get("commerce_model", "legacy_pair") != "legacy_pair":
+            fail(409, "QUOTE_UNAVAILABLE")
+        from app.db.template_registry import recheck_quote
+        recheck_quote(session,payload["lines"])
         if any(
             f"{line['template_key']}@{line['template_version']}"
             not in settings.catalog_approved_templates
             for line in payload["lines"]
+            if "registry_specs" not in line
         ):
             fail(422, "PHYSICAL_CATALOG_APPROVAL_REQUIRED")
         # Recheck publication and physical policy; preserve the unexpired quoted prices.
@@ -454,9 +508,9 @@ def confirm_quote(
                     if use["mode"] == "new_pair"
                     else use["existing_qr_id"]
                 )
-                session.execute(
+                use_id = session.execute(
                     text("""INSERT INTO public.order_item_qr_uses(order_item_id,qr_code_id,pair_unit_id,use_kind,tag_type_snapshot,copies)
-     VALUES(:item,:qr,:unit,:kind,:tag,:copies)"""),
+     VALUES(:item,:qr,:unit,:kind,:tag,:copies) RETURNING id"""),
                     {
                         "item": item,
                         "qr": qr,
@@ -467,7 +521,13 @@ def confirm_quote(
                         "tag": use["tag_type"],
                         "copies": use["copies"],
                     },
-                )
+                ).scalar_one()
+                from app.db.template_registry import freeze_use
+                specs=line.get("registry_specs")
+                spec=next((s for s in specs if s["tag_type"]==use["tag_type"]),None) if specs is not None else None
+                if specs is not None and spec is None:
+                    fail(409,"CONFLICT")
+                freeze_use(session,use_id,spec)
         session.execute(
             text(
                 "UPDATE public.orders SET order_status='placed',placed_at=clock_timestamp() WHERE id=:id"
@@ -503,7 +563,7 @@ def confirm_quote(
     )
 
 
-@router.post("/me/orders", operation_id="API-060")
+@router.post("/me/orders", operation_id="API-060", status_code=409)
 def legacy_order(context: Authenticated):
     """Legacy callers must upgrade; never run a competing order writer."""
     require_verified_account(context)

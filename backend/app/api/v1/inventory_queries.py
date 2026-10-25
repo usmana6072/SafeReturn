@@ -263,7 +263,8 @@ def list_batches(
     data = (
         context.session.execute(
             text(f"""WITH selected AS (
-      SELECT b.* FROM public.qr_batches b WHERE (CAST(:label AS text) IS NULL OR b.batch_code=:label)
+      SELECT b.* FROM public.qr_batches b WHERE to_jsonb(b)->>'generation_mode' IS DISTINCT FROM 'standalone'
+      AND (CAST(:label AS text) IS NULL OR b.batch_code=:label)
       AND (CAST(:status AS text) IS NULL OR b.status=:status)
       AND (CAST(:stamp AS timestamptz) IS NULL OR (b.created_at,b.id)<(:stamp,:ident))
       ORDER BY b.created_at DESC,b.id DESC LIMIT :lim)
@@ -289,7 +290,7 @@ def batch_detail(batch_id: UUID, context: Authenticated):
     require_staff(context, "operations")
     row = (
         context.session.execute(
-            text(f"SELECT {BATCH_FIELDS} FROM public.qr_batches b WHERE b.id=:id"),
+            text(f"SELECT {BATCH_FIELDS} FROM public.qr_batches b WHERE b.id=:id AND to_jsonb(b)->>'generation_mode' IS DISTINCT FROM 'standalone'"),
             {"id": batch_id},
         )
         .mappings()
@@ -316,7 +317,7 @@ def stock_summary(context: Authenticated, request: Request):
       count(*) FILTER(WHERE p.inventory_status IN ('generated','printed','rejected')) AS qa_held_pairs,
       count(*) FILTER(WHERE p.ownership_status='active') AS active_pairs,
       (SELECT jsonb_build_object('batch_id',b.id,'batch_label',b.batch_code,'status',b.status,'generated_at',b.generated_at)
-        FROM public.qr_batches b ORDER BY b.created_at DESC,b.id DESC LIMIT 1) AS last_batch
+        FROM public.qr_batches b WHERE to_jsonb(b)->>'generation_mode' IS DISTINCT FROM 'standalone' ORDER BY b.created_at DESC,b.id DESC LIMIT 1) AS last_batch
       FROM public.tag_pairs p""")
         )
         .mappings()

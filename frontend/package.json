@@ -8,6 +8,13 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "playwright test",
+    "test:catalog-admin": "playwright test --config playwright.catalog.config.ts",
+    "test:catalog-relay": "node scripts/test-product-admin-relay.cjs",
+    "test:item-checkout": "playwright test --config playwright.item-checkout.config.ts",
+    "test:item-contracts": "node scripts/test-item-checkout.cjs",
+    "test:allocation": "playwright test --config playwright.allocation.config.ts",
+    "test:allocation-contracts": "node scripts/test-allocation.cjs",
+    "test:pricing": "playwright test --config playwright.pricing.config.ts",
     "test:integration:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-local-integration.ps1"
   },
   "dependencies": {

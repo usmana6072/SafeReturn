@@ -3,7 +3,10 @@ import { validateOrigin } from "./api/transport";
 
 export type CatalogProduct = {
   product_id: string; slug: string; name: string; description: string | null;
+  commerce_model?: "legacy_pair"|"single_qr"; qr_type?: "lost"|"ice"|null;
+  checkout_available?: boolean;
   featured: boolean; catalog_version: number;
+  price_per_copy: string; max_order_copies: number;
   category: { id: string; slug: string; name: string };
   images: { url: string; alt_text: string; is_primary: boolean }[];
   variants: { variant_id: string; sku: string; name: string; currency_code: string; unit_price_pkr: string }[];
@@ -12,8 +15,13 @@ export type Catalog = { products: CatalogProduct[]; unavailable: boolean };
 function record(v: unknown): v is Record<string, unknown> { return typeof v === "object" && v !== null; }
 function isProduct(value: unknown): value is CatalogProduct {
   if (!record(value) || !record(value.category)) return false;
+  if(value.checkout_available!==undefined&&typeof value.checkout_available!=="boolean")return false;
+  if(value.commerce_model!==undefined&&value.commerce_model!=="legacy_pair"&&value.commerce_model!=="single_qr")return false;
+  if(value.commerce_model==="single_qr"&&value.qr_type!=="lost"&&value.qr_type!=="ice")return false;
   return typeof value.product_id === "string" && typeof value.slug === "string" && /^[a-z0-9-]+$/.test(value.slug)
     && typeof value.name === "string" && (value.description === null || typeof value.description === "string")
+    && typeof value.price_per_copy === "string" && /^\d{1,10}\.\d{2}$/.test(value.price_per_copy)
+    && Number.isInteger(value.max_order_copies) && Number(value.max_order_copies) >= 1 && Number(value.max_order_copies) <= 100
     && typeof value.featured === "boolean" && Number.isInteger(value.catalog_version)
     && typeof value.category.name === "string" && typeof value.category.slug === "string"
     && Array.isArray(value.images) && value.images.every(i => record(i) && typeof i.url === "string"
