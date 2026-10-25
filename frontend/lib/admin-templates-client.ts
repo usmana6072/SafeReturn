@@ -13,7 +13,10 @@ export function templateError(e: unknown, ur = false) {
     if (error.status === 401)
         return ur ? 'دوبارہ سائن ان کریں؛ درج شدہ ڈیزائن برقرار ہے۔' : 'Sign in again. Your unsaved design is retained.';
     if (error.code === 'REAUTH_REQUIRED')
-        return ur ? 'حساس کارروائی کے لیے دوبارہ تصدیق درکار ہے۔' : 'Recent authentication is required (within 5 minutes). Reauthenticate using the existing sign-in/MFA flow, then review and retry. Your input is retained.';
+        return ur ? 'حساس کارروائی کے لیے دوبارہ تصدیق درکار ہے۔' : 'Recent authentication is required: drafting and synthetic preview allow 15 minutes; QA submission, publication, binding and retirement require 5 minutes. Reauthenticate using the existing sign-in/MFA flow, then review and retry. Your input is retained.';
+    if (error.code === 'PREVIEW_TIMEOUT') return 'The isolated preview worker exceeded its five-second limit. Retry the same intent once; if repeated, inspect Render CPU/memory and worker logs. No preview or approval was produced.';
+    if (error.code === 'PREVIEW_BUSY') return 'Another preview is running. Wait for it to finish, then retry the same intent.';
+    if (error.code === 'PREVIEW_WORKER_FAILED') return 'The isolated preview worker failed. Check the deployed worker/assets and Render logs; no preview or approval was produced.';
     if (error.code === 'TEMPLATE_MANAGEMENT_DISABLED')
         return 'Print Template Management is disabled in this backend environment. Reauthentication will not enable it.';
     if (error.code === 'TEMPLATE_ASSETS_UNAVAILABLE')
