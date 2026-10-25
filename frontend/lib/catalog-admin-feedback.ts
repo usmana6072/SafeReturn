@@ -1,5 +1,7 @@
 /** Fixed local messages only: never render provider bodies or validation inputs. */
 const messages: Record<string, [string, string]> = {
+  TEMPLATE_BINDING_CONFLICT: ['The template binding was rejected because its physical review, assets or rendering policy no longer match. Your variant fields are retained. Refresh the template; this is not a product-version conflict.', 'ٹیمپلیٹ کی جانچ، وسائل یا پرنٹ پالیسی مطابقت نہیں رکھتی۔ ویریئنٹ کا اندراج برقرار ہے۔'],
+  SKU_ALREADY_USED: ['This SKU is already used by another variant. Choose a unique SKU; your entries are retained.', 'یہ SKU پہلے سے موجود ہے۔ منفرد SKU منتخب کریں۔'],
   TEMPLATE_VARIANT_MISMATCH: ['The selected template does not match this variant. QR type, exact symbol size and material must match the published design.', 'منتخب ڈیزائن کی QR قسم، سائز اور مواد ویریئنٹ سے ملنا چاہیے۔'],
   TEMPLATE_BINDING_UNAVAILABLE: ['The published design could not be bound. Refresh the template and variant before retrying.', 'منظور شدہ ڈیزائن منسلک نہیں ہو سکا۔ دوبارہ لوڈ کریں۔'],
   TEMPLATE_QR_ORIGIN_REQUIRED: ['The public QR page address is not configured for printing. Configure the hosted portal address; the QR opens the owner-selected public details page.', 'پرنٹ کے لیے عوامی QR صفحے کا پتہ درکار ہے۔'],

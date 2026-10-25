@@ -2,6 +2,7 @@
 from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, uuid5
 
+from fastapi import HTTPException
 from sqlalchemy import text
 
 from app.api.auth import require_staff
@@ -33,5 +34,10 @@ def ensure_variant_template(context, settings, variant, parent):
     ready = context.session.execute(text("SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('public.template_qa_approvals') AND attname='approval_kind' AND NOT attisdropped) AS manual_template_binding_available")).scalar_one()
     if not ready:
         fail(503, 'TEMPLATE_BINDING_UNAVAILABLE')
-    RegistryRepository(context).call('manual_variant_bind', {'variant_id': str(variant['id']), 'expected': int(variant['catalog_version']), **manual_policy(settings)})
+    try:
+        RegistryRepository(context).call('manual_variant_bind', {'variant_id': str(variant['id']), 'expected': int(variant['catalog_version']), **manual_policy(settings)})
+    except HTTPException as error:
+        if error.status_code == 409 and isinstance(error.detail, dict) and error.detail.get('code') == 'CONFLICT':
+            fail(409, 'TEMPLATE_BINDING_CONFLICT')
+        raise
     return dict(context.session.execute(text('SELECT * FROM public.product_variants WHERE id=:id'), {'id': variant['id']}).mappings().one())
