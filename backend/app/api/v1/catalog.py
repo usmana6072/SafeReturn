@@ -88,8 +88,23 @@ class ProductRequest(Closed):
     name: str = Field(min_length=1, max_length=160)
     description: str | None = Field(default=None, max_length=4000)
     lifecycle_status: Literal["draft", "published", "archived"] = "draft"
+    price_per_copy: Decimal = Field(ge=0, le=Decimal("9999999999.99"), decimal_places=2, allow_inf_nan=False)
+    max_order_copies: int = Field(default=100, ge=1, le=100, strict=True)
+    qr_type: Literal["lost", "ice"] | None = None
+
+    @field_validator("price_per_copy", mode="before")
+    @classmethod
+    def product_money(cls, value):
+        if not isinstance(value, (str, Decimal)):
+            raise ValueError("Money must be a decimal string")  # noqa: TRY004 - Pydantic requires ValueError
+        return value
+
     is_featured: bool = Field(default=False, strict=True)
     featured_sort_order: int = Field(default=0, ge=-100000, le=100000, strict=True)
+
+
+class CreateProductRequest(ProductRequest):
+    qr_type: Literal["lost", "ice"]
 
 
 class VariantRequest(Closed):
@@ -100,8 +115,8 @@ class VariantRequest(Closed):
     )
     material: str | None = Field(default=None, max_length=120)
     color: str | None = Field(default=None, max_length=80)
-    unit_price: Decimal = Field(
-        ge=0, le=Decimal("9999999999.99"), decimal_places=2, allow_inf_nan=False
+    unit_price: Decimal | None = Field(
+        default=None, ge=0, le=Decimal("9999999999.99"), decimal_places=2, allow_inf_nan=False
     )
     fulfillment_method: Literal["pdf_label", "manufacturer_artwork", "manual"]
     template_key: str | None = Field(default=None, max_length=120)
@@ -112,8 +127,8 @@ class VariantRequest(Closed):
     @field_validator("unit_price", mode="before")
     @classmethod
     def decimal_money(cls, value):
-        if not isinstance(value, (str, Decimal)):
-            raise ValueError("Money must be a decimal string")  # noqa: TRY004 - Pydantic validates ValueError, not TypeError
+        if value is not None and not isinstance(value, (str, Decimal)):
+            raise ValueError("Money must be a decimal string")
         return value
 
 
@@ -223,6 +238,9 @@ def lock(context, table, identifier, match):
 
 def mutation(context, request, operation, body, work):
     guard(context)
+    if operation.startswith(("catalog.product.","catalog.variant.")):
+        from app.db.template_registry import gate
+        gate(context.session)
     key = request.headers.get("idempotency-key", "")
     if not re.fullmatch(r"[A-Za-z0-9._:-]{8,160}", key):
         fail(400, "IDEMPOTENCY_KEY_REQUIRED")
@@ -344,6 +362,9 @@ def publishable(context, request, product):
     if product["lifecycle_status"] != "published":
         return
     session = context.session
+    single = product.get("commerce_model") == "single_qr"
+    if single and product.get("qr_type") not in {"lost", "ice"}:
+        fail(422, "QR_TYPE_REQUIRED")
     category = (
         session.execute(
             text(
@@ -367,18 +388,26 @@ def publishable(context, request, product):
         .all()
     )
     approved = request.app.state.settings.catalog_approved_templates
+    from app.db.template_registry import catalog_eligibility
+    eligible={str(v["id"]):catalog_eligibility(session,v["id"], product["qr_type"]) if single else catalog_eligibility(session,v["id"]) for v in variants}
+    if single and len({v["size_mm"] for v in variants}) != len(variants):
+        fail(422, "DUPLICATE_SIZE")
+    if single and any(eligible[str(v["id"])] is not True for v in variants):
+        fail(422, "QR_TYPE_TEMPLATE_APPROVAL_REQUIRED")
     if not variants or any(
         v["fulfillment_method"] != "pdf_label"
         or v["size_mm"] is None
         or v["size_mm"] < 30
         or v["currency_code"] != "PKR"
-        or f"{v['template_key']}@{v['template_version']}" not in approved
+        or (single and eligible[str(v["id"])] is not True)
+        or eligible[str(v["id"])] is False
+        or (eligible[str(v["id"])] is None and f"{v['template_key']}@{v['template_version']}" not in approved)
         for v in variants
     ):
         fail(422, "PHYSICAL_CATALOG_APPROVAL_REQUIRED")
     if not session.execute(
         text(
-            "SELECT 1 FROM public.product_images WHERE product_id=:id AND verified_public_url IS NOT NULL LIMIT 1"
+            "SELECT 1 FROM public.product_images WHERE product_id=:id AND verified_public_url IS NOT NULL" + (" AND is_primary" if single else "") + " LIMIT 1"
         ),
         {"id": product["id"]},
     ).scalar_one_or_none():
@@ -492,11 +521,28 @@ def admin_products(
                     {"id": row["id"]},
                 ).mappings()
             ]
+        # Variant prices are legacy metadata; expose the product price for every size.
+        for variant in item["variants"]:
+            variant["unit_price"] = item["price_per_copy"]
         items.append(jsonable_encoder(item, custom_encoder={Decimal: str}))
     return {
         "items": items,
         "next_cursor": str(rows[limit - 1]["id"]) if len(rows) > limit else None,
     }
+
+
+@admin_router.get("/admin/products/{product_id}", operation_id="catalog-admin-product-detail")
+def admin_product_detail(product_id: UUID, context: Authenticated):
+    guard(context)
+    row = context.session.execute(text("SELECT * FROM public.products WHERE id=:id"), {"id": product_id}).mappings().one_or_none()
+    if row is None:
+        raise AccessError(404)
+    item = dict(row)
+    for key, table in (("variants", "product_variants"), ("images", "product_images")):
+        item[key] = [dict(r) for r in context.session.execute(text(f"SELECT * FROM public.{table} WHERE product_id=:id ORDER BY id"), {"id": product_id}).mappings()]
+    for variant in item["variants"]:
+        variant["unit_price"] = item["price_per_copy"]
+    return jsonable_encoder(item, custom_encoder={Decimal: str})
 
 
 @admin_router.get("/admin/catalog/categories", operation_id="API-227")
@@ -549,11 +595,13 @@ def edit_category(
 
 
 @admin_router.post("/admin/products", operation_id="API-221", status_code=201)
-def create_product(body: ProductRequest, request: Request, context: Authenticated):
+def create_product(body: CreateProductRequest, request: Request, context: Authenticated):
     def work():
         if body.lifecycle_status != "draft":
             fail(422, "CREATE_AS_DRAFT")
-        return insert(context, "products", body.model_dump()), None
+        if body.qr_type is None:
+            fail(422, "QR_TYPE_REQUIRED")
+        return insert(context, "products", {**body.model_dump(), "commerce_model": "single_qr", "allows_new_pair": False}), None
 
     return mutation(context, request, "catalog.product.create", body.model_dump(), work)
 
@@ -573,6 +621,10 @@ def edit_product(
             and body.lifecycle_status != "archived"
         ):
             fail(422, "ARCHIVED_PRODUCT")
+        if old.get("commerce_model", "legacy_pair") == "legacy_pair" and body.qr_type != old.get("qr_type"):
+            fail(409, "LEGACY_PRODUCT_TYPE")
+        if old.get("commerce_model") == "single_qr" and body.qr_type is None:
+            fail(422, "QR_TYPE_REQUIRED")
         row = update(context, "products", product_id, body.model_dump())
         publishable(context, request, row)
         return row, jsonable_encoder(old)
@@ -598,8 +650,10 @@ def create_variant(
 ):
     def work():
         parent = lock(context, "products", product_id, if_match)
+        if parent["price_per_copy"] is None:
+            fail(422, "PRODUCT_PRICE_REQUIRED")
         row = insert(
-            context, "product_variants", {**body.model_dump(), "product_id": product_id}
+            context, "product_variants", {**body.model_dump(), "unit_price": parent["price_per_copy"], "product_id": product_id}
         )
         update(context, "products", product_id, {"name": parent["name"]})
         publishable(context, request, parent)
@@ -638,7 +692,9 @@ def edit_variant(
             .one()
         )
         old = lock(context, "product_variants", variant_id, if_match)
-        row = update(context, "product_variants", variant_id, body.model_dump())
+        if parent["price_per_copy"] is None:
+            fail(422, "PRODUCT_PRICE_REQUIRED")
+        row = update(context, "product_variants", variant_id, {**body.model_dump(), "unit_price": parent["price_per_copy"]})
         update(context, "products", pid, {"name": parent["name"]})
         publishable(context, request, parent)
         return row, jsonable_encoder(old)
@@ -694,6 +750,29 @@ def create_image(
         {**body.model_dump(), "id": product_id, "version": if_match},
         work,
     )
+
+
+class ImageMetadataRequest(Closed):
+    alt_text: str = Field(min_length=1, max_length=240)
+    sort_order: int = Field(default=0, ge=-100000, le=100000, strict=True)
+    is_primary: bool = Field(strict=True)
+
+
+@admin_router.patch("/admin/products/{product_id}/images/{image_id}", operation_id="catalog-image-metadata")
+def edit_image(product_id: UUID, image_id: UUID, body: ImageMetadataRequest, request: Request,
+               context: Authenticated, if_match: Annotated[str | None, Header()] = None):
+    def work():
+        parent = lock(context, "products", product_id, if_match)
+        old = context.session.execute(text("SELECT * FROM public.product_images WHERE id=:id AND product_id=:pid FOR UPDATE"), {"id": image_id, "pid": product_id}).mappings().one_or_none()
+        if old is None:
+            raise AccessError(404)
+        if body.is_primary:
+            context.session.execute(text("UPDATE public.product_images SET is_primary=false WHERE product_id=:pid"), {"pid": product_id})
+        row = context.session.execute(text("UPDATE public.product_images SET alt_text=:alt_text,sort_order=:sort_order,is_primary=:is_primary WHERE id=:id AND product_id=:pid RETURNING *"), {**body.model_dump(), "id": image_id, "pid": product_id}).mappings().one()
+        update(context, "products", product_id, {"name": parent["name"]})
+        publishable(context, request, parent)
+        return dict(row), dict(old)
+    return mutation(context, request, "catalog.image.edit", {**body.model_dump(), "product": product_id, "id": image_id, "version": if_match}, work)
 
 
 @admin_router.delete(

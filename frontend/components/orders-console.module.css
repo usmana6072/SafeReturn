@@ -1,0 +1,13 @@
+.console { min-width: 0; max-width: 76rem; margin: auto; padding: 1rem; overflow-wrap: anywhere; }
+.console nav { display: flex; flex-wrap: wrap; gap: 1rem; margin-block: 1rem; }
+.console a { text-decoration: underline; display: inline-block; margin-inline-end: 1rem; padding-block: .5rem; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,15rem),1fr)); gap: .8rem; margin-block: 1rem; }
+.filters label { display: flex; flex-direction: column; gap: .3rem; }
+.filters input,.filters select { width: 100%; min-width: 0; border: 1px solid #64748b; border-radius: .3rem; padding: .65rem; background: white; color: #172033; }
+.console button { padding: .65rem 1rem; background: #173b5c; color: white; border-radius: .3rem; min-height: 44px; }
+.console button:disabled { opacity: .6; }
+.console :focus-visible { outline: 3px solid #b45309; outline-offset: 3px; }
+.results { display: grid; gap: 1rem; }
+.results article,.console aside { border: 1px solid #94a3b8; border-radius: .5rem; padding: 1rem; margin-block: .5rem; }
+.facts { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr); gap: .4rem 1rem; }
+.facts dd { margin: 0; }

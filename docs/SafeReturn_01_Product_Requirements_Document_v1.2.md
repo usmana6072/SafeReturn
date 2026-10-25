@@ -1,5 +1,8 @@
 # SafeReturn — Product Requirements Document (PRD) v1.2
 
+> **Owner-delegated contract review, 2026-10-19:** [BTR-20261019](SafeReturn_13_Blocked_Task_Contract_Review_2026-10-19.md) records reviewed/corrected decisions for all thirteen formerly blocked task cards. Its explicit design approvals amend conflicting proposals for those tasks only; runtime roles, live/destructive authorization and existing acceptance evidence are unchanged. Provider/legal/physical/recovery gates remain explicit. Reserved API IDs are contracts, not implemented endpoints.
+
+
 **Document ID:** SR-PRD-001  
 **Revision:** 1.2 — founder-directed implementation baseline  
 **Date:** 12 October 2026  
@@ -339,9 +342,9 @@ The next Technical/API documents must define explicit transactional boundaries f
 | PRD12-DEC-03 | Reservation hold & pending-review grace | Configurable policy; no premature payment-review release | Needs policy value |
 | PRD12-DEC-04 | Gift/third-party activation | Concealed one-time credential only | Security review required |
 | PRD12-DEC-05 | Evidence retention | Delete after finance/dispute window | Needs legal/finance approval |
-| PRD12-DEC-06 | PDF retention | Delivery + proposed 7 day grace, legal/reprint exceptions | Needs founder approval |
+| PRD12-DEC-06 | PDF retention | Seven days after later of delivery/authorized reprint; holds/work/reconciliation exceptions | Design approved BTR-10; activation and live-object acceptance still gated |
 | PRD12-DEC-07 | Payment provider | Manual now; automatic verified gateway later | Gateway undecided |
-| PRD12-DEC-08 | Google Sheet schema and sharing | Restricted mirror, masked sender account | Real sheet mapping pending |
+| PRD12-DEC-08 | Google Sheet schema and sharing | Dedicated workbook; exact existing eleven-column mirror; literal masked/private values | Schema/sharing design approved BTR-09; actual mapping/sharing/live-write gate pending |
 | PRD12-DEC-09 | QR center logo artwork and scanning | Measured approved art, no quiet zone overlap | Physical QA pending |
 | PRD12-DEC-10 | Shipping/carrier delivery evidence | Authorized verification and audit | Carrier policy pending |
 | PRD12-DEC-11 | Cloudinary scope | Public media only, confidential files in Supabase | Proposed v1.2 architecture |

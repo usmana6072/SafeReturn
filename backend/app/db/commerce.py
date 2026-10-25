@@ -8,8 +8,10 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -21,6 +23,7 @@ from sqlalchemy import (
     Uuid,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.models import Base, Identity, Timestamps, auth_fk
@@ -49,6 +52,12 @@ class Product(Identity, Timestamps, Base):
     name: Mapped[str] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
     lifecycle_status: Mapped[str] = mapped_column(Text, server_default="draft")
+    # NULL is retained only for legacy products awaiting an explicit admin price.
+    price_per_copy: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    max_order_copies: Mapped[int] = mapped_column(Integer, server_default="100")
+    # Required for new-model publication in Phase 3; legacy products are not inferred.
+    qr_type: Mapped[str | None] = mapped_column(String(8))
+    commerce_model: Mapped[str] = mapped_column(String(16), server_default="legacy_pair")
     is_featured: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     featured_sort_order: Mapped[int] = mapped_column(Integer, server_default="0")
     allows_new_pair: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
@@ -56,6 +65,10 @@ class Product(Identity, Timestamps, Base):
         Boolean, server_default=text("false")
     )
     __table_args__ = (
+        CheckConstraint("price_per_copy BETWEEN 0 AND 9999999999.99", name="price_per_copy"),
+        CheckConstraint("max_order_copies BETWEEN 1 AND 100", name="max_order_copies"),
+        CheckConstraint("qr_type IN ('lost','ice')", name="qr_type"),
+        CheckConstraint("commerce_model IN ('legacy_pair','single_qr') AND (commerce_model<>'single_qr' OR qr_type IS NOT NULL)", name="commerce_model"),
         CheckConstraint(
             "lifecycle_status IN ('draft','published','archived')", name="lifecycle"
         ),
@@ -117,6 +130,9 @@ class ProductImage(Identity, Created, Base):
 
 class Order(Identity, Timestamps, Base):
     __tablename__ = "orders"
+    commerce_model: Mapped[str] = mapped_column(String(16), server_default="legacy_pair")
+    payment_instructions_snapshot: Mapped[dict | None] = mapped_column(JSONB)
+    revision: Mapped[int] = mapped_column(Integer, server_default="1")
     order_number: Mapped[str] = mapped_column(String(40), unique=True)
     customer_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, auth_fk())
     order_status: Mapped[str] = mapped_column(String(24), server_default="draft")
@@ -134,6 +150,8 @@ class Order(Identity, Timestamps, Base):
     total_pkr: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     placed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
+        CheckConstraint("commerce_model IN ('legacy_pair','single_qr')", name="commerce_model"),
+        CheckConstraint("revision > 0", name="revision"),
         CheckConstraint(
             "order_status IN ('draft','placed','processing','fulfilled','cancelled')",
             name="status",
@@ -163,6 +181,89 @@ class Order(Identity, Timestamps, Base):
             "placed_at IS NULL OR order_status <> 'draft'", name="no_unplace"
         ),
         Index("idx_orders_customer", "customer_user_id", "created_at"),
+    )
+
+
+class OrderLogicalItem(Identity, Created, Base):
+    __tablename__ = "order_logical_items"
+    order_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("orders.id", ondelete="RESTRICT"))
+    product_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("products.id", ondelete="RESTRICT"))
+    identity_group: Mapped[str | None] = mapped_column(String(80))
+    product_name_snapshot: Mapped[str] = mapped_column(Text)
+    qr_type_snapshot: Mapped[str] = mapped_column(String(8))
+    quantity: Mapped[int] = mapped_column(Integer)
+    unit_price_snapshot: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    max_copies_snapshot: Mapped[int] = mapped_column(Integer)
+    product_version_snapshot: Mapped[int] = mapped_column(Integer)
+    currency_code: Mapped[str] = mapped_column(String(3), server_default="PKR")
+    __table_args__ = (
+        CheckConstraint("qr_type_snapshot IN ('lost','ice')", name="type"),
+        CheckConstraint("quantity BETWEEN 1 AND max_copies_snapshot AND max_copies_snapshot BETWEEN 1 AND 100", name="copies"),
+        CheckConstraint("unit_price_snapshot>=0 AND line_total=quantity*unit_price_snapshot AND currency_code='PKR' AND product_version_snapshot>0", name="pricing"),
+        Index("uq_logical_item_identity", "order_id", "product_id", text("coalesce(identity_group,'')"), unique=True),
+        CheckConstraint("identity_group IS NULL OR identity_group ~ '^[A-Za-z0-9_-]{1,80}$'", name="group"),
+    )
+
+
+class OrderItemSize(Identity, Created, Base):
+    __tablename__ = "order_item_sizes"
+    logical_item_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("order_logical_items.id", ondelete="RESTRICT"))
+    variant_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("product_variants.id", ondelete="RESTRICT"))
+    variant_name_snapshot: Mapped[str] = mapped_column(Text)
+    sku_snapshot: Mapped[str] = mapped_column(Text)
+    size_mm_snapshot: Mapped[Decimal] = mapped_column(Numeric(7, 2))
+    material_snapshot: Mapped[str | None] = mapped_column(Text)
+    copies: Mapped[int] = mapped_column(Integer)
+    variant_version_snapshot: Mapped[int] = mapped_column(Integer)
+    print_spec_snapshot: Mapped[dict] = mapped_column(JSONB)
+    # Registry tables are SQL-managed; migration 0040 adds their RESTRICT FKs.
+    revision_id: Mapped[uuid.UUID] = mapped_column(Uuid, Computed("(print_spec_snapshot->>'revision_id')::uuid", persisted=True))
+    approval_id: Mapped[uuid.UUID] = mapped_column(Uuid, Computed("(print_spec_snapshot->>'approval_id')::uuid", persisted=True))
+    __table_args__ = (
+        UniqueConstraint("logical_item_id", "variant_id"),
+        UniqueConstraint("logical_item_id", "size_mm_snapshot"),
+        CheckConstraint("copies BETWEEN 1 AND 100 AND size_mm_snapshot BETWEEN 30 AND 100 AND variant_version_snapshot>0", name="shape"),
+    )
+
+
+class TypedOrderSettlement(Base):
+    __tablename__ = "typed_order_settlements"
+    order_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("orders.id", ondelete="RESTRICT"), primary_key=True)
+    attempt_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("payment_attempts.id", ondelete="RESTRICT"), unique=True)
+    state: Mapped[str] = mapped_column(Text)
+    reason_code: Mapped[str | None] = mapped_column(Text)
+    revision: Mapped[int] = mapped_column(Integer, server_default="1")
+    verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("clock_timestamp()"))
+    allocated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint("state IN ('reconciliation_pending','allocated')", name="state"),
+        CheckConstraint("reason_code IN ('stock_shortage','financial_review','cancellation_review','template_review')", name="reason"),
+        CheckConstraint("revision>0", name="revision"),
+        CheckConstraint("(state='allocated' AND allocated_at IS NOT NULL AND reason_code IS NULL) OR (state='reconciliation_pending' AND allocated_at IS NULL AND reason_code IS NOT NULL)", name="allocation"),
+    )
+
+
+class OrderItemQRAllocation(Base):
+    __tablename__ = "order_item_qr_allocations"
+    logical_item_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("order_logical_items.id", ondelete="RESTRICT"), primary_key=True)
+    qr_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("qr_codes.id", ondelete="RESTRICT"), unique=True)
+    order_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("typed_order_settlements.order_id", ondelete="RESTRICT"))
+    purchaser_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, auth_fk())
+    allocated_by: Mapped[uuid.UUID] = mapped_column(Uuid, auth_fk())
+    allocated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("clock_timestamp()"))
+    __table_args__ = (Index("ix_typed_allocations_order", "order_id", "logical_item_id"),)
+
+
+class TypedAllocationEvent(Identity, Created, Base):
+    __tablename__ = "typed_allocation_events"
+    order_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("typed_order_settlements.order_id", ondelete="RESTRICT"))
+    settlement_revision: Mapped[int] = mapped_column(Integer)
+    event_kind: Mapped[str] = mapped_column(Text)
+    __table_args__ = (
+        UniqueConstraint("order_id", "settlement_revision"),
+        CheckConstraint("settlement_revision>0", name="revision"),
+        CheckConstraint("event_kind IN ('allocation.ready','allocation.reconciliation')", name="kind"),
     )
 
 
@@ -401,12 +502,33 @@ class AddressFields:
 class ShippingAddress(Identity, Created, AddressFields, Base):
     __tablename__ = "shipping_addresses"
     customer_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, auth_fk())
+    is_saved: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     __table_args__ = (
         CheckConstraint(
             "key_version > 0 AND octet_length(recipient_name_ciphertext) > 0 AND octet_length(phone_ciphertext) > 0 AND octet_length(address_ciphertext) > 0",
             name="encryption",
         ),
         Index("idx_addresses_customer", "customer_user_id"),
+        UniqueConstraint("customer_user_id", "id", name="uq_shipping_address_owner"),
+        CheckConstraint("version > 0", name="version"),
+    )
+
+
+class ShippingAddressBook(Base):
+    __tablename__ = "shipping_address_books"
+    customer_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, auth_fk(), primary_key=True
+    )
+    version: Mapped[int] = mapped_column(Integer)
+    default_address_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["customer_user_id", "default_address_id"],
+            ["shipping_addresses.customer_user_id", "shipping_addresses.id"],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("version > 0", name="version"),
     )
 
 
@@ -478,6 +600,62 @@ class ShipmentPair(Base):
             name="packing",
         ),
     )
+
+
+class StandaloneOwnerRelease(Base):
+    __tablename__ = "standalone_owner_release"
+    singleton: Mapped[bool] = mapped_column(Boolean, primary_key=True, server_default=text("true"))
+    enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    __table_args__ = (CheckConstraint("singleton", name="singleton"),)
+
+
+class StandaloneActivationIntent(Identity, Base):
+    __tablename__ = "standalone_activation_intents"
+    logical_item_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("order_item_qr_allocations.logical_item_id", ondelete="RESTRICT"))
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, auth_fk())
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid)
+    state_revision: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("statement_timestamp()"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("statement_timestamp()+interval '5 minutes'"))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (CheckConstraint("state_revision>0", name="revision"), CheckConstraint("expires_at>created_at AND expires_at<=created_at+interval '5 minutes'", name="expiry"), Index("ix_standalone_intents_actor", "actor_user_id", "created_at"))
+
+
+class StandaloneOwnerEvent(Identity, Created, Base):
+    __tablename__ = "standalone_owner_events"
+    qr_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("qr_codes.id", ondelete="RESTRICT"))
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, auth_fk())
+    event_type: Mapped[str] = mapped_column(Text)
+    state_revision: Mapped[int] = mapped_column(Integer)
+    __table_args__ = (UniqueConstraint("qr_id", "state_revision"), CheckConstraint("state_revision>0", name="revision"), CheckConstraint("event_type IN ('activated','owner_disabled','owner_enabled')", name="event"), Index("uq_standalone_activation_once", "qr_id", unique=True, postgresql_where=text("event_type='activated'")))
+
+
+class StandaloneOwnerReceipt(Created, Base):
+    __tablename__ = "standalone_owner_receipts"
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, auth_fk(), primary_key=True)
+    operation: Mapped[str] = mapped_column(Text, primary_key=True)
+    key_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    request_hash: Mapped[str] = mapped_column(Text)
+    result: Mapped[dict] = mapped_column(JSONB)
+    __table_args__ = (CheckConstraint("key_hash ~ '^[0-9a-f]{64}$' AND request_hash ~ '^[0-9a-f]{64}$'", name="hashes"), CheckConstraint("jsonb_typeof(result)='object'", name="result"))
+
+
+class ShipmentItem(Base):
+    __tablename__ = "shipment_items"
+    shipment_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("shipments.id", ondelete="RESTRICT"), primary_key=True)
+    logical_item_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("order_item_qr_allocations.logical_item_id", ondelete="RESTRICT"), primary_key=True, unique=True)
+    print_job_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("print_jobs.id", ondelete="RESTRICT"))
+    packed_qa_confirmed: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    packed_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, auth_fk())
+    packed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (CheckConstraint("NOT packed_qa_confirmed OR (packed_by IS NOT NULL AND packed_at IS NOT NULL)", name="packing"),)
+
+
+class TypedPrintHandoff(Base):
+    __tablename__ = "typed_print_handoffs"
+    event_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("typed_allocation_events.id", ondelete="RESTRICT"), primary_key=True)
+    durable_job_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("durable_jobs.id", ondelete="RESTRICT"), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("clock_timestamp()"))
 
 
 class PairPrintQA(Identity, Base):

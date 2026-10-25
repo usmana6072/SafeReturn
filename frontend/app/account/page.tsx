@@ -32,6 +32,9 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
     {params.saved === "1" && <p role="status">{ur ? "تبدیلیاں محفوظ ہو گئیں۔" : "Changes saved."}</p>}
     {params.logout === "failed" && <p role="status">{ur ? "لاگ آؤٹ نہیں ہو سکا۔ دوبارہ کوشش کریں۔" : "Logout could not be completed. Please try again."}</p>}
     <p><Link href="/admin/security/mfa">Staff security / MFA</Link></p>
+    <p><Link href="/account/shipping-addresses">{ur ? "ترسیل کے محفوظ پتے" : "Saved shipping addresses"}</Link></p>
+    <p><Link href="/account/privacy/exports">{ur ? "محدود ڈیٹا برآمد" : "Limited data export"}</Link></p>
+    <p><Link href="/settings">{ur ? "رازداری کی تاریخ اور درخواستیں" : "Privacy history and requests"}</Link></p>
     <AccountForm account={account} initialName={initialName} ur={ur} />
     <form action={logout} className="logout-form"><button className="button secondary">{ur ? "لاگ آؤٹ" : "Log out"}</button></form>
   </AuthShell>;

@@ -1,0 +1,11 @@
+.screen { min-width: 0; }
+.screen h1 { font-size: 20px; line-height: 1.35; margin: 0; letter-spacing: normal; }
+.screen h2 { font-size: 14px; line-height: 1.4; margin: 0; letter-spacing: normal; }
+.screen p { margin-block: 0; }
+.screen button, .screen a { font-size: 12px; }
+.screen button { min-height: 32px; }
+.screen input, .screen select, .screen textarea { max-width: 100%; }
+.screen :is(button,input,select,textarea,a):focus-visible { outline: 2px solid #0a756e; outline-offset: 3px; }
+.screen dialog { width: calc(100% - 2rem); overflow-wrap: anywhere; }
+.screen table { min-width: 760px; }
+@media (max-width: 639px) { .screen h1 { font-size: 18px; } .screen input[aria-label="Search inspection pair ID"] { min-width: 140px; } }

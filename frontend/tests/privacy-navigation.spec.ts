@@ -1,0 +1,53 @@
+import { test, expect } from '@playwright/test';
+
+test('privacy history, limited status and safe unavailable paths', async ({ page, context, request }, testInfo) => {
+  test.setTimeout(150000);
+  await page.goto('/settings'); await expect(page).toHaveURL(/login/);
+  expect((await page.request.get('/account/privacy/exports/api?id=00000000-0000-0000-0000-000000000001')).status()).toBe(401);
+  async function login(name: string) {
+    await context.clearCookies();
+    await request.post('http://127.0.0.1:8115/fixture/privacy/user/'+name);
+    await request.post('http://127.0.0.1:8115/fixture/privacy/expired/false');
+    await page.goto('/login'); await page.getByLabel('Email address').fill(name+'@synthetic.invalid');
+    await page.locator('input[name=password]').fill('synthetic-password');
+    await page.getByRole('button',{name:'Log in',exact:true}).click();
+    await expect(page).not.toHaveURL(/\/login/);
+  }
+  await login('a'); await page.goto('/settings');
+  await expect(page.getByText(/These historical states do not describe current permission/)).toBeVisible();
+  await expect(page.getByText(/More recorded events exist/)).toBeVisible();
+  await expect(page.getByText(/Recorded as enabled then/)).toHaveCount(100);
+  await expect(page.getByText(/A request or case closure is not proof of erasure/)).toBeVisible();
+  expect(await page.locator('body').innerText()).not.toContain('PRIVATE_CANARY');
+  const ssr = await page.request.get('/settings');
+  expect(await ssr.text()).not.toMatch(/PRIVATE_CANARY|synthetic-refresh|synthetic-key-only/);
+  expect(await (await page.request.get('/settings', {headers:{RSC:'1'}})).text()).not.toContain('PRIVATE_CANARY');
+  await page.getByRole('link',{name:'Limited export requests and status',exact:true}).click();
+  await expect(page).toHaveURL(/account\/privacy\/exports$/);
+  const fixture = await (await request.post('http://127.0.0.1:8115/fixture/privacy/status/requested')).json();
+  await page.getByLabel('Request ID',{exact:true}).fill(fixture.request_id);
+  await page.getByRole('button',{name:'Load status',exact:true}).click();
+  await expect(page.getByText('requested · Revision 1',{exact:true})).toBeVisible();
+  expect((await page.request.get('/account/privacy/exports/api?id='+fixture.request_id)).headers()['cache-control']).toBe('private, no-store');
+  await page.getByRole('link',{name:'Privacy history and requests',exact:true}).click();
+  await expect(page).toHaveURL(/settings$/);
+  await request.post('http://127.0.0.1:8115/fixture/privacy/history/empty'); await page.reload();
+  await expect(page.getByText('No consent changes recorded.',{exact:true})).toBeVisible();
+  await request.post('http://127.0.0.1:8115/fixture/privacy/history/down'); await page.reload();
+  await expect(page.getByText(/could not be loaded|unavailable|try again/i).first()).toBeVisible();
+  await request.post('http://127.0.0.1:8115/fixture/privacy/history/full');
+  await login('b');
+  const foreign = await page.request.get('/account/privacy/exports/api?id='+fixture.request_id);
+  expect(foreign.status()).toBe(404); expect(await foreign.text()).not.toContain(fixture.request_id);
+  await page.goto('/settings'); await expect(page.getByText('No consent changes recorded.',{exact:true})).toBeVisible();
+  await login('a');
+  await context.addCookies([{name:'safereturn-language',value:'ur',url:'http://127.0.0.1:3100'}]);
+  await page.setViewportSize({width:375,height:900});await page.goto('/settings');
+  await expect(page.locator('html')).toHaveAttribute('dir','rtl');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
+  await page.screenshot({path:testInfo.outputPath('privacy-rtl.png'),fullPage:true});
+  await request.post('http://127.0.0.1:8115/fixture/privacy/expired/true');
+  expect((await page.request.get('/account/privacy/exports/api?id='+fixture.request_id)).status()).toBe(401);
+  await page.goto('/settings');await expect(page).toHaveURL(/login/);
+});

@@ -1,0 +1,8 @@
+export type Variant = {id:string;sku:string;name:string;size_mm:string|null;material:string|null;color:string|null;currency_code:string;unit_price:string;fulfillment_method:string;template_key:string|null;template_version:number;is_active:boolean;sort_order:number;catalog_version:number};
+export type ProductImage = {id:string;alt_text:string;sort_order:number;is_primary:boolean;verified_public_url:string|null};
+export type Product = {id:string;name:string;slug:string;description:string|null;category_id:string|null;qr_type:"lost"|"ice"|null;commerce_model:"legacy_pair"|"single_qr";price_per_copy:string|null;max_order_copies:number;lifecycle_status:"draft"|"published"|"archived";is_featured:boolean;featured_sort_order:number;catalog_version:number;variants:Variant[];images:ProductImage[]};
+export type Category = {id:string;name:string;slug:string;is_active:boolean};
+export const blankProduct = {name:"",slug:"",description:"",category_id:"",qr_type:"lost" as "lost"|"ice"|"",price_per_copy:"",max_order_copies:100,lifecycle_status:"draft" as Product["lifecycle_status"],is_featured:false,featured_sort_order:0};
+export function productForm(p:Product):typeof blankProduct {return {name:p.name,slug:p.slug,description:p.description??"",category_id:p.category_id??"",qr_type:p.qr_type??"",price_per_copy:p.price_per_copy??"",max_order_copies:p.max_order_copies,lifecycle_status:p.lifecycle_status,is_featured:p.is_featured,featured_sort_order:p.featured_sort_order};}
+export function productPayload(form:typeof blankProduct) {return {...form,category_id:form.category_id||null,description:form.description||null,qr_type:form.qr_type||null};}
+export function validCopyPrice(value:string) {return /^\d{1,10}(\.\d{1,2})?$/.test(value)&&Number(value)<=9999999999.99;}

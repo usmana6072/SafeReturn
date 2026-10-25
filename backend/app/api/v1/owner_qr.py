@@ -23,8 +23,8 @@ router = APIRouter(tags=["owner QR"])
 
 class TagSummary(BaseModel):
     qr_id: UUID
-    pair_id: UUID
-    pair_reference: str
+    pair_id: UUID | None
+    pair_reference: str | None
     tag_type: Literal["lost", "ice"]
     public_status: str
     profile_label: str | None
@@ -110,18 +110,18 @@ TAG_SELECT = """
  CASE WHEN q.tag_type='lost' THEN coalesce(l.published,false) ELSE coalesce(i.published,false) END AS published,
  CASE WHEN q.tag_type='lost' THEN coalesce(l.profile_version,0) ELSE coalesce(i.profile_version,0) END AS profile_version,
  coalesce(c.profile_version,0) AS preference_version
- FROM public.qr_codes q JOIN public.tag_pairs p ON p.id=q.pair_id
+ FROM public.qr_codes q LEFT JOIN public.tag_pairs p ON p.id=q.pair_id
  LEFT JOIN public.lost_item_profiles l ON l.qr_id=q.id
  LEFT JOIN public.ice_profiles i ON i.qr_id=q.id
  LEFT JOIN public.tag_contact_preferences c ON c.qr_id=q.id
- WHERE p.owner_user_id=:uid AND q.is_current
+ WHERE (p.owner_user_id=:uid OR (q.pair_id IS NULL AND public.sr_owns_qr(q.id))) AND q.is_current
 """
 
 
 def tag(row):
     return {
         "qr_id": str(row["qr_id"]),
-        "pair_id": str(row["pair_id"]),
+        "pair_id": str(row["pair_id"]) if row["pair_id"] is not None else None,
         "pair_reference": row["pair_reference"],
         "tag_type": row["tag_type"],
         "public_status": row["public_status"],
@@ -281,6 +281,9 @@ def get_qr(qr_id: UUID, context: Authenticated):
     if not rows:
         raise AccessError(404)
     result = tag(rows[0])
+    if result["pair_id"] is None:
+        result["physical_products"] = context.session.execute(text("SELECT public.sr_standalone_products(:qid)"), {"qid": qr_id}).scalar_one()
+        return result
     result["physical_products"] = [
         dict(r)
         for r in context.session.execute(

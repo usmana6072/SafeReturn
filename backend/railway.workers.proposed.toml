@@ -1,0 +1,14 @@
+# DESIGN RECORD ONLY. Not a Railway deployment configuration.
+# No [deploy], startCommand, HTTP healthcheck, cron, secret or auto-migration.
+# The operations module is an offline model and has NO runnable daemon CLI.
+schema_version = 1
+status = "proposed_not_deployable"
+enabled = false
+replicas_per_job = 1
+concurrency_per_job = 1
+poll_seconds = 5
+jobs = ["notifications", "printing", "finance-sync"]
+excluded_jobs = ["retention", "privacy-export", "manufacturing-export", "preview"]
+operator = "unappointed"
+alert_authority = "unappointed"
+activation = "requires_separate_concrete_plan_and_explicit_authorization"

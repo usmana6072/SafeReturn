@@ -1,5 +1,8 @@
 # SafeReturn — Implementation Plan & Task Backlog v1.2
 
+> **Owner-delegated contract review, 2026-10-19:** [BTR-20261019](SafeReturn_13_Blocked_Task_Contract_Review_2026-10-19.md) records reviewed/corrected decisions for all thirteen formerly blocked task cards. Its explicit design approvals amend conflicting proposals for those tasks only; runtime roles, live/destructive authorization and existing acceptance evidence are unchanged. Provider/legal/physical/recovery gates remain explicit. Reserved API IDs are contracts, not implemented endpoints.
+
+
 **Document ID:** SR-PLAN-005 | **Version:** 1.2 proposed | **Date:** 12 October 2026 | **Project:** SafeReturn Lahore pilot  
 **Repository target:** `docs/06-implementation-plan.md` | **Status:** Implementation plan for review; NOT an assertion that tickets, tests, providers, migrations or deployment are complete.
 

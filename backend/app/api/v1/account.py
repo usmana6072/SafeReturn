@@ -30,6 +30,16 @@ class StaffSecurity(BaseModel):
 # Navigation/page capabilities mirror existing endpoint role lists; they never
 # replace require_staff on the actual privileged reads and mutations.
 STAFF_CAPABILITIES = {
+    "orders.read": frozenset({"operations", "finance"}),
+    "inventory.manage": frozenset({"operations"}),
+    "users.manage": frozenset({"security_admin"}),
+    "audit.search": frozenset({"security_admin"}),
+    "finance.mirror": frozenset({"finance", "security_admin", "superadmin"}),
+    "storage.metadata": frozenset(
+        {"operations", "finance", "security_admin", "superadmin"}
+    ),
+    "storage.holds": frozenset({"security_admin", "superadmin"}),
+    "privacy.exports": frozenset({"security_admin"}),
     "catalog.manage": frozenset({"operations", "security_admin", "superadmin"}),
     "payments.review": frozenset({"finance"}),
     "fulfillment.manage": frozenset({"operations"}),

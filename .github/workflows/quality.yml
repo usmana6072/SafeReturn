@@ -1,0 +1,60 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  backend:
+    name: Backend offline preparation (partial coverage)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[dev]"
+      - name: Scoped preparation lint
+        run: python -m ruff check ../ops/run-task61a-backend.py tests/task61a_offline.py tests/test_task61a_runner.py
+      - name: Bounded synthetic backend checks (no PostgreSQL)
+        run: python ../ops/run-task61a-backend.py
+      - name: Retain synthetic backend evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-offline-preparation
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            output/task61a/latest.json
+            output/task61a/*/summary.json
+            output/task61a/*/preservation.json
+            output/task61a/*/collection.json
+            output/task61a/*/junit.xml
+            output/task61a/*/pytest.log
+            output/task61a/*/source-before.json
+            output/task61a/*/source-after.json
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build

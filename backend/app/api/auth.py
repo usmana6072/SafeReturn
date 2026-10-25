@@ -119,7 +119,11 @@ def get_auth_context(
     try:
         with api_transaction(database, principal.user_id) as session:
             session.info["settings"] = request.app.state.settings
-            yield authorize(session, principal)
+            context = authorize(session, principal)
+            from app.services.support_development_access import enforce
+
+            enforce(context, request.app.state.settings, request)
+            yield context
     except SQLAlchemyError as error:
         original = getattr(error, "orig", None)
         sqlstate = getattr(original, "sqlstate", None)
@@ -155,6 +159,21 @@ def require_staff(context: AuthContext, *allowed_roles: str):
     require_verified_account(context)
     if not context.mfa_verified:
         raise AccessError(403)
+    settings = context.session.info.get("settings")
+    if (
+        settings
+        and settings.support_dev_enabled
+        and context.principal.user_id == settings.support_dev_subject_id
+        and (
+            allowed_roles != ("support",)
+            or context.session.execute(
+                text("SELECT public.sr_support_dev_state(:uid)"),
+                {"uid": context.principal.user_id},
+            ).scalar_one()
+            != "active"
+        )
+    ):
+        raise AccessError(403)
     role = context.session.execute(
         text(
             "SELECT 1 FROM public.staff_roles WHERE user_id=:uid AND role=ANY(:roles) AND revoked_at IS NULL LIMIT 1"
@@ -188,7 +207,7 @@ def require_qr_owner(context: AuthContext, qr_id: UUID, *, tag_type: str | None 
         raise ValueError("Invalid QR purpose guard")
     _owned(
         context,
-        "SELECT 1 FROM public.qr_codes q JOIN public.tag_pairs p ON p.id=q.pair_id WHERE q.id=:id AND p.owner_user_id=:uid AND q.is_current AND (CAST(:kind AS text) IS NULL OR q.tag_type=:kind)",
+        "SELECT 1 FROM public.qr_codes q LEFT JOIN public.tag_pairs p ON p.id=q.pair_id WHERE q.id=:id AND (p.owner_user_id=:uid OR (q.pair_id IS NULL AND public.sr_owns_qr(q.id))) AND q.is_current AND (CAST(:kind AS text) IS NULL OR q.tag_type=:kind)",
         qr_id,
         kind=tag_type,
     )

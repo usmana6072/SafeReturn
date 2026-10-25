@@ -25,7 +25,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
     if (tag.tag_type === "ice") contacts = optionsResult.value as Contacts;
     else prefs = optionsResult.value as Preferences;
   }
-  return <><Link className="text-link" href={`/kits/${tag.pair_id}`}>{ur ? "کٹ پر واپس" : "Back to kit"}</Link>
+  return <><Link className="text-link" href={tag.pair_id?`/kits/${tag.pair_id}`:"/independent-qr"}>{tag.pair_id?(ur ? "کٹ پر واپس" : "Back to kit"):(ur?"میرے الگ QR":"My independent QRs")}</Link>
     <h1>{tag.tag_type === "lost" ? (ur ? "Lost پروفائل میں ترمیم" : "Edit Lost profile") : (ur ? "ICE پروفائل میں ترمیم" : "Edit ICE profile")}</h1>
     <p className="form-help">QR: <bdi>{qrId}</bdi> · {ur ? "تمام پرنٹ کاپیاں یہی پروفائل استعمال کرتی ہیں۔" : "All printed copies share this profile."}</p>
     {(await searchParams).saved === "1" && <p role="status">{ur ? "تبدیلیاں محفوظ ہو گئیں۔" : "Changes saved."}</p>}

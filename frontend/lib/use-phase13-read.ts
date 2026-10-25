@@ -1,0 +1,12 @@
+"use client";
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {phase13Query,type Phase13Kind} from './phase13-contract';
+export function usePhase13Read<T>(kind:Phase13Kind,parse:(v:unknown,q:URLSearchParams)=>T){
+ const [data,setData]=useState<T|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[checked,setChecked]=useState<string|null>(null);const serial=useRef(0),active=useRef<AbortController|null>(null),query=useRef(new URLSearchParams());
+ const load=useCallback(async(input:URLSearchParams)=>{const n=++serial.current;active.current?.abort();const controller=new AbortController();active.current=controller;setData(null);setError('');setBusy(true);
+ try{const q=phase13Query(input,kind);query.current=q;const path={trends:'/admin/dashboard/api',summary:'/admin/dashboard/api',audit:'/admin/audit/api',security:'/admin/staff-permissions/api',liveness:'/admin/system/api'}[kind];const search=new URLSearchParams(q);if(kind==='trends')search.set('kind','trends');const response=await fetch(path+(search.size?'?'+search:''),{cache:'no-store',redirect:'error',signal:AbortSignal.any([controller.signal,AbortSignal.timeout(15000)])});if(!response.ok)throw Error(String(response.status));const result=parse(await response.json(),q);if(n===serial.current&&!controller.signal.aborted)setData(result);
+ }catch(e){if(n===serial.current&&!controller.signal.aborted)setError(e instanceof Error&&['401','403'].includes(e.message)?'Access or recent authentication required. Sign in and verify MFA as required.':'Metadata unavailable. Refresh to try again.');}
+ finally{if(n===serial.current){setBusy(false);setChecked(new Date().toISOString());}}},[kind,parse]);
+ useEffect(()=>{const initial=new URLSearchParams(location.search);if(kind==='audit'){if(!initial.has('end'))initial.set('end',new Date().toISOString());const end=Date.parse(initial.get('end')!);if(!initial.has('start')&&Number.isFinite(end))initial.set('start',new Date(end-7*86400000).toISOString());}void load(initial);const visibility=()=>{if(document.hidden){serial.current++;active.current?.abort();setData(null);setBusy(false);}else void load(query.current);};document.addEventListener('visibilitychange',visibility);return()=>{serial.current++;active.current?.abort();document.removeEventListener('visibilitychange',visibility);};},[load,kind]);
+ return {data,error,busy,checked,load,query};
+}

@@ -8,8 +8,9 @@ export function CustomerShell({ ur, children }: { ur: boolean; children: ReactNo
     <header className="container auth-header"><Link className="brand" href="/">SafeReturn</Link><Link href="/account">{ur ? "اکاؤنٹ" : "Account"}</Link></header>
     <div className="container customer-layout"><nav className="customer-nav" aria-label={ur ? "اکاؤنٹ مینو" : "Customer navigation"}>
       <Link href="/dashboard">{ur ? "خلاصہ" : "Overview"}</Link><Link href="/my-qr">{ur ? "میرے QR کوڈز" : "My QR codes"}</Link>
-      <Link href="/kits">{ur ? "میرے کٹس" : "My kits"}</Link><Link href="/activate">{ur ? "فعال کریں" : "Activate QR"}</Link>
+      <Link href="/independent-qr">{ur?"الگ QR شناختیں":"Independent QRs"}</Link><Link href="/kits">{ur ? "میرے کٹس" : "My kits"}</Link><Link href="/activate">{ur ? "فعال کریں" : "Activate QR"}</Link>
       <Link href="/orders">{ur ? "میرے آرڈرز" : "My orders"}</Link>
+      <Link href="/account/shipping-addresses">{ur ? "ترسیل کے پتے" : "Shipping addresses"}</Link>
       <Link href="/inbox">{ur ? "فائنڈر اِن باکس" : "Finder inbox"}</Link>
       <Link href="/settings">{ur ? "ترتیبات" : "Settings"}</Link>
       <Link href="/help">{ur ? "مدد" : "Help"}</Link>
@@ -31,5 +32,6 @@ export function PairCard({ pair, ur }: { pair: Pair; ur: boolean }) {
   return <section className="pair-card"><h2><Link href={`/kits/${pair.pair_id}`}><bdi>{pair.pair_reference}</bdi></Link></h2>
     <p>{ur ? "ملکیت" : "Ownership"}: <bdi>{pair.ownership_status}</bdi></p>
     {pair.activated_at && <p className="form-help">{ur ? "فعال ہونے کی تاریخ" : "Activated"}: <bdi>{pair.activated_at.slice(0,10)}</bdi></p>}
+    <Link prefetch={false} href={`/kits/${pair.pair_id}/history`}>{ur ? "عوامی رسائی اور تاریخ" : "Public access and history"}</Link>
     <div className="qr-grid">{pair.tags.map(tag => <TagCard key={tag.qr_id} tag={tag} ur={ur} />)}</div></section>;
 }

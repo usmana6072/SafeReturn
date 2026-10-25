@@ -1,0 +1,11 @@
+import {NextRequest} from 'next/server';
+import {phase13Relay} from '../../../../lib/api/phase13-relay';
+export const dynamic='force-dynamic';
+const relay=(r:NextRequest)=>phase13Relay(r,'liveness');
+export const GET=relay;
+export const POST=relay;
+export const PUT=relay;
+export const PATCH=relay;
+export const DELETE=relay;
+export const HEAD=relay;
+export const OPTIONS=relay;

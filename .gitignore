@@ -27,3 +27,15 @@ frontend/auth-task23-*.log
 /backend/tests/tmp/
 /backend/task*.log
 /frontend/task*.log
+/.local-tools/
+
+# Local build, runtime and acceptance artifacts.
+/backend/build/
+/backend/output/
+/backend/tmp/
+/package-lock.json
+*.log
+
+# Original uploaded fonts await licensing/compatibility review.
+/branding/Jameel Noori Nastaleeq.ttf
+/branding/Raleway-Regular.ttf
