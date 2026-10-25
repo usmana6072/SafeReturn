@@ -19,9 +19,10 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.auth import AccessError, Authenticated, authorize, require_staff
 from app.api.v1.catalog import fail
-from app.api.v1.privacy_exports import Confirmed, recent
+from app.api.v1.privacy_exports import Confirmed
 from app.core.print_render import PrintUnavailable
 from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt, encrypt, key
+from app.core.template_auth import recent_template_auth
 from app.core.template_content import Closed, Content, plain
 from app.core.template_preview import isolated_preview
 from app.db.print_templates import TemplateRepository
@@ -307,14 +308,7 @@ def guard(context, request, *, write=False, draft=False):
         *(["operations"] if write else ["operations", "security_admin", "superadmin"]),
     )
     if write:
-        if draft:
-            from app.api.auth import require_verified_account
-            require_verified_account(context)
-            stamp = context.principal.authentication_time
-            if stamp is None or not 0 <= datetime.now(UTC).timestamp() - stamp <= 900:
-                fail(403, "REAUTH_REQUIRED")
-        else:
-            recent(context)
+        recent_template_auth(context)
         origins = request.headers.getlist("origin")
         if origins and (
             len(origins) != 1
