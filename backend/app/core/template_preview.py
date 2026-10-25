@@ -17,6 +17,7 @@ from app.core.template_content import Content
 
 CAPACITY = threading.BoundedSemaphore(1)
 MAX_OUTPUT = 2 * 1024 * 1024
+PREVIEW_WALL_TIMEOUT_SECONDS = 60
 
 
 def checked_assets(assets, root):
@@ -100,7 +101,8 @@ def isolated_preview(spec, root):
             env={"PATH": os.defpath, "LANG": "C.UTF-8"},
         )
         try:
-            data, _ = process.communicate(wire, timeout=5)
+            # Throttled hosts need wall time beyond the unchanged five CPU seconds.
+            data, _ = process.communicate(wire, timeout=PREVIEW_WALL_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
             process.kill()
             process.communicate()

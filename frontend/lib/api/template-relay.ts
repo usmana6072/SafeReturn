@@ -90,7 +90,7 @@ export async function templateRelay(request: NextRequest) {
             return fail(e instanceof Error && e.message === 'size' ? 413 : 422);
         }
         // No auth_time is synthesized: backend requires a genuine recent authentication (300s).
-        const response = await guardedBackendFetch(validateOrigin(process.env.SAFERETURN_API_ORIGIN ?? '') + '/api/v1' + path + (query.size ? '?' + query : ''), { method, cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(action === 'preview' || action === 'submit' ? 20000 : 10000), headers: { Authorization: `Bearer ${session.token}`, Accept: action === 'preview' ? 'application/pdf' : 'application/json', ...(method !== 'GET' ? { 'Content-Type': 'application/json', Origin: origin, 'Idempotency-Key': key! } : {}), ...(version ? { 'If-Match': `"${version}"` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+        const response = await guardedBackendFetch(validateOrigin(process.env.SAFERETURN_API_ORIGIN ?? '') + '/api/v1' + path + (query.size ? '?' + query : ''), { method, cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(action === 'preview' || action === 'submit' ? 75000 : 10000), headers: { Authorization: `Bearer ${session.token}`, Accept: action === 'preview' ? 'application/pdf' : 'application/json', ...(method !== 'GET' ? { 'Content-Type': 'application/json', Origin: origin, 'Idempotency-Key': key! } : {}), ...(version ? { 'If-Match': `"${version}"` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
         if (!response.ok) {
             const status = [400, 401, 403, 404, 409, 412, 413, 422, 429].includes(response.status) ? response.status : 503;
             let code: string | undefined;
