@@ -342,7 +342,7 @@ def command(context, request, action, body, *, prepare=None, **ids):
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     session = context.session
-    if action in {"publish", "bind", "retire"} and not gate(session, exclusive=True):
+    if action in {"publish", "bind", "retire", "manual_review_decide"} and not gate(session, exclusive=True):
         raise AccessError(503)
     if action in {"publish", "retire"}:
         publisher(context)
@@ -353,7 +353,7 @@ def command(context, request, action, body, *, prepare=None, **ids):
     proof = {}
     if before is None and prepare is not None:
         proof = prepare()
-    if action not in {"publish", "bind", "retire"}:
+    if action not in {"publish", "bind", "retire", "manual_review_decide"}:
         # Submit renders before admission; draft writes then share the lifecycle
         # gate so a retired key cannot acquire a racing new revision.
         gate(session)
@@ -835,7 +835,9 @@ class QAReviewView(Closed):
     decision: Literal["approved", "rejected"]
     review_note: str = Field(min_length=4, max_length=500)
     reviewer_user_id: UUID
-    reviewer_human_id: UUID
+    reviewer_human_id: UUID | None
+    evidence_kind: Literal["signed_evidence", "manual_print"]
+    preview_fingerprint: str | None
     approval_id: UUID | None
     decided_at: datetime
 
@@ -854,20 +856,20 @@ class QADecisionReceipt(Closed):
     result: QAStateView
 
 
-class QADecision(Reason, Confirmed):
+class QADecision(Confirmed):
     decision: Literal["approved", "rejected"]
     expected_review_version: int = Field(ge=0, strict=True)
-    envelope: dict | None = None
+    preview_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    reason: str = Field(default="Staff recorded a manual print review", min_length=4, max_length=500)
 
-    @model_validator(mode="after")
-    def evidence_required(self):
-        if (self.decision == "approved") != (self.envelope is not None):
-            raise ValueError("Approval requires signed evidence; rejection excludes it")
-        return self
+    @field_validator("reason")
+    @classmethod
+    def text(cls, value):
+        return plain(value)
 
 
 def review_available(context):
-    if not context.session.execute(text("SELECT to_regclass('public.template_qa_reviews') IS NOT NULL AS template_qa_reviews_available")).scalar_one():
+    if not context.session.execute(text("SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('public.template_qa_reviews') AND attname='evidence_kind' AND NOT attisdropped) AS template_qa_reviews_available")).scalar_one():
         fail(503, "PROVIDER_UNAVAILABLE")
 
 
@@ -878,45 +880,13 @@ def qa_status(template_id: UUID, revision_id: UUID, request: Request, context: A
     recent_template_auth(context)
     query(request, set())
     review_available(context)
-    return RegistryRepository(context).call("review_status", {"template_id": str(template_id), "revision_id": str(revision_id)})
+    return RegistryRepository(context).call("manual_review_status", {"template_id": str(template_id), "revision_id": str(revision_id)})
 
 
 @router.post("/admin/print-templates/{template_id}/revisions/{revision_id}/qa-decision", operation_id="API-312", response_model=QADecisionReceipt)
 def qa_decision(template_id: UUID, revision_id: UUID, body: QADecision, request: Request, context: Authenticated):
-    from app.core.template_evidence import EvidenceInvalid, parse
-    from app.db.template_registry import RegistryRepository
-    from app.services.template_evidence import (
-        controlled_command,
-        custody,
-        import_evidence,
-    )
-    custody(context, request.app.state.settings)
-    origins = request.headers.getlist("origin")
-    if len(origins) != 1 or origins[0] != request.app.state.settings.print_template_web_origin:
+    guard(context, request, write=True)
+    if request.headers.getlist("origin") != [request.app.state.settings.print_template_web_origin]:
         fail(403, "TEMPLATE_ORIGIN_MISMATCH")
-    version = match(request)
-    keys = request.headers.getlist("idempotency-key")
-    if len(keys) != 1:
-        fail(400, "VALIDATION_ERROR")
     review_available(context)
-    if body.envelope is not None:
-        try:
-            envelope = parse(json.dumps(body.envelope).encode())
-        except EvidenceInvalid:
-            fail(422, "VALIDATION_ERROR")
-        if envelope.payload.template_id != template_id or envelope.payload.revision_id != revision_id or envelope.payload.revision_row_version != version:
-            fail(412, "VERSION_MISMATCH")
-    payload = body.model_dump(mode="json") | {"template_id": str(template_id), "revision_id": str(revision_id), "expected": version}
-
-    def work():
-        proof = {}
-        if body.envelope is not None:
-            imported = import_evidence(context, request.app.state.settings, json.dumps(body.envelope).encode(), keys[0])
-            proof = {"approval_id": imported["result"]["approval_id"], "verified_evidence_sha256": imported["result"]["evidence_sha256"]}
-        return RegistryRepository(context).call("review_decide", {
-            "template_id": str(template_id), "revision_id": str(revision_id), "expected": version,
-            "decision": body.decision, "review_note": body.reason, "confirmed": body.confirmed,
-            "expected_review_version": body.expected_review_version, **proof,
-        })
-
-    return controlled_command(context, request.app.state.settings, "template.qa.decision", keys[0], payload, work)
+    return command(context, request, "manual_review_decide", body, template_id=str(template_id), revision_id=str(revision_id))

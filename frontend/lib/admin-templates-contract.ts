@@ -148,11 +148,11 @@ export function templateBody(action: Action, v: unknown) {
     if (action === 'create')
         return createBody(v);
     if (action === 'qa-decision') {
-        const o = object(v); exact(o, ['decision', 'reason', 'expected_review_version', 'envelope', 'confirmed']);
+        const o = object(v); exact(o, ['decision', 'reason', 'expected_review_version', 'preview_fingerprint', 'confirmed']);
         if (o.confirmed !== true || !Number.isSafeInteger(o.expected_review_version) || Number(o.expected_review_version) < 0) bad('confirmation');
         const decision = one(o.decision, ['approved', 'rejected']);
-        if (decision === 'approved' ? !o.envelope : o.envelope !== null) bad('evidence');
-        return { decision, reason: plain(o.reason, 'reason', 500, 4), expected_review_version: o.expected_review_version, envelope: o.envelope === null ? null : object(o.envelope), confirmed: true };
+        if (typeof o.preview_fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(o.preview_fingerprint)) bad('preview_fingerprint');
+        return { decision, reason: plain(o.reason, 'reason', 500, 4), expected_review_version: o.expected_review_version, preview_fingerprint: o.preview_fingerprint, confirmed: true };
     }
     const o = object(v);
     if (action === 'revision' || action === 'edit') {
@@ -257,17 +257,18 @@ export function templateQuery(action: Action, p: URLSearchParams): URLSearchPara
     return out;
 }
 
-export type QAReview = { review_id: string; revision_id: string; revision_row_version: number; review_version: number; decision: 'approved' | 'rejected'; review_note: string; reviewer_user_id: string; reviewer_human_id: string; approval_id: string | null; decided_at: string };
+export type QAReview = { review_id: string; revision_id: string; revision_row_version: number; review_version: number; decision: 'approved' | 'rejected'; review_note: string; reviewer_user_id: string; reviewer_human_id: string | null; evidence_kind: 'signed_evidence' | 'manual_print'; preview_fingerprint: string | null; approval_id: string | null; decided_at: string };
 export type QAState = { revision_id: string; revision_row_version: number; review_version: number; status: 'pending' | 'approved' | 'rejected'; can_review: boolean; history: QAReview[] };
 export function qaRecord(value: unknown): QAState {
     const o = object(value); exact(o, ['revision_id', 'revision_row_version', 'review_version', 'status', 'can_review', 'history']);
     if (typeof o.can_review !== 'boolean' || !Number.isSafeInteger(o.review_version) || Number(o.review_version) < 0 || !Array.isArray(o.history) || o.history.length > 20) bad('qa');
     const revision_id = uuid(o.revision_id);
     const history = (o.history as unknown[]).map(value => {
-        const r = object(value); exact(r, ['review_id', 'revision_id', 'revision_row_version', 'review_version', 'decision', 'review_note', 'reviewer_user_id', 'reviewer_human_id', 'approval_id', 'decided_at']);
+        const r = object(value); exact(r, ['review_id', 'revision_id', 'revision_row_version', 'review_version', 'decision', 'review_note', 'reviewer_user_id', 'reviewer_human_id', 'evidence_kind', 'preview_fingerprint', 'approval_id', 'decided_at']);
         const decision = one(r.decision, ['approved', 'rejected']);
-        if (r.revision_id !== revision_id || (decision === 'approved') !== (r.approval_id !== null)) bad('qa');
-        return { review_id: uuid(r.review_id), revision_id, revision_row_version: positive(r.revision_row_version), review_version: positive(r.review_version), decision, review_note: plain(r.review_note, 'review_note', 500, 4), reviewer_user_id: uuid(r.reviewer_user_id), reviewer_human_id: uuid(r.reviewer_human_id), approval_id: r.approval_id === null ? null : uuid(r.approval_id), decided_at: stamp(r.decided_at) };
+        const evidence_kind = one(r.evidence_kind, ['signed_evidence', 'manual_print']);
+        if (r.revision_id !== revision_id || (evidence_kind === 'signed_evidence' ? (decision === 'approved') !== (r.approval_id !== null) || r.reviewer_human_id === null : r.approval_id !== null || typeof r.preview_fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(r.preview_fingerprint))) bad('qa');
+        return { review_id: uuid(r.review_id), revision_id, revision_row_version: positive(r.revision_row_version), review_version: positive(r.review_version), decision, review_note: plain(r.review_note, 'review_note', 500, 4), reviewer_user_id: uuid(r.reviewer_user_id), reviewer_human_id: r.reviewer_human_id === null ? null : uuid(r.reviewer_human_id), evidence_kind, preview_fingerprint: r.preview_fingerprint as string | null, approval_id: r.approval_id === null ? null : uuid(r.approval_id), decided_at: stamp(r.decided_at) };
     });
     const status = one(o.status, ['pending', 'approved', 'rejected']);
     if ((history[0]?.review_version ?? 0) !== o.review_version || (history[0]?.decision ?? 'pending') !== status) bad('qa');
