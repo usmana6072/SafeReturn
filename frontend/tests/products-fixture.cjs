@@ -4,7 +4,7 @@ const {NextRequest}=require('next/server');
 const id='10000000-0000-4000-8000-000000000001',cat='20000000-0000-4000-8000-000000000001',vid='30000000-0000-4000-8000-000000000001',img='40000000-0000-4000-8000-000000000001';
 const baseProduct=()=>({id,name:'SafeReturn Sticker',slug:'sticker',description:'Catalog fixture',category_id:cat,qr_type:'lost',commerce_model:'single_qr',price_per_copy:'12.50',max_order_copies:100,lifecycle_status:'draft',is_featured:false,featured_sort_order:0,catalog_version:1,variants:[],images:[]});
 function createHarness(){
- const state={product:baseProduct(),categories:[{id:cat,name:'Stickers',slug:'qr-stickers',sort_order:0,is_active:true,catalog_version:1}],authorized:true,mfa:true,role:'operations',status:0,malformed:false,calls:[],receipts:new Map(),conflict:false,delay:0};
+ const state={product:baseProduct(),categories:[{id:cat,name:'Stickers',slug:'qr-stickers',sort_order:0,is_active:true,catalog_version:1}],authorized:true,mfa:true,role:'operations',status:0,malformed:false,calls:[],receipts:new Map(),conflict:false,delay:0,publishedTemplates:[],publishedDetails:{},templateStatus:0,templateCode:'PROVIDER_UNAVAILABLE'};
  const cache=new Map();
  const load=file=>{file=path.resolve(file);if(cache.has(file))return cache.get(file).exports;const module={exports:{}};cache.set(file,module);
  const sandbox={module,exports:module.exports,URL,URLSearchParams,AbortSignal,TextDecoder,TextEncoder,Request,Response,Number,Set,Map,Date,JSON,process:{env:{SAFERETURN_API_ORIGIN:'https://api.products.invalid'}},crypto:globalThis.crypto,
@@ -19,11 +19,13 @@ function createHarness(){
  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,sandbox,{filename:file});return module.exports;};
  async function upstream(url,options){const u=new URL(url),p=u.pathname,m=options.method;state.calls.push({path:p,method:m,options});
  // Any unrelated API is a test failure before a request can be dispatched.
- const c=load(path.resolve(__dirname,'../lib/admin-products-contract.ts'));c.target(p.replace('/api/v1',''),m);
+ const c=load(path.resolve(__dirname,'../lib/admin-products-contract.ts'));
+ if(p.startsWith('/api/v1/admin/print-templates')){if(m!=='GET')throw Error('Unexpected template mutation');load(path.resolve(__dirname,'../lib/admin-templates-contract.ts')).templateTarget(p.replace('/api/v1',''),m);}else c.target(p.replace('/api/v1',''),m);
  if(state.delay)await new Promise(r=>setTimeout(r,state.delay));
  if(state.status)return Response.json({detail:{code:state.status===412?'VERSION_MISMATCH':'PRIVATE_PROVIDER_TEXT'},private:'DO_NOT_RENDER'},{status:state.status});
  if(state.malformed)return Response.json({untrusted:'DO_NOT_RENDER'});
  if(m==='GET'){
+ if(p.startsWith('/api/v1/admin/print-templates')){if(state.templateStatus)return Response.json({error:{code:state.templateCode}},{status:state.templateStatus});if(p==='/api/v1/admin/print-templates')return Response.json(state.templatePages?.[u.searchParams.get('cursor')??'start']??{as_of:'2026-10-25T12:00:00Z',items:state.publishedTemplates,next_cursor:null});const tid=p.split('/').at(-1);const d=state.revisionPages?.[tid+'@'+(u.searchParams.get('revisions_cursor')??'start')]??state.publishedDetails[tid];return d?Response.json(d):Response.json({error:{code:'NOT_FOUND'}},{status:404});}
  if(p.endsWith('/approved-templates'))return Response.json({as_of:'2026-10-23T00:00:00Z',items:[{template_key:'approved-template',template_version:1}]});
  if(p.endsWith('/categories'))return Response.json({items:state.categories});
  if(p==='/api/v1/admin/products')return Response.json({items:u.searchParams.has('cursor')?[]:[state.product],next_cursor:u.searchParams.has('cursor')?null:id});

@@ -43,7 +43,7 @@ test('template picker loading, empty, outage, stale, removed and draft-safe bind
  hold=true;await section.getByRole('button',{name:'Add variant',exact:true}).click();
  await expect(picker.getByRole('status')).toContainText('Loading');await expect(choice).toBeDisabled();
  hold=false;await expect.poll(()=>release!==null).toBe(true);release!();
- await expect(picker.getByRole('status')).toHaveText('No catalog templates are configured.');
+ await expect(picker.getByRole('status')).toHaveText('No published or configured templates are available.');
  await page.getByLabel('sku',{exact:true}).fill('SYNTHETIC');await page.getByLabel('name',{exact:true}).fill('Keep draft values');await page.getByLabel('unit price',{exact:true}).fill('100.00');
  await page.getByRole('button',{name:'Save',exact:true}).click();await expect(notice).toHaveText('Saved.');expect(saves[0].body.template_key).toBeNull();expect(saves[0].body.template_version).toBe(1);
  mode='valid';await page.getByRole('button',{name:'Refresh templates',exact:true}).click();await expect(choice).toBeEnabled();await choice.focus();await expect(choice).toBeFocused();await choice.selectOption('alpha@1');
@@ -53,7 +53,7 @@ test('template picker loading, empty, outage, stale, removed and draft-safe bind
  mode='removed';const removedBefore=saves.length;await page.getByRole('button',{name:'Save',exact:true}).click();await expect(notice).toContainText('Selected template is unavailable');expect(saves.length).toBe(removedBefore);await expect(picker).toContainText('alpha@1');
  await choice.selectOption('beta@2');await page.clock.fastForward(60001);await expect(picker.getByRole('status')).toContainText('stale');await expect(choice).toBeDisabled();
  const count=calls;await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await expect.poll(()=>calls).toBeGreaterThan(count);await expect(choice).toBeEnabled();
- mode='empty';await section.getByRole('button',{name:'Edit variant',exact:true}).click();await expect(picker.getByRole('status')).toHaveText('No catalog templates are configured.');await expect(picker).toContainText('legacy-only@7');
+ mode='empty';await section.getByRole('button',{name:'Edit variant',exact:true}).click();await expect(picker.getByRole('status')).toHaveText('No published or configured templates are available.');await expect(picker).toContainText('legacy-only@7');
  await page.getByRole('button',{name:'Save',exact:true}).click();await expect(notice).toContainText('reviewed template');expect(saves.at(-1).body.template_key).toBe('legacy-only');expect(saves.at(-1).body.template_version).toBe(7);
  await page.getByRole('button',{name:'Clear draft template',exact:true}).click();await page.getByRole('button',{name:'Save',exact:true}).click();await expect(notice).toContainText('reviewed template');expect(saves.at(-1).body.template_key).toBeNull();expect(saves.at(-1).body.template_version).toBe(7);
  expect(await page.locator('body').innerText()).not.toContain('PRIVATE_CANARY');expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
