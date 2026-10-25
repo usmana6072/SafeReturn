@@ -21,6 +21,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install cairo system dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev
       - run: python -m pip install -e ".[dev]"
       - name: Scoped preparation lint
         run: python -m ruff check ../ops/run-task61a-backend.py tests/task61a_offline.py tests/test_task61a_runner.py
