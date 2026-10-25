@@ -31,6 +31,7 @@ export interface AdminNavigationItem {
 }
 
 export const ALL_ADMIN_MODULES: AdminNavigationItem[] = [
+  { id: "template_qa", path: "/admin/template-qa", labelEn: "Template QA", labelUr: "سانچے کا معیار", section: "catalog", icon: "printer", capability: "printing.manage", descriptionEn: "Inspect submitted revisions and synthetic previews.", descriptionUr: "سانچوں کا جائزہ۔" },
   {
     id: "overview",
     path: "/admin",
@@ -331,4 +332,3 @@ export const DEMO_PERMISSIONS: Record<DemoRoleName, { pages: string[] }> = {
     ],
   },
 };
-
