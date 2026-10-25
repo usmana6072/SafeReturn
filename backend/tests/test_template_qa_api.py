@@ -11,15 +11,19 @@ def api(registry):  # noqa: F811
     client, db, headers, settings = registry
     db.roles = {'operations'}
     original = db.execute
-    state = {'available': True, 'calls': 0, 'conflict': False}
+    state = {'available': True, 'calls': 0, 'conflict': False, 'decision': None, 'publish_failure': False}
     def execute(statement, params=None):
         sql, p = str(statement), params or {}
         if 'AS template_qa_reviews_available' in sql: return Result(state['available'])
         if 'sr_template_lifecycle' in sql and p['action'] in {'manual_review_status', 'manual_review_decide'}:
             payload = json.loads(p['payload'])
             if state['conflict']: return Result({'error': 'VERSION_MISMATCH'})
-            if p['action'] == 'manual_review_decide': state['calls'] += 1
-            return Result({'revision_id': payload['revision_id'], 'revision_row_version': 2, 'review_version': 1, 'status': payload.get('decision', 'pending'), 'can_review': True, 'history': []})
+            if p['action'] == 'manual_review_decide':
+                if state['publish_failure']: return Result({'error': 'CONFLICT'})
+                state['calls'] += 1
+                state['decision'] = payload['decision']
+            published = state['decision'] == 'approved'
+            return Result({'revision_id': payload['revision_id'], 'revision_row_version': 3 if published else 2, 'review_version': 1, 'status': state['decision'] or 'pending', 'can_review': not published, 'publication_status': 'published' if published else 'pending_qa', 'published_at': '2026-10-25T12:00:00Z' if published else None, 'history': []})
         return original(statement, params)
     db.execute = execute
     p = db.evidence.payload
@@ -35,6 +39,8 @@ def test_manual_approval_without_signed_evidence_and_replay(api):
     first = request('approved')
     assert first.status_code == 200, first.text
     assert first.json()['result']['status'] == 'approved' and db.approval is None
+    assert first.json()['result']['publication_status'] == 'published'
+    assert first.json()['result']['published_at']
     assert request('approved').json() == first.json()
     assert state['calls'] == 1 and len(db.audit) == 1
 
@@ -104,3 +110,10 @@ def test_review_requires_matching_origin(api, origin):
     if origin: h['Origin'] = origin
     response = client.post(path + '/qa-decision', json={'decision': 'rejected', 'reason': 'CSRF rejected review', 'expected_review_version': 0, 'preview_fingerprint': str(db.evidence.payload.revision_fingerprint_sha256), 'confirmed': True}, headers=h)
     assert response.status_code == 403 and state['calls'] == 0
+
+
+def test_publication_failure_cannot_confirm_qa(api):
+    _, db, _, state, _, request = api
+    state['publish_failure'] = True
+    assert request('approved').status_code == 409
+    assert state['decision'] is None and not db.audit and not db.receipts

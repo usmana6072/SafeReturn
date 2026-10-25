@@ -28,7 +28,7 @@ for(const status of [401,403,503])test('QA backend error '+status,async({page})=
 
 function reviewer() {
  const h=withDraft();h.state.role='operations';h.state.revisions[0].status='pending_qa';h.state.revisions[0].fingerprint_sha256='a'.repeat(64);
- h.state.reviewState={revision_id:rid,revision_row_version:1,review_version:0,status:'pending',can_review:true,history:[]}; return h;
+ h.state.reviewState={revision_id:rid,revision_row_version:1,review_version:0,status:'pending',can_review:true,publication_status:'pending_qa',published_at:null,history:[]}; return h;
 }
 for (const decision of ['approved','rejected']) test('confirmed '+decision+' uses backend history',async({page})=>{
  const h=reviewer(),s=await setup(page,'list',h);
@@ -37,6 +37,7 @@ for (const decision of ['approved','rejected']) test('confirmed '+decision+' use
  await page.getByRole('button',{name:'Get PDF for printing'}).click();
  await page.getByRole('button',{name:decision==='approved'?'Approve QA':'Reject QA',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Revision 1 · '+decision,exact:true})).toBeVisible();
+ if(decision==='approved'){ await expect(page.getByText('QA approved and template published',{exact:false})).toBeVisible(); expect(h.state.revisions[0].status).toBe('published'); await expect(page.getByRole('button',{name:'Approve QA',exact:true})).toBeDisabled(); }
  await expect(page.getByLabel('QA decision history')).toContainText('Physical evidence reviewed');
  await expect(page.getByLabel('QA decision history')).toContainText('00000000-0000-0000-0000-000000000602');s.check();
 });

@@ -46,8 +46,12 @@ export function AdminTemplateDetails({ keyParam, ur = false }: AdminTemplateDeta
                 return;
             }
         }
-        else if (!revision)
+        else if (!revision) {
             setConflict(false);
+            if (!more && content === '{}' && !note && d.revisions.length) {
+                const latest = d.revisions[0]; setRevision(latest); setBase(latest.revision_id); setContent(JSON.stringify(latest.content, null, 2));
+            }
+        }
         setMessage('Latest server data loaded. Unsaved editor text is retained; compare before saving.');
     }
     catch (e) {
@@ -58,6 +62,11 @@ export function AdminTemplateDetails({ keyParam, ur = false }: AdminTemplateDeta
     } }
     useEffect(() => { void load(); return () => { if (previewRef.current)
         URL.revokeObjectURL(previewRef.current); }; }, [keyParam]);
+    useEffect(() => {
+        const refresh = () => { if (!busy && !dirty && !note && !mutating.current) void load(); };
+        window.addEventListener('focus', refresh);
+        return () => window.removeEventListener('focus', refresh);
+    }, [busy, dirty, note, revision?.revision_id, keyParam]);
     function choose(r: Revision | null) { if ((dirty || note) && !window.confirm('Discard unsaved editor changes?'))
         return; clearPreview(); setRevision(r); setBase(r?.revision_id ?? ''); setContent(r ? JSON.stringify(r.content, null, 2) : '{}'); setNote(''); setReason(''); setConfirmed(false); setConflict(false); setError(''); setMessage(''); }
     async function mutate(action: 'save' | 'preview' | 'submit-qa' | 'retire') {
@@ -101,7 +110,7 @@ export function AdminTemplateDetails({ keyParam, ur = false }: AdminTemplateDeta
                 setConfirmed(false);
                 setReason('');
                 setDetail(d => d ? { ...d, template: result.result.template ?? d.template, revisions: [r, ...d.revisions.filter(x => x.revision_id !== r.revision_id)] } : d);
-                setMessage(action === 'submit-qa' ? 'Submitted for independent physical QA. No publication approval has been granted.' : action === 'retire' ? 'Revision retired; history retained.' : 'Draft saved.');
+                setMessage(action === 'submit-qa' ? 'Submitted for physical QA. Approval on Template QA will publish this revision automatically.' : action === 'retire' ? 'Revision retired; history retained.' : 'Draft saved.');
             }
         }
         catch (e) {
@@ -121,6 +130,9 @@ export function AdminTemplateDetails({ keyParam, ur = false }: AdminTemplateDeta
  <TemplateDesignFields content={content} onChange={value=>{setContent(value);clearPreview();}} readOnly={!canWrite || !!revision && revision.status!=='draft'} purpose={detail.template.purpose}/>
  <details><summary>Advanced design JSON</summary><label className="block">Content JSON<textarea aria-label="Content JSON" rows={6} value={content} readOnly={!canWrite || !!revision && revision.status !== 'draft'} onChange={e => { setContent(e.target.value); clearPreview(); }} className="block w-full font-mono text-xs border rounded p-2"/></label></details>{revision && <details><summary>Latest server content for comparison</summary><pre className="overflow-auto text-xs">{JSON.stringify(revision.content, null, 2)}</pre></details>}
  {canWrite && (!revision || revision.status === 'draft') && <><label className="block">Version note<input minLength={4} maxLength={500} value={note} onChange={e => setNote(e.target.value)} className="block w-full border p-2"/></label><button disabled={busy || conflict || note.trim().length < 4 || !revision && detail.revisions.length > 0 && !base} onClick={() => void mutate('save')}>Save draft</button></>}
- {canWrite && revision && <><button disabled={busy || conflict || dirty || revision.status === 'retired'} onClick={() => void mutate('preview')}>Generate synthetic PDF preview</button><label className="block">QA / retirement reason<input value={reason} maxLength={500} onChange={e => setReason(e.target.value)} className="block w-full border p-2"/></label><label className="block"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/> I reviewed the current revision and confirm this lifecycle action.</label><button disabled={busy || conflict || revision.status !== 'draft' || !previewCurrent || !confirmed || reason.trim().length < 4} onClick={() => void mutate('submit-qa')}>Submit for independent QA</button><p className="text-sm">QA submission requires a saved, reviewed preview. Publication additionally requires independent physical QA evidence and an enrolled publisher. No approved evidence discovery workflow is available here; Publish remains unavailable.</p><button disabled title="No approved evidence lookup or publisher enrollment is available in this workflow">Publish unavailable</button><button disabled={busy || conflict || dirty || revision.status !== 'published' || !confirmed || reason.trim().length < 4} onClick={() => void mutate('retire')}>Retire published revision</button><p className="text-sm">Retirement requires backend publisher authorization and no active bindings. Rejections retain input.</p></>}
+ {canWrite && revision?.status === 'draft' && <><button disabled={busy || conflict || dirty} onClick={() => void mutate('preview')}>Generate synthetic PDF preview</button><label className="block">QA / retirement reason<input value={reason} maxLength={500} onChange={e => setReason(e.target.value)} className="block w-full border p-2"/></label><label className="block"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/> I reviewed the current revision and confirm this lifecycle action.</label><button disabled={busy || conflict || !previewCurrent || !confirmed || reason.trim().length < 4} onClick={() => void mutate('submit-qa')}>Submit for independent QA</button><p className="text-sm">After submission, print and review the PDF on Template QA. Approve QA will publish the same revision automatically.</p></>}
+ {revision?.status === 'pending_qa' && <p role="status">Awaiting physical QA. <Link prefetch={false} href="/admin/template-qa">Open Template QA</Link> to review the PDF. Approval publishes this revision automatically.</p>}
+ {revision?.status === 'published' && <><p role="status">This revision is published. No additional QA submission or PDF generation is required. Product assignment is a separate action.</p>{canWrite && <><label className="block">QA / retirement reason<input value={reason} maxLength={500} onChange={e => setReason(e.target.value)} className="block w-full border p-2"/></label><label className="block"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/> I reviewed the current revision and confirm this lifecycle action.</label><button disabled={busy || conflict || dirty || !confirmed || reason.trim().length < 4} onClick={() => void mutate('retire')}>Retire published revision</button><p className="text-sm">Retirement requires backend publisher authorization and no active bindings. Rejections retain input.</p></>}</>}
+
  {previewCurrent && <div className="break-all"><p>Fingerprint: {preview!.fingerprint}</p><a href={preview!.url} target="_blank" rel="noreferrer">Open synthetic PDF preview</a></div>}</section></div><TemplateBindings template={detail.template} revisions={detail.revisions} canWrite={canWrite} ur={ur}/></>}</section>;
 }

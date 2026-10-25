@@ -19,7 +19,8 @@ function createHarness(){
   if (state.reviewConflict || body.expected_review_version!==state.reviewState.review_version) return Response.json({error:{code:'VERSION_MISMATCH'}},{status:412});
   const review_version=state.reviewState.review_version+1;
   const review={review_id:'00000000-0000-0000-0000-000000000601',revision_id:rid,revision_row_version:1,review_version,decision:body.decision,review_note:body.reason,reviewer_user_id:'00000000-0000-0000-0000-000000000602',reviewer_human_id:null,evidence_kind:'manual_print',preview_fingerprint:body.preview_fingerprint,approval_id:null,decided_at:stamp};
-  state.reviewState={...state.reviewState,review_version,status:body.decision,can_review:body.decision!=='rejected',history:[review,...state.reviewState.history]};
+  if (body.decision==='approved') { state.revisions[0]={...state.revisions[0],status:'published',published_at:stamp,row_version:state.revisions[0].row_version+1}; state.template={...state.template,lifecycle_status:'active',row_version:state.template.row_version+1}; }
+  state.reviewState={...state.reviewState,review_version,status:body.decision,can_review:false,revision_row_version:state.revisions[0].row_version,publication_status:state.revisions[0].status,published_at:state.revisions[0].published_at,history:[review,...state.reviewState.history]};
   return Response.json({command_id:'00000000-0000-0000-0000-000000000605',result:state.reviewState});
  }
  if(m==='GET'){

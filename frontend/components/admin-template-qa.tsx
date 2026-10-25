@@ -80,7 +80,7 @@ export function TemplateQA({ ur = false }: { ur?: boolean }) {
     }
     return <section className={styles.screen}>
         <h1 className="text-2xl font-bold">Template QA</h1>
-        <p>Get the PDF, print it and inspect the result. Then click Approve QA or Reject QA. QA does not publish the template or assign it to products.</p>
+        <p>Get the PDF, print it and inspect the result. Then click Approve QA or Reject QA. Approval also publishes this revision. Product assignment remains separate.</p>
         {qaError && <p role="alert">{qaError}</p>}
         <button disabled={busy} onClick={() => void load()}>Refresh submitted revisions</button>
         {busy && <p role="status">Loading template QA…</p>}
@@ -92,14 +92,15 @@ export function TemplateQA({ ur = false }: { ur?: boolean }) {
             </button>)}</section>
             {selected && <section className="rounded-xl border p-4 space-y-3 min-w-0">
                 <h2 className="font-bold">Revision {selected.revision.version} · {current?.status ?? 'Review status unavailable'}</h2>
-                <p className="break-all">Template: {selected.template.template_id}<br/>Revision: {selected.revision.revision_id}<br/>Row version: {selected.revision.row_version}<br/>Submitted fingerprint: {selected.revision.fingerprint_sha256}</p>
+                {current?.publication_status === 'published' && <p role="status">QA approved and template published · {current.published_at}</p>}
+                <p className="break-all">Template: {selected.template.template_id}<br/>Revision: {selected.revision.revision_id}<br/>Row version: {current?.revision_row_version ?? selected.revision.row_version}<br/>Submitted fingerprint: {selected.revision.fingerprint_sha256}</p>
                 <Link prefetch={false} href={'/admin/templates/' + selected.template.template_id}>Open template details</Link>
                 <details><summary>Revision design metadata</summary><pre className="overflow-auto text-xs">{JSON.stringify(selected.revision.content, null, 2)}</pre></details>
                 <button disabled={busy || !authenticatedRoles.includes('operations')} onClick={() => void generate()}>Get PDF for printing</button>
                 {preview && <div className="break-all"><a href={preview.url} target="_blank" rel="noreferrer">Open PDF to print</a><p>Backend fingerprint: {preview.fingerprint}<br/>PDF size: {preview.bytes} bytes</p></div>}
-                <p>Clicking Approve QA confirms that you printed and checked this PDF. No evidence upload is required.</p>
+                <p>Clicking Approve QA confirms that you printed and checked this PDF, and publishes this exact revision. No evidence upload is required.</p>
                 <details><summary>Add a note (optional)</summary><label className="block">Review note<textarea className="block w-full border rounded p-2" maxLength={500} value={note} onChange={e => setNote(e.target.value)}/></label></details>
-                {current && !current.can_review && <p>{current.status === 'rejected' ? 'This revision was rejected. Submit a new revision to review changes.' : 'Your current account is not permitted to review this revision.'}</p>}
+                {current && !current.can_review && current.publication_status !== 'published' && <p>{current.status === 'rejected' ? 'This revision was rejected. Submit a new revision to review changes.' : 'Your current account is not permitted to review this revision.'}</p>}
                 <button disabled={busy || !current?.can_review || !preview || (!!note.trim() && note.trim().length < 4)} onClick={() => void decide('approved')}>Approve QA</button>{' '}
                 <button disabled={busy || !current?.can_review || !preview || (!!note.trim() && note.trim().length < 4)} onClick={() => void decide('rejected')}>Reject QA</button>
                 {current && <section aria-label="QA decision history"><h3 className="font-bold">QA decision history</h3>{!current.history.length && <p>No QA decisions recorded.</p>}{current.history.map(review => <article key={review.review_id} className="border rounded p-3 break-all"><p>{review.decision} · {review.decided_at}</p><p>Reviewer: {review.reviewer_user_id}</p><p>{review.review_note}</p><p>{review.evidence_kind === 'manual_print' ? 'Manual print review' : 'Signed evidence review'}</p>{review.approval_id && <p>Evidence approval: {review.approval_id}. Publication separately rechecks evidence validity.</p>}</article>)}</section>}
