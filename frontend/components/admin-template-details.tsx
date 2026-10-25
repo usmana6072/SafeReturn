@@ -25,7 +25,7 @@ export function AdminTemplateDetails({ keyParam, ur = false }: AdminTemplateDeta
     const dirty = revision ? content !== JSON.stringify(revision.content, null, 2) : content !== '{}';
     function clearPreview() { if (previewRef.current)
         URL.revokeObjectURL(previewRef.current); previewRef.current = null; setPreview(null); }
-    async function load(more = false) { setBusy(true); setError(''); clearPreview(); setConfirmed(false); try {
+    async function load(more = false) { setBusy(true); setError(''); try {
         try {
             uuid(keyParam);
         }
@@ -37,16 +37,21 @@ export function AdminTemplateDetails({ keyParam, ur = false }: AdminTemplateDeta
         if (!more && revision) {
             const fresh = d.revisions.find(r => r.revision_id === revision.revision_id);
             if (fresh) {
+                if (fresh.row_version !== revision.row_version || fresh.status !== revision.status || JSON.stringify(fresh.content) !== JSON.stringify(revision.content)) {
+                    clearPreview(); setConfirmed(false);
+                }
                 setRevision(fresh);
                 setConflict(false);
             }
             else {
+                clearPreview(); setConfirmed(false);
                 setConflict(true);
                 setMessage('Selected revision is outside this page. Load its history and select it before editing.');
                 return;
             }
         }
         else if (!revision) {
+            clearPreview(); setConfirmed(false);
             setConflict(false);
             if (!more && content === '{}' && !note && d.revisions.length) {
                 const latest = d.revisions[0]; setRevision(latest); setBase(latest.revision_id); setContent(JSON.stringify(latest.content, null, 2));
@@ -124,13 +129,14 @@ export function AdminTemplateDetails({ keyParam, ur = false }: AdminTemplateDeta
         }
     }
     const previewCurrent = !!preview && preview.id === revision?.revision_id && preview.version === revision.row_version && !dirty;
+    const submissionHint = conflict ? 'Load the latest revision before submitting.' : dirty ? 'Save your design changes before generating the PDF.' : !previewCurrent ? 'Generate the saved revision PDF, then open it for review.' : !confirmed ? 'Confirm that you reviewed this PDF.' : reason.trim().length < 4 ? 'Add a review note of at least 4 characters.' : '';
     return <section className={styles.screen}><Link prefetch={false} href="/admin/templates">Back to templates</Link><h1 className="text-2xl font-bold">{detail?.template.name ?? 'Template details'}</h1><button disabled={busy} onClick={() => void load()}>Load latest record (keep edits)</button>{conflict && <p>Load the latest record and compare edits before retrying.</p>}{busy && <p role="status">Working…</p>}<TemplateErrorNotice message={error} ur={ur}/>{message && <p role="status">{message}</p>}{detail && <><p className="break-all">{detail.template.key} · {detail.template.purpose} · template version {detail.template.row_version}</p><p className="break-all">Template ID: {detail.template.template_id} · Created: {detail.template.created_at}</p><AdminStatusBadge label={detail.template.lifecycle_status}/><div className="grid gap-5 lg:grid-cols-2"><section className="rounded-xl border bg-white p-4 space-y-3"><h2 className="font-bold">Revision history</h2>{!detail.revisions.length && <p>No revisions yet.</p>}{detail.revisions.map(r => <button key={r.revision_id} disabled={busy} onClick={() => choose(r)} className="block w-full text-left border rounded p-3">Revision {r.version} · {r.status} · row version {r.row_version}</button>)}{detail.next_cursor && <button disabled={busy} onClick={() => void load(true)}>Load more revisions</button>}{canWrite && <button disabled={busy || detail.template.lifecycle_status === 'retired'} onClick={() => choose(null)}>New draft revision</button>}</section>
  <section className="rounded-xl border bg-white p-4 space-y-3"><h2 className="font-bold">{revision ? 'Revision ' + revision.version : 'New draft revision'}</h2><p className="text-sm">{revision && <>Created: {revision.created_at} · Published: {revision.published_at ?? 'Not published'} · Fingerprint: {revision.fingerprint_sha256 ?? 'Not submitted'}</>}</p><p className="text-sm">Use the form below to configure the sticker. Only enrolled font/logo assets are supported; arbitrary files and URLs are unavailable.</p>{!revision && <label className="block">Base revision<select aria-label="Base revision" value={base} onChange={e => { setBase(e.target.value); const r = detail.revisions.find(r => r.revision_id === e.target.value); if (r)
             setContent(JSON.stringify(r.content, null, 2)); }} className="block max-w-full"><option value="">None (first revision only)</option>{detail.revisions.map(r => <option key={r.revision_id} value={r.revision_id}>Revision {r.version} · {r.status}</option>)}</select></label>}
  <TemplateDesignFields content={content} onChange={value=>{setContent(value);clearPreview();}} readOnly={!canWrite || !!revision && revision.status!=='draft'} purpose={detail.template.purpose}/>
  <details><summary>Advanced design JSON</summary><label className="block">Content JSON<textarea aria-label="Content JSON" rows={6} value={content} readOnly={!canWrite || !!revision && revision.status !== 'draft'} onChange={e => { setContent(e.target.value); clearPreview(); }} className="block w-full font-mono text-xs border rounded p-2"/></label></details>{revision && <details><summary>Latest server content for comparison</summary><pre className="overflow-auto text-xs">{JSON.stringify(revision.content, null, 2)}</pre></details>}
  {canWrite && (!revision || revision.status === 'draft') && <><label className="block">Version note<input minLength={4} maxLength={500} value={note} onChange={e => setNote(e.target.value)} className="block w-full border p-2"/></label><button disabled={busy || conflict || note.trim().length < 4 || !revision && detail.revisions.length > 0 && !base} onClick={() => void mutate('save')}>Save draft</button></>}
- {canWrite && revision?.status === 'draft' && <><button disabled={busy || conflict || dirty} onClick={() => void mutate('preview')}>Generate synthetic PDF preview</button><label className="block">QA / retirement reason<input value={reason} maxLength={500} onChange={e => setReason(e.target.value)} className="block w-full border p-2"/></label><label className="block"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/> I reviewed the current revision and confirm this lifecycle action.</label><button disabled={busy || conflict || !previewCurrent || !confirmed || reason.trim().length < 4} onClick={() => void mutate('submit-qa')}>Submit for independent QA</button><p className="text-sm">After submission, print and review the PDF on Template QA. Approve QA will publish the same revision automatically.</p></>}
+ {canWrite && revision?.status === 'draft' && <><button disabled={busy || conflict || dirty} onClick={() => void mutate('preview')}>Generate synthetic PDF preview</button><label className="block">QA / retirement reason<input value={reason} maxLength={500} onChange={e => setReason(e.target.value)} className="block w-full border p-2"/></label><label className="block"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/> I reviewed the current revision and confirm this lifecycle action.</label><button disabled={busy || conflict || !previewCurrent || !confirmed || reason.trim().length < 4} onClick={() => void mutate('submit-qa')}>Submit for independent QA</button>{submissionHint && <p role="status">{submissionHint}</p>}<p className="text-sm">After submission, print and review the PDF on Template QA. Approve QA will publish the same revision automatically.</p></>}
  {revision?.status === 'pending_qa' && <p role="status">Awaiting physical QA. <Link prefetch={false} href="/admin/template-qa">Open Template QA</Link> to review the PDF. Approval publishes this revision automatically.</p>}
  {revision?.status === 'published' && <><p role="status">This revision is published. No additional QA submission or PDF generation is required. Product assignment is a separate action.</p>{canWrite && <><label className="block">QA / retirement reason<input value={reason} maxLength={500} onChange={e => setReason(e.target.value)} className="block w-full border p-2"/></label><label className="block"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/> I reviewed the current revision and confirm this lifecycle action.</label><button disabled={busy || conflict || dirty || !confirmed || reason.trim().length < 4} onClick={() => void mutate('retire')}>Retire published revision</button><p className="text-sm">Retirement requires backend publisher authorization and no active bindings. Rejections retain input.</p></>}</>}
 
