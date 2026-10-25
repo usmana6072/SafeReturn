@@ -1,0 +1,2 @@
+# Asset enrollment pins exact file bytes across Windows and Linux checkouts.
+backend/print-assets/* -text
