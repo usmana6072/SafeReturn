@@ -4,6 +4,7 @@ import { validateOrigin } from "./api/transport";
 export type CatalogProduct = {
   product_id: string; slug: string; name: string; description: string | null;
   commerce_model?: "legacy_pair"|"single_qr"; qr_type?: "lost"|"ice"|null;
+  checkout_available?: boolean;
   featured: boolean; catalog_version: number;
   price_per_copy: string; max_order_copies: number;
   category: { id: string; slug: string; name: string };
@@ -14,6 +15,7 @@ export type Catalog = { products: CatalogProduct[]; unavailable: boolean };
 function record(v: unknown): v is Record<string, unknown> { return typeof v === "object" && v !== null; }
 function isProduct(value: unknown): value is CatalogProduct {
   if (!record(value) || !record(value.category)) return false;
+  if(value.checkout_available!==undefined&&typeof value.checkout_available!=="boolean")return false;
   if(value.commerce_model!==undefined&&value.commerce_model!=="legacy_pair"&&value.commerce_model!=="single_qr")return false;
   if(value.commerce_model==="single_qr"&&value.qr_type!=="lost"&&value.qr_type!=="ice")return false;
   return typeof value.product_id === "string" && typeof value.slug === "string" && /^[a-z0-9-]+$/.test(value.slug)

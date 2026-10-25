@@ -6,7 +6,8 @@ import { FeaturedCatalog } from "../components/catalog";
 export default async function Home() {
   const language = await getLanguage();
   const t = messages[language];
-  const catalog = await getCatalog(true);
+  const featured = await getCatalog(true);
+  const catalog = !featured.unavailable && featured.products.length === 0 ? await getCatalog() : featured;
   const links = <><a href="#stickers">{t.products}</a><a href="#how-it-works">{t.how}</a><a href="#faq">{t.help}</a><a href="/login">{language === "ur" ? "لاگ اِن" : "Log in"}</a></>;
   return <>
     <a href="#main" className="skip-link">{t.skip}</a>
