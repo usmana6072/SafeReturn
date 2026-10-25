@@ -10,7 +10,7 @@ async function mount(page:any,exportName:string,props:any,storage:any=cart){
  await page.route("**/account/shipping-addresses/api",(r:any)=>r.fulfill({json:{items:[],version:1}}));
  await page.goto("https://item-checkout.test/");
  await page.evaluate(({props,key,storage}:any)=>{(window as any).qaProps=props;localStorage.setItem(key,JSON.stringify(storage));localStorage.setItem("safereturn-cart-v1","legacy-cart-canary");},{props,key,storage});
- await page.addScriptTag({content:bundle({componentPath:exportName==="PaymentForm"?"../components/payments.tsx":"../components/item-checkout.tsx",exportName})});
+ await page.addScriptTag({content:bundle({componentPath:exportName==="KitConfigurator"?"../components/checkout.tsx":exportName==="PaymentForm"?"../components/payments.tsx":"../components/item-checkout.tsx",exportName})});
 }
 async function fillAddress(page:any){for(const [label,value] of [["Recipient name","Synthetic"],["Phone","+923001234567"],["Street address","Synthetic street"],["City","Lahore"]])await page.getByLabel(label,{exact:true}).fill(value);await page.getByLabel("I confirm the shipping phone and address.",{exact:true}).check();}
 
@@ -47,3 +47,7 @@ test("private evidence retry never declares verified payment",async({page})=>{
 test("Urdu single-QR cart fits mobile and unavailable size blocks quote",async({page},info)=>{
  await page.setViewportSize({width:375,height:900});await mount(page,"ItemCheckoutCart",{products:[],language:"ur",checkout:true});await expect(page.getByRole("alert")).toBeVisible();await expect(page.getByRole("button",{name:"حتمی قیمت حاصل کریں",exact:true})).toBeDisabled();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath("cart-ur-mobile.png"),fullPage:true});
 });
+
+test('published browse-only product cannot request checkout and preserves its cart',async({page})=>{let writes=0;await page.route('**/checkout/api',r=>{writes++;return r.fulfill({status:503,json:{error:{code:'SINGLE_QR_CHECKOUT_NOT_RELEASED'}}});});await mount(page,'ItemCheckoutCart',{products:[{...product,checkout_available:false}],language:'en',checkout:true});await fillAddress(page);await expect(page.getByRole('button',{name:'Get final quote',exact:true})).toBeDisabled();await expect(page.getByRole('alert')).toContainText('unavailable for ordering');expect(writes).toBe(0);expect(await page.evaluate(key=>localStorage.getItem(key),key)).not.toBeNull();});
+
+test('browse-only published product shows order availability instead of an Add to cart button',async({page})=>{await mount(page,'KitConfigurator',{product:{...product,checkout_available:false},language:'en'},[]);await expect(page.getByText('This product is published. Online ordering is not available yet.')).toBeVisible();await expect(page.getByRole('button',{name:'Add to cart',exact:true})).toHaveCount(0);await expect(page.getByRole('link',{name:'Back to Shop'})).toHaveAttribute('href','/shop');});

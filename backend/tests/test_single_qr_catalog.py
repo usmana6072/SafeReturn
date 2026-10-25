@@ -29,7 +29,7 @@ def context(monkeypatch):
     req = SimpleNamespace(
         app=SimpleNamespace(
             state=SimpleNamespace(
-                settings=SimpleNamespace(catalog_approved_templates=["approved@1"])
+                settings=SimpleNamespace(catalog_approved_templates=["approved@1"], print_template_management_enabled=False)
             )
         )
     )
