@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "renderer": "safereturn-vector-v1",
+  "preset": "fixed-footer-v1",
+  "symbol_mm": "30.00",
+  "width_mm": "40.00",
+  "height_mm": "60.00",
+  "qr_x_mm": "5.00",
+  "qr_y_mm": "18.00",
+  "logo_mm": "4.00",
+  "min_pitch_mm": "0.30",
+  "font_pt": "8.00",
+  "header": "SafeReturn",
+  "english_lines": [
+    "Found? Scan me."
+  ],
+  "urdu_lines": [
+    "ملا ہے؟ اسکین کریں"
+  ],
+  "asset_set_id": "0a7c508b-fc96-42d6-ba58-e367dbb8d08b",
+  "material_codes": [
+    "vinyl"
+  ]
+}

@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SafeReturn · Admin Workspace (Interactive Mock)</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Inter Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    /* Custom scrollbar for data dense tables */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .badge-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .sr-input {display:block;width:100%;padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:#0f172a;font-size:12px;outline-offset:2px} .sr-input:focus{outline:2px solid #0A756E;border-color:#0A756E} .sr-input:disabled{background:#f1f5f9}
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0A756E',
+              600: '#0A756E',
+              700: '#075D57',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="h-screen overflow-hidden flex flex-col bg-slate-50 text-slate-900 text-sm">
+
+  <div id="app" class="flex flex-col h-full w-full">
+    <!-- Dynamic Content injected by JS -->
+  </div>
+
+  <!-- Main JavaScript Application Logic -->
+  <script>
+    // --- MOCK DATABASE & INITIAL SEED DATA ---
+    const INITIAL_SEED = {
+      products: [
+        { id: 'PROD-101', name: 'SafeReturn Medical Wristband', sku: 'SR-WB-MED-01', category: 'Wearables', status: 'published', price: 29.99, stock: 142, templateKey: 'TP-WRIST-V2', variants: ['Red/ICE', 'Blue/Medical'], updatedAt: '2026-10-18' },
+        { id: 'PROD-102', name: 'Kids Safety Backpack Tag', sku: 'SR-TG-KID-02', category: 'Tags', status: 'published', price: 14.50, stock: 88, templateKey: 'TP-TAG-MINI-V1', variants: ['Neon Yellow', 'Pink'], updatedAt: '2026-10-19' },
+        { id: 'PROD-103', name: 'Dementia Care QR Sticker Set (4x)', sku: 'SR-ST-DEM-04', category: 'Stickers', status: 'draft', price: 19.99, stock: 250, templateKey: 'TP-STICKER-4X', variants: ['Standard Clear'], updatedAt: '2026-10-21' }
+      ],
+      printTemplates: [
+        { id: 'TMP-001', key: 'TP-WRIST-V2', name: 'Standard Wristband Layout', revision: 2, status: 'published', supportedTypes: ['Wristband'], size: '20mm x 200mm', lastAuthor: 'ops_lead' },
+        { id: 'TMP-002', key: 'TP-TAG-MINI-V1', name: 'Compact Keyring Tag', revision: 1, status: 'published', supportedTypes: ['Tag'], size: '30mm x 30mm', lastAuthor: 'graphics_admin' },
+        { id: 'TMP-003', key: 'TP-STICKER-4X', name: '4x Quad Sticker Sheet Layout', revision: 3, status: 'draft', supportedTypes: ['Sticker Sheet'], size: '100mm x 150mm', lastAuthor: 'product_team' }
+      ],
+      users: [
+        { id: 'USR-8821', name: 'Amina Khan', email: 'amina.k@example.com', role: 'Customer', status: 'Active', qrCount: 2, registeredAt: '2026-08-12', mfaEnrolled: true },
+        { id: 'USR-8822', name: 'Tariq Mahmood', email: 'tariq.m@example.com', role: 'Customer', status: 'Suspended', qrCount: 1, registeredAt: '2026-09-01', mfaEnrolled: false },
+        { id: 'USR-8823', name: 'Dr. Bilal Ahmed', email: 'bilal.ahmed@clinic.pk', role: 'Customer', status: 'Active', qrCount: 5, registeredAt: '2026-09-15', mfaEnrolled: true },
+        { id: 'USR-9001', name: 'Sarah Jenkins', email: 'sarah.j@safereturn.org', role: 'Operations Staff', status: 'Active', qrCount: 0, registeredAt: '2026-01-10', mfaEnrolled: true }
+      ],
+      qrBatches: [
+        { id: 'BATCH-2026-09', size: 1000, generatedAt: '2026-10-01', status: 'QA Passed', pairsCount: 500, exported: true },
+        { id: 'BATCH-2026-10', size: 500, generatedAt: '2026-10-15', status: 'In QA', pairsCount: 250, exported: false }
+      ],
+      orders: [
+        { id: 'ORD-9021', customer: 'Amina Khan', items: 'Medical Wristband (x1)', total: 29.99, status: 'Dispatched', payment: 'Verified', date: '2026-10-18' },
+        { id: 'ORD-9022', customer: 'Tariq Mahmood', items: 'Kids Backpack Tag (x2)', total: 29.00, status: 'Pending Review', payment: 'Under Review', date: '2026-10-20' },
+        { id: 'ORD-9023', customer: 'Dr. Bilal Ahmed', items: 'QR Sticker Set (x2)', total: 39.98, status: 'Processing', payment: 'Verified', date: '2026-10-21' }
+      ],
+      auditLogs: [
+        { id: 'LOG-551', timestamp: '2026-10-21 19:42:10', actor: 'security_admin', action: 'API-320 Account Suspended', target: 'USR-8822', details: 'Reason: Suspicious recovery escalation request' },
+        { id: 'LOG-550', timestamp: '2026-10-21 18:15:33', actor: 'operations', action: 'API-221 Product Draft Created', target: 'PROD-103', details: 'Dementia Care QR Sticker Set created' },
+        { id: 'LOG-549', timestamp: '2026-10-20 11:05:01', actor: 'finance', action: 'API-241 Payment Review Approved', target: 'ORD-9021', details: 'Settlement confirmed via manual review' }
+      ]
+    };
+
+    // Upgraded mock schema version. Older localStorage seed is normalized on load.
+    const MOCK_SCHEMA_VERSION = 2;
+    const escapeHTML = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function normalizeData(db) {
+      if (!db.products) db.products = [];
+      db.products.forEach(p => {
+        p.slug ??= p.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+        p.description ??= '';
+        p.isFeatured ??= false;
+        p.featuredSortOrder ??= 0;
+        p.allowsNewPair ??= true;
+        p.allowsExistingQr ??= false;
+        p.version ??= 1;
+        p.images ??= [];
+        if (!Array.isArray(p.variantRecords)) p.variantRecords = [{id:'VAR-'+p.id,sku:p.sku||'',name: Array.isArray(p.variants)?p.variants[0]||'Default':'Default',sizeMm:'35.00',material:'Vinyl',color:'',currencyCode:'PKR',unitPrice:String(p.price||0),fulfillmentMethod:'pdf_label',templateKey:p.templateKey||'',templateVersion:1,isActive:true}];
+      });
+      db.printTemplates ??= [];
+      db.printTemplates.forEach(t=>{t.purpose ??= 'lost';t.rowVersion ??= 1;});
+      return db;
+    }
+    // --- APPLICATION STATE ---
+    let state = {
+      currentPage: 'overview',
+      currentRole: 'Superadmin', // Roles: Operations, Finance, Support, Security Admin, Superadmin
+      data: loadStorageData(),
+      sidebarCollapsed: false,
+      searchQuery: '',
+      modal: null, // { type: 'add_product' | 'edit_product' | 'create_template' | 'suspend_user' | 'confirm_reset' | 'qr_qa', data: {} }
+      toast: null // { message, type: 'success' | 'error' | 'info' }
+    };
+
+    function loadStorageData() {
+      const stored = localStorage.getItem('safereturn_demo_db');
+      if (stored) {
+        try {
+          return normalizeData(JSON.parse(stored));
+        } catch (e) {
+          console.error('Failed to parse localStorage demo data', e);
+        }
+      }
+      return normalizeData(JSON.parse(JSON.stringify(INITIAL_SEED)));
+    }
+
+    function saveStorageData() {
+      localStorage.setItem('safereturn_demo_db', JSON.stringify(state.data));
+    }
+
+    function resetDemoData() {
+      state.data = normalizeData(JSON.parse(JSON.stringify(INITIAL_SEED)));
+      saveStorageData();
+      showToast('Demo data reset to initial benchmark state!', 'info');
+      render();
+    }
+
+    function showToast(message, type = 'success') {
+      state.toast = { message, type };
+      render();
+      setTimeout(() => {
+        if (state.toast && state.toast.message === message) {
+          state.toast = null;
+          render();
+        }
+      }, 3500);
+    }
+
+    function addAuditLog(action, target, details) {
+      const newLog = {
+        id: `LOG-${Math.floor(100 + Math.random() * 900)}`,
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        actor: state.currentRole.toLowerCase().replace(' ', '_'),
+        action,
+        target,
+        details
+      };
+      state.data.auditLogs.unshift(newLog);
+      saveStorageData();
+    }
+
+    // --- ROLE PERMISSIONS MAP ---
+    // Precise role restrictions matching the SafeReturn phase plan
+    const PERMISSIONS = {
+      'Operations': {
+        pages: ['overview', 'products', 'templates', 'inventory', 'qr_batches', 'qa', 'orders', 'print_jobs', 'shipments', 'notifications', 'monitoring'],
+        canEditCatalog: true,
+        canCreateTemplates: true,
+        canSuspendUser: false,
+        canApprovePayment: false,
+        canManagePermissions: false
+      },
+      'Finance': {
+        pages: ['overview', 'orders', 'payments', 'finance_sync', 'audit'],
+        canEditCatalog: false,
+        canCreateTemplates: false,
+        canSuspendUser: false,
+        canApprovePayment: true,
+        canManagePermissions: false
+      },
+      'Support': {
+        pages: ['overview', 'users', 'orders', 'support', 'notifications'],
+        canEditCatalog: false,
+        canCreateTemplates: false,
+        canSuspendUser: false,
+        canApprovePayment: false,
+        canManagePermissions: false
+      },
+      'Security Admin': {
+        pages: ['overview', 'users', 'staff_permissions', 'privacy_requests', 'storage', 'audit', 'monitoring'],
+        canEditCatalog: false,
+        canCreateTemplates: false,
+        canSuspendUser: true,
+        canApprovePayment: false,
+        canManagePermissions: true
+      },
+      'Superadmin': {
+        pages: ['overview', 'products', 'templates', 'users', 'staff_permissions', 'inventory', 'qr_batches', 'qa', 'orders', 'payments', 'print_jobs', 'shipments', 'notifications', 'support', 'privacy_requests', 'finance_sync', 'storage', 'audit', 'monitoring'],
+        canEditCatalog: true,
+        canCreateTemplates: true,
+        canSuspendUser: true,
+        canApprovePayment: true,
+        canManagePermissions: true
+      }
+    };
+
+    function isRoleAllowed(pageName) {
+      const allowedPages = PERMISSIONS[state.currentRole]?.pages || [];
+      return allowedPages.includes(pageName);
+    }
+
+    // --- UI ROUTING & NAVIGATION ---
+    function navigateTo(page) {
+      if (!isRoleAllowed(page)) {
+        showToast(`Page '${page}' is restricted for the '${state.currentRole}' role.`, 'error');
+        return;
+      }
+      state.currentPage = page;
+      state.searchQuery = '';
+      render();
+    }
+
+    // --- RENDER ENGINE ---
+    function render() {
+      const appEl = document.getElementById('app');
+      if (!appEl) return;
+
+      // Ensure current page is allowed for active role
+      if (!isRoleAllowed(state.currentPage)) {
+        state.currentPage = PERMISSIONS[state.currentRole].pages[0] || 'overview';
+      }
+
+      appEl.innerHTML = `
+        <div class="flex h-full w-full overflow-hidden">
+          ${renderSidebar()}
+          <div class="flex flex-col flex-1 h-full min-w-0 overflow-hidden">
+            ${renderHeader()}
+            <main class="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50">
+              ${renderCurrentPage()}
+            </main>
+          </div>
+        </div>
+        ${renderModal()}
+        ${renderToast()}
+      `;
+
+      // Re-initialize Lucide Icons
+      if (window.lucide) {
+        lucide.createIcons();
+      }
+    }
+
+    // --- COMPONENT: SIDEBAR ---
+    function renderSidebar() {
+      const allowed = PERMISSIONS[state.currentRole]?.pages || [];
+      const menuItems = [
+        { id: 'overview', label: 'Overview', icon: 'layout-dashboard' },
+        { id: 'products', label: 'Products (API-220)', icon: 'package' },
+        { id: 'templates', label: 'Print Templates (API-300)', icon: 'printer' },
+        { id: 'users', label: 'Users & Accounts (API-320)', icon: 'users' },
+        { id: 'staff_permissions', label: 'Staff Permissions', icon: 'shield-check' },
+        { id: 'inventory', label: 'Inventory Management', icon: 'boxes' },
+        { id: 'qr_batches', label: 'QR Batches', icon: 'qr-code' },
+        { id: 'qa', label: 'QR Quality Assurance', icon: 'check-circle-2' },
+        { id: 'orders', label: 'Orders & Sales', icon: 'shopping-cart' },
+        { id: 'payments', label: 'Payments & Reconciliation', icon: 'credit-card' },
+        { id: 'print_jobs', label: 'Print Jobs Queue', icon: 'file-text' },
+        { id: 'shipments', label: 'Shipments & Logistics', icon: 'truck' },
+        { id: 'notifications', label: 'Notification Queue', icon: 'bell' },
+        { id: 'support', label: 'Support Cases', icon: 'life-buoy' },
+        { id: 'privacy_requests', label: 'Privacy Requests', icon: 'file-lock-2' },
+        { id: 'finance_sync', label: 'Finance Mirror Sync', icon: 'refresh-cw' },
+        { id: 'storage', label: 'Storage & Retention', icon: 'hard-drive' },
+        { id: 'audit', label: 'Audit Logs', icon: 'file-spreadsheet' },
+        { id: 'monitoring', label: 'System Health', icon: 'activity' }
+      ];
+
+      return `
+        <aside class="bg-slate-900 text-slate-300 ${state.sidebarCollapsed ? 'w-16' : 'w-64'} transition-all duration-200 flex flex-col h-full z-20 border-r border-slate-800">
+          <!-- Logo Header -->
+          <div class="h-14 flex items-center justify-between px-4 border-b border-slate-800 text-white">
+            <div class="flex items-center space-x-2 font-bold text-base truncate ${state.sidebarCollapsed ? 'hidden' : 'flex'}">
+              <span class="bg-sky-500 text-white p-1.5 rounded-lg">
+                <i data-lucide="shield" class="w-4 h-4"></i>
+              </span>
+              <span class="tracking-tight">SafeReturn <span class="text-xs font-normal text-sky-400">ADMIN</span></span>
+            </div>
+            <button onclick="state.sidebarCollapsed = !state.sidebarCollapsed; render();" class="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white">
+              <i data-lucide="${state.sidebarCollapsed ? 'chevron-right' : 'chevron-left'}" class="w-5 h-5"></i>
+            </button>
+          </div>
+
+          <!-- Navigation Links -->
+          <nav class="flex-1 overflow-y-auto p-2 space-y-1">
+            ${menuItems.map(item => {
+              const isAllowed = allowed.includes(item.id);
+              if (!isAllowed) return ''; // Hide forbidden navigation items per requirements
+              const isActive = state.currentPage === item.id;
+              return `
+                <button onclick="navigateTo('${item.id}')" 
+                  class="w-full flex items-center ${state.sidebarCollapsed ? 'justify-center' : 'justify-start px-3'} py-2 rounded-lg text-xs font-medium transition-colors ${isActive ? 'bg-sky-600 text-white font-semibold' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'}">
+                  <i data-lucide="${item.icon}" class="w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}"></i>
+                  ${!state.sidebarCollapsed ? `<span class="ml-3 truncate">${item.label}</span>` : ''}
+                </button>
+              `;
+            }).join('')}
+          </nav>
+
+          <!-- Footer Action -->
+          <div class="p-3 border-t border-slate-800">
+            <button onclick="state.modal = { type: 'confirm_reset' }; render();" class="w-full flex items-center ${state.sidebarCollapsed ? 'justify-center' : 'justify-start px-3'} py-2 rounded-lg text-xs font-medium bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/50 transition-colors">
+              <i data-lucide="rotate-ccw" class="w-4 h-4 shrink-0 text-red-400"></i>
+              ${!state.sidebarCollapsed ? `<span class="ml-2.5">Reset Demo Data</span>` : ''}
+            </button>
+          </div>
+        </aside>
+      `;
+    }
+
+    // --- COMPONENT: HEADER ---
+    function renderHeader() {
+      return `
+        <header class="h-14 bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between z-10">
+          <div class="flex items-center space-x-3">
+            <h1 class="font-semibold text-slate-800 text-sm md:text-base capitalize">
+              ${state.currentPage.replace('_', ' ')}
+            </h1>
+            <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 font-mono hidden sm:inline-block">
+              Mock Storage: ${state.data.products.length} Products | ${state.data.users.length} Users
+            </span>
+          </div>
+
+          <!-- Role Switcher & User Control -->
+          <div class="flex items-center space-x-3">
+            <div class="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200">
+              <span class="text-xs text-slate-500 font-medium px-2 hidden lg:inline">Role View:</span>
+              <select onchange="state.currentRole = this.value; render();" class="bg-white text-slate-800 text-xs font-semibold rounded px-2 py-1 border border-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500">
+                <option value="Superadmin" ${state.currentRole === 'Superadmin' ? 'selected' : ''}>Superadmin</option>
+                <option value="Operations" ${state.currentRole === 'Operations' ? 'selected' : ''}>Operations</option>
+                <option value="Finance" ${state.currentRole === 'Finance' ? 'selected' : ''}>Finance</option>
+                <option value="Support" ${state.currentRole === 'Support' ? 'selected' : ''}>Support</option>
+                <option value="Security Admin" ${state.currentRole === 'Security Admin' ? 'selected' : ''}>Security Admin</option>
+              </select>
+            </div>
+
+            <div class="h-6 w-px bg-slate-200"></div>
+
+            <div class="flex items-center space-x-2">
+              <div class="w-7 h-7 rounded-full bg-sky-600 text-white flex items-center justify-center font-bold text-xs">
+                ${state.currentRole.charAt(0)}
+              </div>
+              <span class="text-xs font-medium text-slate-700 hidden sm:inline">${state.currentRole} User</span>
+            </div>
+          </div>
+        </header>
+      `;
+    }
+
+    // --- PAGE CONTROLLER ROUTER ---
+    function renderCurrentPage() {
+      switch (state.currentPage) {
+        case 'overview': return renderOverviewPage();
+        case 'products': return renderProductsPage();
+        case 'templates': return renderPrintTemplatesPage();
+        case 'users': return renderUsersPage();
+        case 'staff_permissions': return renderStaffPermissionsPage();
+        case 'inventory': return renderInventoryPage();
+        case 'qr_batches': return renderQRBatchesPage();
+        case 'qa': return renderQAPage();
+        case 'orders': return renderOrdersPage();
+        case 'payments': return renderPaymentsPage();
+        case 'audit': return renderAuditPage();
+        default: return renderGenericModulePage(state.currentPage);
+      }
+    }
+
+    // --- PAGE 1: OVERVIEW PAGE ---
+    function renderOverviewPage() {
+      const prodCount = state.data.products.length;
+      const userCount = state.data.users.length;
+      const orderCount = state.data.orders.length;
+      const templateCount = state.data.printTemplates.length;
+
+      return `
+        <div class="space-y-6">
+          <!-- Notice Banner -->
+          <div class="bg-sky-50 border border-sky-200 rounded-xl p-4 flex items-start space-x-3">
+            <i data-lucide="info" class="w-5 h-5 text-sky-600 shrink-0 mt-0.5"></i>
+            <div class="text-xs text-sky-900">
+              <span class="font-semibold">Browser-Testable SafeReturn Admin Prototype Active:</span>
+              Changes will persist in your browser's <code class="bg-sky-100 px-1 py-0.5 rounded text-sky-800">localStorage</code>. 
+              Switch roles in the top bar to preview access restrictions. Use the <span class="font-semibold">Reset Demo Data</span> button anytime.
+            </div>
+          </div>
+
+          <!-- Key Metrics Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p class="text-xs font-medium text-slate-500">Managed Products</p>
+                <p class="text-2xl font-bold text-slate-900 mt-1">${prodCount}</p>
+                <p class="text-[11px] text-emerald-600 mt-1">API-220 Catalog synced</p>
+              </div>
+              <div class="p-3 bg-sky-50 text-sky-600 rounded-lg">
+                <i data-lucide="package" class="w-6 h-6"></i>
+              </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p class="text-xs font-medium text-slate-500">Print Template Revisions</p>
+                <p class="text-2xl font-bold text-slate-900 mt-1">${templateCount}</p>
+                <p class="text-[11px] text-sky-600 mt-1">API-300 Templates ready</p>
+              </div>
+              <div class="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+                <i data-lucide="printer" class="w-6 h-6"></i>
+              </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p class="text-xs font-medium text-slate-500">Registered Accounts</p>
+                <p class="text-2xl font-bold text-slate-900 mt-1">${userCount}</p>
+                <p class="text-[11px] text-amber-600 mt-1">API-320 Lifecycle guarded</p>
+              </div>
+              <div class="p-3 bg-amber-50 text-amber-600 rounded-lg">
+                <i data-lucide="users" class="w-6 h-6"></i>
+              </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p class="text-xs font-medium text-slate-500">Total Active Orders</p>
+                <p class="text-2xl font-bold text-slate-900 mt-1">${orderCount}</p>
+                <p class="text-[11px] text-emerald-600 mt-1">Settlements verified</p>
+              </div>
+              <div class="p-3 bg-emerald-50 text-emerald-600 rounded-lg">
+                <i data-lucide="shopping-bag" class="w-6 h-6"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Interactive Workflows Section -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Recent Audit Events -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+              <div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                <h3 class="font-semibold text-slate-800 text-sm flex items-center">
+                  <i data-lucide="activity" class="w-4 h-4 mr-2 text-sky-600"></i> Recent Audit Log Activity
+                </h3>
+                <button onclick="navigateTo('audit')" class="text-xs text-sky-600 hover:underline">View All</button>
+              </div>
+              <div class="space-y-2">
+                ${state.data.auditLogs.slice(0, 4).map(log => `
+                  <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs flex justify-between items-start">
+                    <div>
+                      <span class="font-semibold text-slate-800">${log.action}</span>
+                      <p class="text-slate-500 text-[11px] mt-0.5">${log.details}</p>
+                    </div>
+                    <span class="text-[10px] text-slate-400 shrink-0 font-mono">${log.timestamp.split(' ')[1]}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <!-- Role Capability Matrix Interactive Card -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+              <div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                <h3 class="font-semibold text-slate-800 text-sm flex items-center">
+                  <i data-lucide="shield-alert" class="w-4 h-4 mr-2 text-indigo-600"></i> Active Role Governance Matrix
+                </h3>
+                <span class="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-medium">${state.currentRole}</span>
+              </div>
+              <div class="text-xs space-y-2">
+                <div class="flex justify-between py-1 border-b border-slate-100">
+                  <span class="text-slate-600">Product Management (API-220–229)</span>
+                  <span class="font-semibold ${PERMISSIONS[state.currentRole].canEditCatalog ? 'text-emerald-600' : 'text-red-500'}">
+                    ${PERMISSIONS[state.currentRole].canEditCatalog ? 'Allowed (Editable)' : 'Restricted (Read-Only)'}
+                  </span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-100">
+                  <span class="text-slate-600">Template Key Revision (API-300–310)</span>
+                  <span class="font-semibold ${PERMISSIONS[state.currentRole].canCreateTemplates ? 'text-emerald-600' : 'text-red-500'}">
+                    ${PERMISSIONS[state.currentRole].canCreateTemplates ? 'Allowed' : 'Restricted'}
+                  </span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-100">
+                  <span class="text-slate-600">Account Suspension & Escalation (API-320)</span>
+                  <span class="font-semibold ${PERMISSIONS[state.currentRole].canSuspendUser ? 'text-emerald-600' : 'text-red-500'}">
+                    ${PERMISSIONS[state.currentRole].canSuspendUser ? 'Authorized' : 'Restricted'}
+                  </span>
+                </div>
+                <div class="flex justify-between py-1">
+                  <span class="text-slate-600">Payment Reconciliation (API-241)</span>
+                  <span class="font-semibold ${PERMISSIONS[state.currentRole].canApprovePayment ? 'text-emerald-600' : 'text-red-500'}">
+                    ${PERMISSIONS[state.currentRole].canApprovePayment ? 'Authorized' : 'Restricted'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // --- PAGE 2: PRODUCTS PAGE (API-220–229) ---
+    function renderProductsPage() {
+      const canEdit = PERMISSIONS[state.currentRole].canEditCatalog;
+      const filteredProducts = state.data.products.filter(p => 
+        p.name.toLowerCase().includes(state.searchQuery.toLowerCase()) || 
+        p.sku.toLowerCase().includes(state.searchQuery.toLowerCase())
+      );
+
+      return `
+        <div class="space-y-4">
+          <!-- Header Bar -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200">
+            <div class="relative flex-1 max-w-md">
+              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
+              <input type="text" placeholder="Search products by title, SKU..." 
+                value="${state.searchQuery}"
+                oninput="state.searchQuery = this.value; render();"
+                class="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+            </div>
+
+            <div class="flex items-center space-x-2">
+              <button onclick="${canEdit ? "state.modal = { type: 'add_product' }; render();" : "showToast('Role " + state.currentRole + " is not authorized to add products.', 'error');"}" 
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center ${canEdit ? 'bg-sky-600 hover:bg-sky-700 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'} shadow-sm">
+                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Product
+              </button>
+            </div>
+          </div>
+
+          <!-- Product Table -->
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                    <th class="py-3 px-4">Product ID & SKU</th>
+                    <th class="py-3 px-4">Product Title</th>
+                    <th class="py-3 px-4">Category</th>
+                    <th class="py-3 px-4">Template Binding</th>
+                    <th class="py-3 px-4">Price (PKR)</th>
+                    <th class="py-3 px-4">Variants</th>
+                    <th class="py-3 px-4">Status</th>
+                    <th class="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${filteredProducts.length === 0 ? `
+                    <tr>
+                      <td colspan="8" class="py-8 text-center text-slate-400">No matching products found in mock state.</td>
+                    </tr>
+                  ` : filteredProducts.map(p => `
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                      <td class="py-3 px-4 font-mono font-medium text-slate-900">
+                        ${p.id}<br><span class="text-[10px] text-slate-400">${p.sku}</span>
+                      </td>
+                      <td class="py-3 px-4 font-semibold text-slate-800">${p.name}</td>
+                      <td class="py-3 px-4 text-slate-600">${p.category}</td>
+                      <td class="py-3 px-4 font-mono text-[11px] text-indigo-600 bg-indigo-50/50 rounded px-1.5 py-0.5 inline-block my-2">
+                        ${p.templateKey}
+                      </td>
+                      <td class="py-3 px-4 font-medium text-slate-900">PKR ${Number(p.price).toFixed(2)}</td>
+                      <td class="py-3 px-4 font-semibold ${p.stock < 100 ? 'text-amber-600' : 'text-slate-700'}">${p.variantRecords?.length || 0} variants</td>
+                      <td class="py-3 px-4">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${p.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
+                          <span class="badge-dot ${p.status === 'published' ? 'bg-emerald-500' : 'bg-amber-500'}"></span>
+                          ${p.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td class="py-3 px-4 text-right space-x-1">
+                        <button onclick="${canEdit ? `openEditProductModal('${p.id}')` : `showToast('Read-only role restriction', 'error')`}" 
+                          class="p-1 rounded hover:bg-slate-100 text-sky-600" title="Edit Product">
+                          <i data-lucide="edit-3" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="${canEdit ? `deleteProduct('${p.id}')` : `showToast('Read-only role restriction', 'error')`}" 
+                          class="p-1 rounded hover:bg-slate-100 text-red-500" title="Archive / Delete">
+                          <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openEditProductModal(id) {
+      const prod = state.data.products.find(p => p.id === id);
+      if (!prod) return;
+      state.modal = { type: 'edit_product', data: { ...prod } };
+      render();
+    }
+
+    function deleteProduct(id) {
+      const item=state.data.products.find(p=>p.id===id); if(item){item.status='archived';item.version=(item.version||1)+1;}
+      addAuditLog('API-222 Product Archived', id, 'Product archived from active catalog');
+      saveStorageData();
+      showToast('Product archived successfully');
+      render();
+    }
+
+    // --- PAGE 3: PRINT TEMPLATES PAGE (API-300–310) ---
+    function renderPrintTemplatesPage() {
+      const canEdit = PERMISSIONS[state.currentRole].canCreateTemplates;
+
+      return `
+        <div class="space-y-4">
+          <!-- Header Bar -->
+          <div class="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200">
+            <div>
+              <h2 class="font-bold text-slate-800 text-sm">Print Template Key & Revision Management</h2>
+              <p class="text-xs text-slate-500">Draft keys (API-301) are separate from revision content, synthetic preview, QA and currently unavailable publication/binding.</p>
+            </div>
+            <button onclick="${canEdit ? "state.modal = { type: 'create_template' }; render();" : "showToast('Role " + state.currentRole + " restricted from creating templates', 'error')"}" 
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center ${canEdit ? 'bg-sky-600 hover:bg-sky-700 text-white' : 'bg-slate-200 text-slate-400 cursor-not-allowed'} shadow-sm">
+              <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Create Template Key
+            </button>
+          </div>
+
+          <!-- Templates Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            ${state.data.printTemplates.map(tmpl => `
+              <div class="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm hover:border-sky-300 transition-colors">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">${tmpl.key}</span>
+                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${tmpl.status === 'published' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">
+                    Rev ${tmpl.revision} (${tmpl.status})
+                  </span>
+                </div>
+
+                <div>
+                  <h3 class="font-semibold text-slate-900 text-sm">${tmpl.name}</h3>
+                  <p class="text-xs text-slate-500 mt-0.5">Physical Size: ${tmpl.size}</p>
+                </div>
+
+                <div class="text-[11px] text-slate-500 space-y-1 bg-slate-50 p-2 rounded border border-slate-100">
+                  <div>Supported: <span class="font-medium text-slate-700">${tmpl.supportedTypes.join(', ')}</span></div>
+                  <div>Last Editor: <span class="font-mono text-slate-700">${tmpl.lastAuthor}</span></div>
+                </div>
+
+                <div class="pt-2 flex items-center justify-between border-t border-slate-100">
+                  <button onclick="showToast('Synthetic PDF preview unavailable without validated enrolled assets and isolated renderer (API-305)', 'info')" class="text-xs text-sky-600 hover:underline flex items-center font-medium">
+                    <i data-lucide="eye" class="w-3.5 h-3.5 mr-1"></i> Layout Preview
+                  </button>
+                  <button onclick="${canEdit ? `showToast('Revision editor requires validated content and preconditions; publication APIs 307–310 are unavailable.', 'info');` : "showToast('Role restricted', 'error')"}" 
+                    class="text-xs text-slate-600 hover:text-slate-900 font-medium">
+                    Edit Draft Rev
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // --- PAGE 4: USERS PAGE (API-320–322) ---
+    function renderUsersPage() {
+      const canSuspend = PERMISSIONS[state.currentRole].canSuspendUser;
+      const filteredUsers = state.data.users.filter(u => 
+        u.name.toLowerCase().includes(state.searchQuery.toLowerCase()) || 
+        u.email.toLowerCase().includes(state.searchQuery.toLowerCase())
+      );
+
+      return `
+        <div class="space-y-4">
+          <!-- Filter Header -->
+          <div class="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200">
+            <div class="relative flex-1 max-w-md">
+              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
+              <input type="text" placeholder="Search user by name or email..." 
+                value="${state.searchQuery}"
+                oninput="state.searchQuery = this.value; render();"
+                class="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+            </div>
+            <div class="text-xs text-slate-500 font-medium">
+              API-320 Account Governance Mode
+            </div>
+          </div>
+
+          <!-- User Table -->
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                    <th class="py-3 px-4">User ID</th>
+                    <th class="py-3 px-4">Full Name</th>
+                    <th class="py-3 px-4">Email</th>
+                    <th class="py-3 px-4">MFA State</th>
+                    <th class="py-3 px-4">Owned QRs</th>
+                    <th class="py-3 px-4">Account Status</th>
+                    <th class="py-3 px-4 text-right">Governance Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${filteredUsers.map(u => `
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                      <td class="py-3 px-4 font-mono text-slate-600">${u.id}</td>
+                      <td class="py-3 px-4 font-semibold text-slate-800">${u.name}</td>
+                      <td class="py-3 px-4 text-slate-600">${u.email}</td>
+                      <td class="py-3 px-4">
+                        <span class="inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded ${u.mfaEnrolled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'}">
+                          ${u.mfaEnrolled ? 'AAL2 Enrolled' : 'None'}
+                        </span>
+                      </td>
+                      <td class="py-3 px-4 font-medium text-slate-700">${u.qrCount} paired profiles</td>
+                      <td class="py-3 px-4">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${u.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
+                          ${u.status}
+                        </span>
+                      </td>
+                      <td class="py-3 px-4 text-right space-x-2">
+                        ${u.status === 'Active' ? `
+                          <button onclick="${canSuspend ? `openSuspendUserModal('${u.id}')` : "showToast('Role " + state.currentRole + " is restricted from suspending accounts', 'error')"}" 
+                            class="px-2 py-1 rounded text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 border border-red-200">
+                            Suspend
+                          </button>
+                        ` : `
+                          <button onclick="${canSuspend ? `restoreUser('${u.id}')` : "showToast('Role restricted', 'error')"}" 
+                            class="px-2 py-1 rounded text-xs font-medium bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200">
+                            Restore
+                          </button>
+                        `}
+                        <button onclick="${canSuspend ? `escalateRecovery('${u.id}')` : "showToast('Role restricted', 'error')"}" 
+                          class="px-2 py-1 rounded text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200">
+                          Escalate Recovery
+                        </button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openSuspendUserModal(id) {
+      const user = state.data.users.find(u => u.id === id);
+      if (!user) return;
+      state.modal = { type: 'suspend_user', data: { ...user } };
+      render();
+    }
+
+    function restoreUser(id) {
+      const user = state.data.users.find(u => u.id === id);
+      if (user) {
+        user.status = 'Active';
+        addAuditLog('API-321 Account Restored', id, 'Account un-suspended via governance action');
+        saveStorageData();
+        showToast(`User ${user.name} has been restored.`);
+        render();
+      }
+    }
+
+    function escalateRecovery(id) {
+      addAuditLog('API-322 Recovery Escalation', id, 'Case referral logged for security review');
+      showToast(`Recovery escalated for ${id}. Audit record generated.`, 'info');
+      render();
+    }
+
+    // --- PAGE 5: STAFF PERMISSIONS ---
+    function renderStaffPermissionsPage() {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white p-4 rounded-xl border border-slate-200">
+            <h2 class="font-bold text-slate-800 text-sm">Staff Provisioning & Role Matrix</h2>
+            <p class="text-xs text-slate-500">Strict separation of duties per implementation plan specifications</p>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                    <th class="py-2 px-3">Role</th>
+                    <th class="py-2 px-3">Product Catalog</th>
+                    <th class="py-2 px-3">Print Templates</th>
+                    <th class="py-2 px-3">User Suspension</th>
+                    <th class="py-2 px-3">Payment Settlement</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-700">
+                  <tr>
+                    <td class="py-2 px-3 font-semibold text-slate-900">Operations</td>
+                    <td class="py-2 px-3 text-emerald-600 font-semibold">Full Edit</td>
+                    <td class="py-2 px-3 text-emerald-600 font-semibold">Full Revision</td>
+                    <td class="py-2 px-3 text-red-500">Restricted</td>
+                    <td class="py-2 px-3 text-red-500">Restricted</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 px-3 font-semibold text-slate-900">Finance</td>
+                    <td class="py-2 px-3 text-slate-400">Read Only</td>
+                    <td class="py-2 px-3 text-slate-400">Read Only</td>
+                    <td class="py-2 px-3 text-red-500">Restricted</td>
+                    <td class="py-2 px-3 text-emerald-600 font-semibold">Full Review</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 px-3 font-semibold text-slate-900">Security Admin</td>
+                    <td class="py-2 px-3 text-slate-400">Read Only</td>
+                    <td class="py-2 px-3 text-slate-400">Read Only</td>
+                    <td class="py-2 px-3 text-emerald-600 font-semibold">Full Control</td>
+                    <td class="py-2 px-3 text-red-500">Restricted</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 px-3 font-semibold text-slate-900">Superadmin</td>
+                    <td class="py-2 px-3 text-emerald-600 font-semibold">All Privileges</td>
+                    <td class="py-2 px-3 text-emerald-600 font-semibold">All Privileges</td>
+                    <td class="py-2 px-3 text-emerald-600 font-semibold">All Privileges</td>
+                    <td class="py-2 px-3 text-emerald-600 font-semibold">All Privileges</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // --- OTHER DASHBOARD MODULES (INVENTORY, ORDERS, AUDIT, ETC.) ---
+    function renderInventoryPage() {
+      return `
+        <div class="bg-white p-6 rounded-xl border border-slate-200 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <h2 class="font-bold text-slate-800 text-sm">Physical Inventory & QR Tag Allocations</h2>
+              <p class="text-xs text-slate-500">Low-stock thresholds and pair distribution monitoring</p>
+            </div>
+            <span class="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-full border border-emerald-200">Stock Healthy</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <span class="text-xs text-slate-500">Total Unassigned Pairs</span>
+              <p class="text-xl font-bold text-slate-900 mt-1">4,280 Pairs</p>
+            </div>
+            <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <span class="text-xs text-slate-500">Active Reserved Stock</span>
+              <p class="text-xl font-bold text-slate-900 mt-1">120 Pairs</p>
+            </div>
+            <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <span class="text-xs text-slate-500">Low-Stock Alert Level</span>
+              <p class="text-xl font-bold text-slate-900 mt-1">500 Pairs</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderQRBatchesPage() {
+      return `
+        <div class="space-y-4">
+          <div class="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center">
+            <div>
+              <h2 class="font-bold text-slate-800 text-sm">QR Code Batch Manufacturing</h2>
+              <p class="text-xs text-slate-500">CSPRNG Keypair Generation & Export (API-090)</p>
+            </div>
+            <button onclick="showToast('New QR CSPRNG Batch generated in state', 'success')" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold">
+              Generate New Batch
+            </button>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-slate-600 font-semibold border-b">
+                  <th class="p-2">Batch ID</th>
+                  <th class="p-2">Quantity</th>
+                  <th class="p-2">Generated Date</th>
+                  <th class="p-2">QA Status</th>
+                  <th class="p-2 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.data.qrBatches.map(b => `
+                  <tr class="border-b hover:bg-slate-50">
+                    <td class="p-2 font-mono font-semibold">${b.id}</td>
+                    <td class="p-2">${b.size} tags (${b.pairsCount} pairs)</td>
+                    <td class="p-2 text-slate-500">${b.generatedAt}</td>
+                    <td class="p-2"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${b.status === 'QA Passed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${b.status}</span></td>
+                    <td class="p-2 text-right">
+                      <button onclick="showToast('Exporting CSPRNG sealed credentials...', 'info')" class="text-xs text-sky-600 hover:underline">Export Export Payload</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderQAPage() {
+      return `
+        <div class="bg-white p-6 rounded-xl border border-slate-200 space-y-4">
+          <h2 class="font-bold text-slate-800 text-sm">QR Quality Assurance (Physical Inspection)</h2>
+          <p class="text-xs text-slate-500">Simulate visual inspection and scan verification for manufactured QR pairs</p>
+
+          <div class="border border-slate-200 p-4 rounded-lg bg-slate-50 max-w-md space-y-3">
+            <label class="block text-xs font-semibold text-slate-700">Scan or Enter Pair Tag ID:</label>
+            <input type="text" id="qa_pair_id" placeholder="e.g. TAG-2026-X88" class="w-full px-3 py-1.5 border rounded text-xs bg-white">
+            <div class="flex space-x-2">
+              <button onclick="showToast('QA Inspection Passed for pair tag', 'success')" class="px-3 py-1.5 bg-emerald-600 text-white rounded text-xs font-semibold">Pass QA</button>
+              <button onclick="showToast('Tag flagged and quarantined', 'error')" class="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold">Reject & Quarantine</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderOrdersPage() {
+      return `
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-4">
+          <h2 class="font-bold text-slate-800 text-sm">Customer Orders & Fulfillment</h2>
+          <table class="w-full text-left text-xs">
+            <thead>
+              <tr class="bg-slate-50 text-slate-600 font-semibold border-b">
+                <th class="p-2">Order ID</th>
+                <th class="p-2">Customer</th>
+                <th class="p-2">Items</th>
+                <th class="p-2">Total ($)</th>
+                <th class="p-2">Payment</th>
+                <th class="p-2">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${state.data.orders.map(o => `
+                <tr class="border-b hover:bg-slate-50">
+                  <td class="p-2 font-mono font-bold">${o.id}</td>
+                  <td class="p-2">${o.customer}</td>
+                  <td class="p-2 text-slate-600">${o.items}</td>
+                  <td class="p-2 font-semibold">$${o.total}</td>
+                  <td class="p-2"><span class="px-2 py-0.5 rounded text-[10px] ${o.payment === 'Verified' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${o.payment}</span></td>
+                  <td class="p-2 font-medium">${o.status}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderPaymentsPage() {
+      const canApprove = PERMISSIONS[state.currentRole].canApprovePayment;
+
+      return `
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-4">
+          <div class="flex justify-between items-center border-b pb-2">
+            <h2 class="font-bold text-slate-800 text-sm">Payments & Manual Settlement Review (API-241)</h2>
+            <span class="text-xs text-slate-500 font-mono">Role: ${state.currentRole}</span>
+          </div>
+
+          <div class="space-y-3">
+            ${state.data.orders.filter(o => o.payment === 'Under Review').map(o => `
+              <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between text-xs">
+                <div>
+                  <span class="font-bold text-slate-900">${o.id} - ${o.customer}</span>
+                  <p class="text-slate-600 text-[11px] mt-0.5">Payment total: $${o.total} | Manual bank receipt submitted</p>
+                </div>
+                <div class="space-x-2">
+                  <button onclick="${canApprove ? `approvePayment('${o.id}')` : "showToast('Finance role required to approve payments', 'error')"}" 
+                    class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold text-xs">
+                    Approve Settlement
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+            ${state.data.orders.filter(o => o.payment === 'Under Review').length === 0 ? `
+              <p class="text-xs text-slate-500 py-4 text-center">No pending payments requiring manual settlement review.</p>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function approvePayment(orderId) {
+      const ord = state.data.orders.find(o => o.id === orderId);
+      if (ord) {
+        ord.payment = 'Verified';
+        ord.status = 'Processing';
+        addAuditLog('API-241 Payment Verified', orderId, 'Manual bank review approved');
+        saveStorageData();
+        showToast(`Payment for order ${orderId} verified successfully`);
+        render();
+      }
+    }
+
+    function renderAuditPage() {
+      return `
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-4">
+          <h2 class="font-bold text-slate-800 text-sm">System Immutable Audit Logs</h2>
+          <div class="space-y-2">
+            ${state.data.auditLogs.map(log => `
+              <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1">
+                <div class="flex justify-between items-center">
+                  <span class="font-mono font-bold text-slate-900">${log.action}</span>
+                  <span class="text-[10px] text-slate-400 font-mono">${log.timestamp}</span>
+                </div>
+                <p class="text-slate-600">${log.details}</p>
+                <div class="text-[10px] text-slate-400">Actor: <span class="font-semibold text-slate-700">${log.actor}</span> | Target: ${log.target}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderGenericModulePage(title) {
+      return `
+        <div class="bg-white p-8 rounded-xl border border-slate-200 text-center space-y-3">
+          <div class="p-3 bg-sky-50 text-sky-600 rounded-full w-12 h-12 flex items-center justify-center mx-auto">
+            <i data-lucide="layers" class="w-6 h-6"></i>
+          </div>
+          <h2 class="font-bold text-slate-800 text-base capitalize">${title.replace('_', ' ')} Operations</h2>
+          <p class="text-xs text-slate-500 max-w-md mx-auto">This area is a navigation-only mock. Its backend workflow and permissions have not been verified; no operational action is available here.</p>
+          <p class="text-xs text-amber-700 font-medium">Not implemented in this prototype</p>
+        </div>
+      `;
+    }
+
+    // --- MODALS ENGINE ---
+    function renderModal() {
+      if (!state.modal) return '';
+
+      const m = state.modal;
+
+      if (m.type === 'add_product' || m.type === 'edit_product') {
+        const editing = m.type === 'edit_product';
+        const p = editing ? m.data : {name:'',slug:'',description:'',category:'Stickers',status:'draft',isFeatured:false,featuredSortOrder:0,allowsNewPair:true,allowsExistingQr:false,variantRecords:[],images:[]};
+        const variants = p.variantRecords || [];
+        const variantRows = variants.map((v,i)=>variantRowHTML(v,i)).join('');
+        return `
+        <div class="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-2 md:p-6" role="dialog" aria-modal="true" aria-label="Product editor">
+          <div class="w-full max-w-5xl max-h-[96vh] bg-white shadow-2xl rounded-2xl flex flex-col overflow-hidden">
+            <div class="p-4 md:px-7 md:py-5 border-b flex items-start justify-between gap-3">
+              <div><p class="text-[11px] font-semibold uppercase tracking-wider text-teal-700">Catalog / API-221, 222–226 · Demo workspace</p><h2 class="text-xl font-bold mt-1">${editing?'Edit product':'Create product draft'}</h2><p class="text-xs text-slate-500 mt-1">Product information, independently priced variants and public images are separate records. Save a draft before publishing.</p></div>
+              <button type="button" aria-label="Close editor" onclick="state.modal=null;render()" class="border rounded-lg p-2"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <form id="product-editor-form" onsubmit="saveDetailedProduct(event,${editing ? "'"+p.id+"'" : 'null'})" class="flex-1 min-h-0 overflow-auto">
+              <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-5 p-4 md:p-7">
+                <div class="space-y-6 min-w-0">
+                  <section class="border rounded-xl p-4 space-y-4"><div><h3 class="font-bold">1. Product information</h3><p class="text-xs text-slate-500">API-221 ProductRequest · Product family, not individual SKU</p></div>
+                    <div class="grid md:grid-cols-2 gap-3">
+                      ${editorField('Product name *','prod_name',p.name,'text','e.g. SafeReturn QR Sticker Kit')}
+                      ${editorField('URL slug *','prod_slug',p.slug,'text','e.g. qr-sticker-kit')}
+                      <div><label for="prod_cat" class="block mb-1 font-medium text-xs">Category *</label><select id="prod_cat" required class="sr-input"><option ${p.category==='Stickers'?'selected':''}>Stickers</option><option ${p.category==='Tags'?'selected':''}>Tags</option><option ${p.category==='Wearables'?'selected':''}>Wearables</option></select><p class="text-[11px] text-amber-700 mt-1">Only approved stickers are P0 sellable. Other families remain feature-gated.</p></div>
+                      ${editorField('Featured sort order','prod_featured_order',p.featuredSortOrder,'number','0')}
+                    </div>
+                    <div><label for="prod_description" class="block mb-1 text-xs font-medium">Description</label><textarea id="prod_description" rows="3" maxlength="2000" class="sr-input">${escapeHTML(p.description)}</textarea></div>
+                    <div class="grid sm:grid-cols-3 gap-3"><label class="flex gap-2 items-center text-xs"><input id="prod_featured" type="checkbox" ${p.isFeatured?'checked':''}> Featured on storefront</label><label class="flex gap-2 items-center text-xs"><input id="prod_new_pair" type="checkbox" ${p.allowsNewPair?'checked':''}> Allow new QR pair</label><label class="flex gap-2 items-center text-xs"><input id="prod_reuse" type="checkbox" ${p.allowsExistingQr?'checked':''}> Existing QR reuse (future only)</label></div>
+                  </section>
+                  <section class="border rounded-xl p-4 space-y-3"><div class="flex items-center justify-between gap-3"><div><h3 class="font-bold">2. Sellable variants</h3><p class="text-xs text-slate-500">API-223/224 · Separate SKU, PKR price, physical size, material and template for each variant</p></div><button type="button" onclick="appendVariantRow()" class="shrink-0 border rounded-lg px-3 py-2 text-xs font-semibold hover:bg-slate-50">+ Add variant</button></div><div id="variant-rows" class="space-y-3">${variantRows}</div><p class="text-xs text-amber-700 bg-amber-50 p-2 rounded-lg">Template keys shown here are demonstration references. A draft template is not approved for production; final publication requires independent QA and eligibility.</p></section>
+                  <section class="border rounded-xl p-4 space-y-3"><h3 class="font-bold">3. Public catalog images</h3><p class="text-xs text-slate-500">API-225/226 · Approved Cloudinary public_id, description/alt text, ordering and primary flag. This mock stores references only; no files are uploaded.</p><div id="product-image-rows" class="space-y-2">${(p.images||[]).map((im,i)=>imageRowHTML(im,i)).join('')}</div><button type="button" onclick="appendImageRow()" class="border rounded-lg px-3 py-2 text-xs font-semibold">+ Add image reference</button></section>
+                </div>
+                <aside class="space-y-3"><div class="bg-slate-50 border rounded-xl p-4 sticky top-0 space-y-3"><h3 class="font-bold">Publication checklist</h3><p class="text-xs text-slate-600">Drafts may be saved with incomplete variants. Publishing requires eligible variants, vetted images and independent physical/template approval.</p><div class="border-t pt-3 text-xs space-y-2"><p>✓ New-pair entitlement model</p><p>✓ Prices in PKR by variant</p><p>✓ Immutable historical order snapshots</p><p class="text-amber-700">! Sticker-only P0 sales</p><p class="text-amber-700">! Template QA and assets gated</p></div><label for="prod_status" class="block font-semibold text-xs">Requested status</label><select id="prod_status" class="sr-input"><option value="draft" ${p.status==='draft'?'selected':''}>Draft</option><option value="published" ${p.status==='published'?'selected':''}>Published (eligibility required)</option><option value="archived" ${p.status==='archived'?'selected':''}>Archived</option></select><div class="text-[11px] text-slate-500">${editing?'Catalog version '+p.version:'New record · draft first'}<br>Demo changes are local to your browser.</div></div></aside>
+              </div>
+              <div class="sticky bottom-0 flex justify-between items-center gap-3 bg-white border-t px-4 md:px-7 py-4"><span class="text-xs text-slate-500">No real backend requests</span><div class="flex gap-2"><button type="button" onclick="state.modal=null;render()" class="px-4 py-2 border rounded-lg text-xs font-semibold">Cancel</button><button type="submit" class="px-5 py-2 rounded-lg bg-teal-700 text-white font-semibold text-xs">${editing?'Save product changes':'Create product draft'}</button></div></div>
+            </form>
+          </div>
+        </div>`;
+      }
+      if (m.type === 'create_template') {
+        return `<div class="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-3"><div class="w-full max-w-xl rounded-2xl bg-white shadow-xl overflow-hidden"><div class="p-6 border-b flex justify-between"><div><p class="text-xs text-teal-700 font-semibold">API-301 · Key creation only</p><h3 class="font-bold text-lg mt-1">Create print template</h3><p class="text-xs text-slate-500 mt-1">Geometry and bilingual content are configured in later revisions (API-303/304), not at key creation.</p></div><button onclick="state.modal=null;render()">✕</button></div><form onsubmit="handleCreateTemplateSubmit(event)" class="p-6 space-y-4">${editorField('Unique key *','m_tmpl_key','','text','sr-lost-sticker')}<p class="text-xs text-slate-500">Case-sensitive, 3–80 ASCII characters: letters, digits, period, underscore or hyphen.</p>${editorField('Template name *','m_tmpl_name','','text','SafeReturn Lost Sticker')}<div><label for="m_tmpl_purpose" class="text-xs block mb-1 font-semibold">Purpose *</label><select id="m_tmpl_purpose" class="sr-input"><option value="lost">Lost item</option><option value="ice">Emergency / ICE</option></select></div><div class="bg-amber-50 text-amber-900 p-3 text-xs rounded-lg">This action creates a draft key only. It does not approve physical artwork, create an asset set, publish a renderer, or bind a sellable product.</div><div class="flex justify-end gap-2"><button type="button" onclick="state.modal=null;render()" class="border px-4 py-2 rounded-lg">Cancel</button><button class="bg-teal-700 text-white font-semibold px-4 py-2 rounded-lg">Save draft key</button></div></form></div></div>`;
+      }
+      if (m.type === 'suspend_user') {
+        const u = m.data;
+        return `
+          <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4 border border-slate-200">
+              <h3 class="font-bold text-slate-900 text-sm">Suspend Account (${u.name})</h3>
+              <p class="text-xs text-slate-600">Security-admin only · API-320 · requires case-bound authority, AAL2, recent authentication and account-state revision. Mock confirmation cannot prove those requirements.</p>
+              ${editorField('Case ID *','m_suspend_case','','text','Case reference UUID')}
+              ${editorField('Expected revision *','m_suspend_revision',u.revision||1,'number','1')}
+              <label class="text-xs block font-semibold">Reason code *<select id="m_suspend_reason_code" class="sr-input mt-1"><option value="">Select approved reason code</option><option value="security_case">Security case (demo)</option><option value="account_compromise">Account compromise (demo)</option></select></label>
+              <label class="flex gap-2 text-xs"><input type="checkbox" id="m_suspend_confirm"> I confirm I have reviewed the case and understand this is a mock action.</label>
+              <p class="text-[11px] text-amber-700">Reason codes shown are illustrative mock fixtures, not a verified server enum.</p>
+
+              <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="state.modal = null; render();" class="px-3 py-1.5 rounded border text-xs">Cancel</button>
+                <button onclick="confirmSuspendUser('${u.id}')" class="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold">Confirm Suspension</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (m.type === 'confirm_reset') {
+        return `
+          <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl space-y-4 border border-slate-200 text-center">
+              <div class="w-10 h-10 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+                <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+              </div>
+              <h3 class="font-bold text-slate-900 text-sm">Reset Demo Dataset?</h3>
+              <p class="text-xs text-slate-500">This will clear local storage and restore the initial seed records.</p>
+              <div class="flex justify-center space-x-2 pt-2">
+                <button onclick="state.modal = null; render();" class="px-3 py-1.5 rounded border text-xs">Cancel</button>
+                <button onclick="state.modal = null; resetDemoData();" class="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold">Reset Data</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      return '';
+    }
+
+    // --- MODAL FORM HANDLERS ---
+    function editorField(label,id,value,type='text',placeholder='') {return `<div><label for="${id}" class="block mb-1 font-medium text-xs">${label}</label><input id="${id}" type="${type}" value="${escapeHTML(value)}" placeholder="${escapeHTML(placeholder)}" ${label.includes('*')?'required':''} class="sr-input" /></div>`;}
+    let variantSequence = 0;
+    function variantRowHTML(v={},i=0) {
+      const n = ++variantSequence;
+      return `<div class="variant-row border bg-slate-50/70 rounded-xl p-3 space-y-3" data-id="${escapeHTML(v.id||'')}"><div class="flex justify-between items-center"><b class="text-xs">Variant ${i+1}</b><button type="button" class="text-xs text-red-700 hover:underline" onclick="this.closest('.variant-row').remove()">Remove</button></div><div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      ${variantInput('Variant name *','name',v.name||'',true)}${variantInput('SKU *','sku',v.sku||'',true)}${variantInput('Size (mm) *','sizeMm',v.sizeMm||'35.00',true)}${variantInput('Material','material',v.material||'')}${variantInput('Color','color',v.color||'')}${variantInput('Unit price (PKR) *','unitPrice',v.unitPrice||'',true)}
+      <label class="text-xs font-medium">Fulfillment method<select data-v="fulfillmentMethod" class="sr-input mt-1">${['pdf_label','manufacturer_artwork','manual'].map(x=>`<option ${v.fulfillmentMethod===x?'selected':''}>${x}</option>`).join('')}</select></label>
+      ${variantInput('Template key','templateKey',v.templateKey||'')}${variantInput('Template version *','templateVersion',v.templateVersion||1,true)}
+      </div><label class="flex gap-2 items-center text-xs"><input type="checkbox" data-v="isActive" ${v.isActive!==false?'checked':''}> Active variant</label><p class="text-[11px] text-slate-500">Variant ${n} · price and template frozen on historical orders</p></div>`;
+    }
+    function variantInput(label,key,val,required=false){return `<label class="text-xs font-medium">${label}<input data-v="${key}" value="${escapeHTML(val)}" ${required?'required':''} class="sr-input mt-1" /></label>`;}
+    function imageRowHTML(im={}) {return `<div class="image-row grid sm:grid-cols-[2fr_2fr_60px_auto] items-end gap-2 bg-slate-50 border rounded-lg p-3">${variantInput('Cloudinary public_id','publicId',im.publicId||'')}${variantInput('Alt text','alt',im.alt||'')}${variantInput('Order','sortOrder',im.sortOrder??0)}<div class="flex items-center gap-3 pb-2"><label class="text-xs flex gap-1"><input type="checkbox" data-v="primary" ${im.primary?'checked':''}>Primary</label><button type="button" onclick="this.closest('.image-row').remove()" class="text-xs text-red-700">Remove</button></div></div>`;}
+    function appendVariantRow(){const el=document.getElementById('variant-rows');el.insertAdjacentHTML('beforeend',variantRowHTML({isActive:true,fulfillmentMethod:'pdf_label'},el.children.length));}
+    function appendImageRow(){document.getElementById('product-image-rows').insertAdjacentHTML('beforeend',imageRowHTML());}
+    function readRows(selector){return [...document.querySelectorAll(selector)].map(row=>{const obj={id:row.dataset.id||undefined};row.querySelectorAll('[data-v]').forEach(input=>obj[input.dataset.v]=input.type==='checkbox'?input.checked:input.value.trim());return obj;});}
+    function saveDetailedProduct(e,id){
+      e.preventDefault();
+      const el=x=>document.getElementById(x);
+      const name=el('prod_name').value.trim(),slug=el('prod_slug').value.trim().toLowerCase(),category=el('prod_cat').value;
+      const variants=readRows('.variant-row'); const images=readRows('.image-row');
+      if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))return showToast('Slug must use lowercase letters, numbers and hyphens.','error');
+      if(state.data.products.some(p=>p.id!==id&&p.slug===slug))return showToast('This product slug is already used.','error');
+      const skuSet=new Set();
+      for(const v of variants){
+        if(!v.sku||skuSet.has(v.sku)||state.data.products.some(p=>p.id!==id&&(p.variantRecords||[]).some(a=>a.sku===v.sku))) return showToast('Every variant needs a globally unique SKU.','error');
+        skuSet.add(v.sku);
+        if(!/^\d+(?:\.\d{1,2})?$/.test(v.unitPrice)||Number(v.unitPrice)<0)return showToast('Variant prices must be nonnegative PKR decimals.','error');
+        if(!/^\d+(?:\.\d{1,2})?$/.test(v.sizeMm)||Number(v.sizeMm)<=0)return showToast('Each variant needs a positive millimeter size.','error');
+        if(!Number.isInteger(Number(v.templateVersion))||Number(v.templateVersion)<1)return showToast('Template version must be a positive integer.','error');
+      }
+      if(images.some(im=>im.publicId&&!im.alt))return showToast('Every referenced public image requires alt text.','error');
+      const requested=el('prod_status').value;
+      if(requested==='published')return showToast('Publishing is gated: independently approved images, physical QA, template revision and P0 policy cannot be verified in this browser mock. Saved draft instead.','error');
+      if(category!=='Stickers'&&requested==='published')return showToast('Non-sticker product launch is gated.','error');
+      const p=id?state.data.products.find(x=>x.id===id):{id:`PROD-${Date.now()}`,version:0}; if(!p)return;
+      Object.assign(p,{name,slug,description:el('prod_description').value.trim(),category,isFeatured:el('prod_featured').checked,featuredSortOrder:Number(el('prod_featured_order').value)||0,allowsNewPair:el('prod_new_pair').checked,allowsExistingQr:el('prod_reuse').checked,status:requested,variantRecords:variants.map((v,i)=>({...v,id:v.id||`VAR-${Date.now()}-${i}`,currencyCode:'PKR',templateVersion:Number(v.templateVersion)})),images:images.filter(im=>im.publicId),updatedAt:new Date().toISOString().slice(0,10),version:p.version+1});
+      p.sku=p.variantRecords[0]?.sku||'—';p.price=p.variantRecords[0]?.unitPrice||'0.00';p.templateKey=p.variantRecords[0]?.templateKey||'—';p.variants=p.variantRecords.map(v=>v.name);p.stock??=0;
+      if(!id)state.data.products.unshift(p);
+      addAuditLog(id?'API-222 Product Draft Updated':'API-221 Product Draft Created',p.id,`Mock draft ${p.slug}, ${variants.length} variants`);
+      saveStorageData();state.modal=null;showToast('Product draft saved in browser demo.');render();
+    }
+    function handleCreateTemplateSubmit(e){
+      e.preventDefault();const key=document.getElementById('m_tmpl_key').value,name=document.getElementById('m_tmpl_name').value.trim(),purpose=document.getElementById('m_tmpl_purpose').value;
+      if(!/^[A-Za-z0-9._-]{3,80}$/.test(key)||name.length<1||name.length>100)return showToast('Invalid key or name; check API-301 constraints.','error');
+      if(state.data.printTemplates.some(t=>t.key===key))return showToast('Template key already exists.','error');
+      const t={id:`TMP-${Date.now()}`,key,name,purpose,revision:0,rowVersion:1,status:'draft',supportedTypes:['Sticker'],size:'Not configured — create revision',lastAuthor:state.currentRole.toLowerCase()};
+      state.data.printTemplates.unshift(t);addAuditLog('API-301 Template Key Created',key,'Draft key only; no renderer or physical QA');saveStorageData();state.modal=null;showToast('Draft template key created. Revision and QA still required.');render();
+    }
+    function confirmSuspendUser(id) {
+      const user=state.data.users.find(u=>u.id===id);if(!user)return;
+      const caseId=document.getElementById('m_suspend_case')?.value.trim(),rev=Number(document.getElementById('m_suspend_revision')?.value),code=document.getElementById('m_suspend_reason_code')?.value,confirmed=document.getElementById('m_suspend_confirm')?.checked;
+      if(!caseId||!Number.isInteger(rev)||rev<1||!code||!confirmed)return showToast('Case, expected revision, reason code and confirmation are required.','error');
+      if(rev!==(user.revision||1))return showToast('Stale account revision; refresh the record and try again.','error');
+      user.status='Suspended';user.revision=rev+1;addAuditLog('API-320 Mock Account Suspension',id,`Case ${caseId}; reason code ${code}; no real session invalidation`);
+      saveStorageData();state.modal=null;showToast('Mock account suspended. No real authorization, session invalidation or backend action occurred.');render();
+    }
+
+    // --- COMPONENT: TOAST NOTIFICATIONS ---
+    function renderToast() {
+      if (!state.toast) return '';
+      const isError = state.toast.type === 'error';
+      const isInfo = state.toast.type === 'info';
+
+      return `
+        <div class="fixed bottom-5 right-5 z-50 flex items-center space-x-2 px-4 py-3 rounded-lg shadow-lg border text-xs font-semibold ${
+          isError ? 'bg-red-900 text-white border-red-700' : isInfo ? 'bg-sky-900 text-white border-sky-700' : 'bg-emerald-900 text-white border-emerald-700'
+        }">
+          <i data-lucide="${isError ? 'alert-circle' : isInfo ? 'info' : 'check-circle'}" class="w-4 h-4 shrink-0"></i>
+          <span>${state.toast.message}</span>
+        </div>
+      `;
+    }
+
+    // --- APP INITIALIZATION ---
+    window.addEventListener('DOMContentLoaded', () => {
+      render();
+    });
+  </script>
+</body>
+</html>

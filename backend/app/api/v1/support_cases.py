@@ -11,7 +11,7 @@ from pydantic import Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from app.api.auth import AccessError, Authenticated, require_staff
+from app.api.auth import AccessError, Authenticated, authorize, require_staff
 from app.api.v1.catalog import CatalogRoute, Closed, fail
 from app.api.v1.fulfillment import bounds, page_cursor, paged
 from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt, encrypt
@@ -52,7 +52,7 @@ class Change(Closed):
         return self
 
 
-def command(context, request, operation, body, work, response_status):
+def command(context, request, operation, body, work, response_status, *, intake_policy=None):
     actor = context.principal.user_id
     key = request.headers.get("idempotency-key", "")
     if not re.fullmatch(r"[A-Za-z0-9._:-]{8,160}", key):
@@ -64,10 +64,13 @@ def command(context, request, operation, body, work, response_status):
         text("SELECT pg_advisory_xact_lock(hashtextextended(:ref,0))"), {"ref": ref}
     )
     args = {"scope": str(actor), "actor": actor, "op": operation, "key": key}
+    receipt_fields = "request_hash,response_body_ciphertext,response_key_version"
+    if intake_policy is not None:
+        receipt_fields += ",expires_at>clock_timestamp() AS receipt_live"
     old = (
         db.execute(
             text(
-                "SELECT request_hash,response_body_ciphertext,response_key_version FROM public.idempotency_records WHERE actor_scope=:scope AND operation=:op AND idempotency_key=:key FOR UPDATE"
+                f"SELECT {receipt_fields} FROM public.idempotency_records WHERE actor_scope=:scope AND operation=:op AND idempotency_key=:key FOR UPDATE"
             ),
             args,
         )
@@ -77,6 +80,10 @@ def command(context, request, operation, body, work, response_status):
     settings = request.app.state.settings
     try:
         if old:
+            if intake_policy is not None:
+                require_staff(authorize(db, context.principal), "support")
+                if not old["receipt_live"]:
+                    raise AccessError(503)
             if old["request_hash"] != digest:
                 fail(409, "IDEMPOTENCY_KEY_REUSED")
             return json.loads(
@@ -91,6 +98,8 @@ def command(context, request, operation, body, work, response_status):
         with db.begin_nested():
             result = work(settings)
             if "error" in result:
+                if result["error"] == "PROVIDER_UNAVAILABLE":
+                    raise AccessError(503)
                 fail(
                     {"NOT_FOUND": 404, "STALE_CASE": 412, "INVALID_REQUEST": 422}.get(
                         result["error"], 409
@@ -100,15 +109,23 @@ def command(context, request, operation, body, work, response_status):
             cipher, version = encrypt(
                 settings, actor, "support:" + ref, json.dumps(result)
             )
+            expiry = (
+                "now()+interval '1 day'" if intake_policy is None
+                else "now()+make_interval(secs=>:receipt_seconds)"
+            )
+            if intake_policy is not None:
+                require_staff(authorize(db, context.principal), "support")
             db.execute(
-                text("""INSERT INTO public.idempotency_records(actor_scope,actor_user_id,operation,idempotency_key,request_hash,state,response_status,response_body_ciphertext,response_key_version,expires_at)
-            VALUES(:scope,:actor,:op,:key,:hash,'completed',:status,:cipher,:version,now()+interval '1 day')"""),
+                text(f"""INSERT INTO public.idempotency_records(actor_scope,actor_user_id,operation,idempotency_key,request_hash,state,response_status,response_body_ciphertext,response_key_version,expires_at)
+            VALUES(:scope,:actor,:op,:key,:hash,'completed',:status,:cipher,:version,{expiry})"""),
                 {
                     **args,
                     "hash": digest,
                     "status": response_status,
                     "cipher": cipher,
                     "version": version,
+                    **({"receipt_seconds": intake_policy.retention.receipt.duration_seconds}
+                       if intake_policy is not None else {}),
                 },
             )
             return result
@@ -142,10 +159,13 @@ def cases(
         fail(422, "INVALID_EVENT_CURSOR")
     stamp, ident = page_cursor(cursor)
     uid = context.principal.user_id
+    from app.db.abuse_intake import case_clause, case_policy
+
+    policy_clause = case_clause(context.session)
     rows = (
         context.session.execute(
             text(f"""SELECT {FIELDS} FROM public.support_cases
-      WHERE (assigned_staff_id IS NULL OR assigned_staff_id=:uid)
+      WHERE (assigned_staff_id IS NULL OR assigned_staff_id=:uid) {policy_clause}
       AND (CAST(:id AS uuid) IS NULL OR id=:id) AND (CAST(:kind AS text) IS NULL OR case_type=:kind)
       AND (CAST(:status AS text) IS NULL OR status=:status) AND (CAST(:priority AS text) IS NULL OR priority=:priority)
       AND (:queue='all' OR (:queue='mine' AND assigned_staff_id=:uid) OR (:queue='unassigned' AND assigned_staff_id IS NULL))
@@ -167,9 +187,11 @@ def cases(
         .all()
     )
     if case_id and not rows:
+        case_policy(context.session, case_id)  # policy-blocked owned scope is503
         raise AccessError(404)
     items = []
     for row in rows:
+        abuse_policy = case_policy(context.session, row["id"])
         item = {
             k: v
             for k, v in row.items()
@@ -181,7 +203,8 @@ def cases(
             can_claim=row["assigned_staff_id"] is None
             and row["status"] in ["open", "investigating"],
             requires_escalation=row["case_type"]
-            in ["payment", "privacy", "ownership_dispute"],
+            in ["payment", "privacy", "ownership_dispute"]
+            or abuse_policy is not None,
         )
         if case_id and own:
             private = (
@@ -263,7 +286,9 @@ def cases(
                 if len(events) > event_limit
                 else None,
             }
-            item["historical_creation_recorded"] = row["description_format"] == 1
+            item["historical_creation_recorded"] = (
+                row["description_format"] == 1 and abuse_policy is None
+            )
             context.session.execute(
                 text("""INSERT INTO public.audit_events(actor_user_id,actor_kind,action,target_type,target_id,request_id,reason,safe_details)
             VALUES(:uid,'staff','support_case.read','support_case',:id,:rid,'assigned_case_review',jsonb_build_object('version',CAST(:rev AS integer)))"""),
@@ -311,6 +336,10 @@ def create_case(body: Intake, context: Authenticated, request: Request):
 @router.patch("/admin/support-cases/{case_id}", operation_id="API-099")
 def update_case(case_id: UUID, body: Change, context: Authenticated, request: Request):
     require_staff(context, "support")
+    from app.db.abuse_intake import case_policy
+
+    # Independent of the public feature flag: retained linkage stays restricted.
+    intake_policy = case_policy(context.session, case_id)
     if (
         context.session.execute(
             text(
@@ -345,5 +374,6 @@ def update_case(case_id: UUID, body: Change, context: Authenticated, request: Re
         ).scalar_one()
 
     return command(
-        context, request, "support.case.update:" + str(case_id), body, work, 200
+        context, request, "support.case.update:" + str(case_id), body, work, 200,
+        intake_policy=intake_policy,
     )

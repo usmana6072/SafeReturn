@@ -1,0 +1,16 @@
+{
+  "purpose": "phase9c-local-support-metadata-acceptance",
+  "database_name": "safereturn_phase9c_acceptance",
+  "host": "127.0.0.1",
+  "port": 55439,
+  "postgres_major": 17,
+  "postgres_bin": ".local-tools/pg17-core/pgsql/bin",
+  "state_directory": "tmp/phase9c-local",
+  "data_directory": "tmp/phase9c-local/pgdata",
+  "load_existing_environment": false,
+  "restore_existing_backup": false,
+  "start_workers": false,
+  "automatic_migrations": false,
+  "automatic_identities": false,
+  "automatic_fixtures": false
+}

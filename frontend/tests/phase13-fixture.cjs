@@ -1,0 +1,26 @@
+// Exact synthetic reads only. No .env, database, provider, worker or readiness.
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript');
+const {NextRequest}=require('next/server');
+const id=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0'),stamp='2026-10-24T12:00:00Z',end=Date.parse('2026-10-24T00:00:00Z'),start=end-30*86400000,cursor=Buffer.from(JSON.stringify([stamp,id(2)])).toString('base64url');
+const event=(n=1)=>({id:id(n),occurred_at:stamp,actor_kind:'system',actor_user_id:null,action:n===1?'audit.search':'PRIVATE_CANARY',target_type:n===1?'audit_search':'PRIVATE_CANARY',target_id:null});
+function trends(timezone='UTC'){return {as_of:stamp,range_start:new Date(start).toISOString(),range_end:new Date(end).toISOString(),bucket_timezone:'UTC',display_timezone:timezone,series:[{series_id:'notifications_created',unit:'outbox_event',status:'ready',reason_code:null,buckets:Array.from({length:30},(_,i)=>({start:new Date(start+i*86400000).toISOString(),end:new Date(start+(i+1)*86400000).toISOString(),count:{value:i===29?1000:i,is_exact:i!==29}}))}]};}
+function createHarness(){const state={admitted:true,authorized:true,roles:['security_admin'],mfa:true,capabilities:['audit.search','notifications.manage'],authCalls:0,calls:[],status:0,network:false,malformed:false,oversized:false,attachment:false,revoke:false,empty:false,unavailable:false,missingCapabilities:false};const cache=new Map();
+ function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file).exports;const module={exports:{}};cache.set(file,module);const sandbox={module,exports:module.exports,URL,URLSearchParams,AbortSignal,TextDecoder,TextEncoder,Request,Response,Uint8Array,Date,JSON,Set,Map,atob,process:{env:{SAFERETURN_API_ORIGIN:'https://api.phase13.invalid'}},require(name){
+ if(name==='server-only')return {};if(name==='next/server')return require(name);
+ if(name.endsWith('/phase13-gate'))return Object.fromEntries(['dashboardSummaryAdmitted','dashboardTrendsAdmitted','auditEventsAdmitted','currentStaffSecurityAdmitted','backendLivenessAdmitted'].map(k=>[k,()=>state.admitted]));
+ if(name.endsWith('/auth/server'))return {verifiedSession:async()=>{state.authCalls++;return state.authorized?{token:'synthetic-only'}:null;}};
+ if(name.endsWith('/auth/staff')){class StaffAccessError extends Error{}return {StaffAccessError,staffState:async()=>({roles:state.roles,mfa_verified:state.mfa,capabilities:state.capabilities})};}
+ if(name.endsWith('/auth/config'))return {authConfig:()=>({origin:'https://phase13.test'})};
+ if(name.startsWith('.'))return load(path.resolve(path.dirname(file),name)+'.ts');throw Error('Unreviewed import '+name);
+ },fetch:upstream};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,sandbox,{filename:file});return module.exports;}
+ async function upstream(url,options){const u=new URL(url);if(u.origin!=='https://api.phase13.invalid'||options.method!=='GET'||!['/api/v1/admin/dashboard/trends','/api/v1/admin/audit-events','/api/v1/me/staff-security','/api/v1/health/live'].includes(u.pathname))throw Error('Prohibited fixture path');state.calls.push({url,options});if(state.revoke)state.roles=[];if(state.network)throw new DOMException('PRIVATE_CANARY','TimeoutError');if(state.status)return Response.json({private:'PRIVATE_CANARY'},{status:state.status});let result;
+ if(u.pathname.endsWith('/trends')){result=trends(u.searchParams.get('display_timezone')??'UTC');if(state.empty)result.series=[];if(state.unavailable)result.series=[{series_id:'notifications_created',unit:'outbox_event',status:'unavailable',reason_code:'QUERY_UNAVAILABLE',buckets:[]}];}
+ else if(u.pathname.endsWith('/audit-events'))result={items:state.empty?[]:u.searchParams.has('cursor')?[event(3)]:[event(1),event(2)],next_cursor:state.empty||u.searchParams.has('cursor')?null:cursor,scope:'security_metadata'};
+ else if(u.pathname.endsWith('/staff-security')){result={roles:state.roles,mfa_verified:state.mfa,capabilities:state.mfa?state.capabilities:[]};if(state.missingCapabilities)delete result.capabilities;}
+ else result={status:'ok'};
+ if(state.malformed)result={...result,private:'PRIVATE_CANARY'};if(state.padded)return new Response(JSON.stringify(result)+' '.repeat(65000),{headers:{'Content-Type':'application/json'}});if(state.oversized)return new Response(' '.repeat(262145),{headers:{'Content-Type':'application/json'}});return Response.json(result,{headers:state.attachment?{'Content-Disposition':'attachment'}:{}});}
+ const directories={trends:'dashboard',summary:'dashboard',audit:'audit',security:'staff-permissions',liveness:'system'},routes=Object.fromEntries(Object.entries(directories).map(([k,d])=>[k,load(path.resolve(__dirname,'../app/admin/'+d+'/api/route.ts'))]));
+ async function dispatch(kind='trends',query='',init={}){const q=new URLSearchParams(query);if(['trends','summary'].includes(kind))q.set('kind',kind);const method=init.method??'GET';return routes[kind][method](new NextRequest('https://phase13.test/admin/'+directories[kind]+'/api'+(q.size?'?'+q:''),init));}
+ return {state,load,dispatch};
+}
+module.exports={createHarness,id,event,trends,cursor,stamp};

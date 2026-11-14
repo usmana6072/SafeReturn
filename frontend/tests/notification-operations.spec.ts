@@ -5,7 +5,7 @@ test('bounded synthetic notification recovery, stale refusal, role denial and RT
  await page.goto('/admin/notifications');await expect(page).toHaveURL(/login/);
  expect((await page.request.get('/admin/notifications/api')).status()).toBe(401);
  async function login(role:string){await context.clearCookies();await request.post('http://127.0.0.1:8115/fixture/notification-role/'+role);await page.goto('/login');await page.getByLabel('Email address').fill(role+'@synthetic.invalid');await page.locator('input[name=password]').fill('synthetic-password');await page.getByRole('button',{name:'Log in',exact:true}).click();await expect(page).toHaveURL(/admin/);}
- await login('operations');await page.goto('/admin/notifications?status=dead');await expect(page.getByRole('status')).toBeEmpty();
+ await login('operations');await page.goto('/admin/notifications?view=live&status=dead');await expect(page.getByRole('status')).toBeEmpty();
  const target=process.env.NOTIFICATION_EVENT!;
  const card=page.locator('section').filter({has:page.getByRole('heading',{name:target,exact:true})});await card.getByRole('link',{name:'Open notification'}).click();
  await expect(page.getByRole('heading',{name:target,exact:true})).toBeVisible();await expect(page.getByRole('status')).toBeEmpty();

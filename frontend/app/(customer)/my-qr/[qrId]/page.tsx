@@ -6,10 +6,12 @@ import { ApiError } from "../../../../lib/api/transport";
 import { getLanguage } from "../../../../lib/i18n";
 import { Unavailable } from "../../../../components/customer";
 import { ProfileEditor, ContactEditor, PreferenceEditor, PrivacyDisable } from "../../../../components/qr-forms";
+import { customerOperationAvailable } from "../../../../lib/customer-capabilities";
 export default async function Page({ params, searchParams }: { params: Promise<{qrId: string}>; searchParams: Promise<{saved?: string}> }) {
   const { qrId } = await params;
   if (!uuid(qrId)) notFound();
   const ur = await getLanguage() === "ur", session = await ownerSession(), api = ownerApi(session.token);
+  if (!customerOperationAvailable("GET", `/me/qr/${qrId}`)) return <><h1>{ur ? "QR پروفائل" : "QR profile"}</h1><p className="alert">{ur ? "پروفائل کی ترمیم اور اشاعت فی الحال دستیاب نہیں۔ آپ کی نجی معلومات میں کوئی تبدیلی نہیں کی گئی۔" : "Profile editing and publication are currently unavailable. Your private information has not been changed."}</p><Link className="button secondary" href="/my-qr">{ur ? "میرے QR کوڈز" : "My QR codes"}</Link></>;
   let tag: Tag, profile: Profile | undefined, contacts: Contacts | undefined, prefs: Preferences | undefined;
   try {
     tag = await api<Tag>(`/me/qr/${qrId}`);
@@ -25,7 +27,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
     if (tag.tag_type === "ice") contacts = optionsResult.value as Contacts;
     else prefs = optionsResult.value as Preferences;
   }
-  return <><Link className="text-link" href={`/kits/${tag.pair_id}`}>{ur ? "کٹ پر واپس" : "Back to kit"}</Link>
+  return <><Link className="text-link" href={tag.pair_id?`/kits/${tag.pair_id}`:"/independent-qr"}>{tag.pair_id?(ur ? "کٹ پر واپس" : "Back to kit"):(ur?"میرے الگ QR":"My independent QRs")}</Link>
     <h1>{tag.tag_type === "lost" ? (ur ? "Lost پروفائل میں ترمیم" : "Edit Lost profile") : (ur ? "ICE پروفائل میں ترمیم" : "Edit ICE profile")}</h1>
     <p className="form-help">QR: <bdi>{qrId}</bdi> · {ur ? "تمام پرنٹ کاپیاں یہی پروفائل استعمال کرتی ہیں۔" : "All printed copies share this profile."}</p>
     {(await searchParams).saved === "1" && <p role="status">{ur ? "تبدیلیاں محفوظ ہو گئیں۔" : "Changes saved."}</p>}

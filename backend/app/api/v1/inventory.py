@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import text
 
-from app.api.auth import Authenticated, require_staff
+from app.api.auth import AccessError, Authenticated, require_staff
 from app.core.inventory_secrets import (
     InventoryCryptoUnavailable,
     activation_verifier,
@@ -342,4 +342,24 @@ def create_qr_batch(
             "key": idempotency_key,
         },
     )
+    if settings.manufacturing_exports_enabled:
+        from app.core.manufacturing import TransportConflict
+        from app.core.manufacturing_custody import register_source
+        from app.core.profile_crypto import ProfileCryptoUnavailable
+
+        try:
+            register_source(
+                context.session,
+                settings,
+                batch_id,
+                idempotency_key,
+                request_model,
+                [
+                    {"pair_reference": p["pair_reference"], "tags": p["tags"]}
+                    for p in manifest_pairs
+                ],
+                response_body,
+            )
+        except (TransportConflict, ProfileCryptoUnavailable):
+            raise AccessError(503) from None
     return _response(batch_id, body.batch_label, body.pair_count, sealed_insert)

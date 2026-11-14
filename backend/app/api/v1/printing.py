@@ -48,25 +48,41 @@ class DownloadRequest(Closed):
 class Observation(Closed):
     tag_type: str = Field(pattern="^(lost|ice)$")
     symbol_mm: str = Field(pattern=r"^[0-9]{2,3}(?:\.[0-9]{1,2})?$")
-    copies: int = Field(ge=1, le=500, strict=True)
+    copies: int = Field(ge=1, le=5000, strict=True)
 
 
 class JobQARequest(Closed):
     approved: bool = Field(strict=True)
     artifact_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    observed: list[Observation] = Field(min_length=1, max_length=30)
+    observed: list[Observation] = Field(min_length=1, max_length=50)
     scan_passed: bool = Field(strict=True)
     logo_quiet_zone_passed: bool = Field(strict=True)
     bilingual_passed: bool = Field(strict=True)
     cutting_packaging_passed: bool = Field(strict=True)
     actual_scale_passed: bool = Field(strict=True)
     reason: str = Field(min_length=4, max_length=1000)
+    inspected_item_ids: list[UUID] = Field(default_factory=list, max_length=50)
+
+
+def binding_matches(rows, manifest):
+    """Compare every frozen occurrence, including repeats of one item identity."""
+    return [
+        (str(r["use_id"]), str(r["qr_id"]), r["tag_type"], int(r["copies"]),
+         Decimal(str(r["size_mm"])), r["public_token"])
+        for r in rows
+    ] == [
+        (o["use_id"], o["qr_id"], o["template"]["tag_type"], o["copies"],
+         Decimal(str(o["template"]["symbol_mm"])), o["url"].rsplit("/", 1)[1])
+        for o in manifest["occurrences"]
+    ]
 
 
 def record(context, request, operation, payload, work):
     require_verified_account(context)
     s = request.app.state.settings
     session = context.session
+    from app.db.template_registry import gate
+    gate(session)
     actor = context.principal.user_id
     key = request.headers.get("idempotency-key", "")
     if not re.fullmatch(r"[A-Za-z0-9._:-]{8,160}", key):
@@ -153,7 +169,10 @@ def record(context, request, operation, payload, work):
         fail(409, "PRINT_CONFLICT")
 
 
-def occurrences(session, oid):
+def occurrences(session, oid, settings=None):
+    from app.api.v1.financial_disputes import require_order_clear
+
+    require_order_clear(session, oid, settings)
     return (
         session.execute(
             text("SELECT * FROM public.sr_print_occurrences(:id)"), {"id": oid}
@@ -186,6 +205,12 @@ def frozen(session, s, job):
 
 
 def enqueue(session, s, oid, expected_revision, reason):
+    from app.db.template_registry import gate, order_specs, registry_manifest
+    gate(session)
+    registry=order_specs(session,oid)
+    from app.api.v1.financial_disputes import require_order_clear
+
+    require_order_clear(session, oid, s)
     order = session.execute(
         text("SELECT public.sr_print_order_lock(:id)"), {"id": oid}
     ).scalar_one()
@@ -217,20 +242,14 @@ def enqueue(session, s, oid, expected_revision, reason):
             fail(409, "PRINT_ALREADY_ACTIVE")
     if previous:
         manifest = frozen(session, s, previous)
-        if [
-            (str(r["use_id"]), str(r["qr_id"]), int(r["copies"]), r["public_token"])
-            for r in rows
-        ] != [
-            (o["use_id"], o["qr_id"], o["copies"], o["url"].rsplit("/", 1)[1])
-            for o in manifest["occurrences"]
-        ]:
+        if not binding_matches(rows, manifest):
             fail(409, "PRINT_BINDING_CHANGED")
         session.execute(
             text("UPDATE public.print_jobs SET status='superseded' WHERE id=:id"),
             {"id": previous["id"]},
         )
     else:
-        manifest = build_manifest(load_bundle(s), rows)
+        manifest = registry_manifest(registry,rows) if registry is not None else build_manifest(load_bundle(s), rows)
     jid = uuid4()
     revision = expected_revision + 1
     cipher, version = encrypt(s, oid, "print-render", canonical(manifest))
@@ -327,10 +346,14 @@ def get_print_job(job_id: UUID, context: Authenticated):
         .mappings()
         .all()
     )
-    return dict(r, artifacts=[dict(a) for a in artifacts])
+    items = context.session.execute(text("SELECT id,product_name_snapshot,qr_type_snapshot FROM public.order_logical_items WHERE order_id=:id ORDER BY id"), {"id": r["order_id"]}).mappings().all()
+    return dict(r, artifacts=[dict(a) for a in artifacts], inspection_items=[dict(i) for i in items])
 
 
 def artifact(session, aid, *, check_binding=True):
+    from app.db.template_registry import gate, order_specs
+    if check_binding:
+        gate(session)
     a = (
         session.execute(
             text(
@@ -343,6 +366,12 @@ def artifact(session, aid, *, check_binding=True):
     )
     if a is None:
         raise AccessError(404)
+    order_specs(session,a["order_id"],lock=check_binding)
+    from app.api.v1.financial_disputes import require_order_clear
+
+    # Provider fetch happens after the initial read-only probe. The final bound
+    # artifact check holds the order lock and rechecks before returning any bytes.
+    require_order_clear(session, a["order_id"], lock=check_binding)
     if a["deleted_at"] is not None:
         fail(410, "ARTIFACT_DELETED")
     if a["status"] not in {"ready", "downloaded", "qa_passed"}:
@@ -422,6 +451,8 @@ def redeem_download(body: DownloadRequest, context: Authenticated, request: Requ
     except PrintUnavailable:
         raise AccessError(503) from None
     # Provider I/O precedes the serialized consume/revalidation transaction section.
+    from app.db.template_registry import gate
+    gate(context.session)
     context.session.execute(
         text("SELECT id FROM public.orders WHERE id=:id FOR UPDATE"),
         {"id": a["order_id"]},
@@ -470,6 +501,8 @@ def record_job_qa(
     require_staff(context, "operations")
 
     def work(s):
+        # Parent first, as in settlement and shipment commands.
+        context.session.execute(text("SELECT o.id FROM public.orders o JOIN public.print_jobs j ON j.order_id=o.id WHERE j.id=:id FOR UPDATE OF o"), {"id": job_id})
         job = (
             context.session.execute(
                 text("SELECT * FROM public.print_jobs WHERE id=:id FOR UPDATE"),
@@ -493,6 +526,11 @@ def record_job_qa(
             .one()
         )
         artifact(context.session, a["id"])
+        typed = context.session.execute(text("SELECT commerce_model='single_qr' FROM public.orders WHERE id=:id"), {"id": job["order_id"]}).scalar_one()
+        if typed is True and body.approved:
+            ids = context.session.execute(text("SELECT id FROM public.order_logical_items WHERE order_id=:id"), {"id": job["order_id"]}).scalars().all()
+            if len(body.inspected_item_ids) != len(set(body.inspected_item_ids)) or set(ids) != set(body.inspected_item_ids):
+                fail(422, "ITEM_QA_MISMATCH")
         manifest = frozen(context.session, s, job)
         expected = {}
         for o in manifest["occurrences"]:
@@ -526,7 +564,7 @@ def record_job_qa(
                 "uid": context.principal.user_id,
                 "approved": body.approved,
                 "hash": body.artifact_sha256,
-                "obs": canonical(body.model_dump()),
+                "obs": canonical(body.model_dump(mode="json")),
                 "reason": body.reason,
             },
         )
@@ -646,7 +684,7 @@ def owner_print_summary(order_id: UUID, context: Authenticated):
     ).scalar_one_or_none()
     counts = context.session.execute(
         text(
-            "SELECT u.tag_type_snapshot,sum(u.copies) AS copies FROM public.order_item_qr_uses u JOIN public.order_items i ON i.id=u.order_item_id WHERE i.order_id=:id GROUP BY u.tag_type_snapshot"
+            "SELECT kind,sum(copies) FROM (SELECT u.tag_type_snapshot AS kind,u.copies FROM public.order_item_qr_uses u JOIN public.order_items i ON i.id=u.order_item_id WHERE i.order_id=:id UNION ALL SELECT i.qr_type_snapshot,s.copies FROM public.order_item_sizes s JOIN public.order_logical_items i ON i.id=s.logical_item_id WHERE i.order_id=:id) counts GROUP BY kind"
         ),
         {"id": order_id},
     ).all()

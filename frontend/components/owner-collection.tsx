@@ -15,7 +15,7 @@ export async function OwnerCollection({ mode, cursor, search = "", filter = "all
     else pairs = await ownerApi(session.token)<Page<Pair>>(`/me/tag-pairs${query}`);
   } catch { return <><h1>{title}</h1><Unavailable ur={ur} /></>; }
   const page = pairs ?? tags!;
-  return <><div className="customer-heading"><h1>{title}</h1><Link className="button" href="/activate">{ur ? "QR فعال کریں" : "Activate QR"}</Link></div>
+  return <><div className="customer-heading"><h1>{title}</h1><Link className="button secondary" href="/independent-qr">{ur?"الگ QR اور فعال کرنا":"Independent QRs and activation"}</Link><Link className="button" href="/activate">{ur ? "QR فعال کریں" : "Activate QR"}</Link></div>
     <p>{ur ? "ہر کٹ کے Lost اور ICE پروفائل الگ ہیں۔ ایک QR کی تمام پرنٹ کاپیاں ایک پروفائل استعمال کرتی ہیں۔" : "Each kit has separate Lost and ICE profiles. Every printed copy of the same QR shares its profile."}</p>
     {mode === "my-qr" && <><form method="GET" className="account-form qr-filters">
       <label>{ur ? "نام سے تلاش" : "Search by label"}<input name="search" defaultValue={search} maxLength={120} /></label>

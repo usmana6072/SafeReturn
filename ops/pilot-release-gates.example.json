@@ -1,0 +1,54 @@
+{
+  "release_id": "pilot-YYYY-MM-DD",
+  "status": "not_ready",
+  "environment": "staging",
+  "app_commit": "replace-with-reviewed-commit",
+  "migration_revision": "replace-with-inspected-head",
+  "physical": {
+    "templates": {
+      "lost": {
+        "status": "not_approved",
+        "version": "sr-lost-sticker-v1",
+        "sha256": ""
+      },
+      "ice": {
+        "status": "not_approved",
+        "version": "sr-ice-sticker-v1",
+        "sha256": ""
+      }
+    },
+    "dimensions_mm": {
+      "quiet_zone_modules": 4,
+      "indoor_qr_symbol_min": 30,
+      "outdoor_qr_symbol_min": 35
+    },
+    "bilingual_copy": {
+      "en": "not_reviewed",
+      "ur": "not_reviewed"
+    },
+    "fonts": {
+      "status": "not_approved",
+      "sha256": ""
+    },
+    "scan_matrix": {
+      "status": "not_run",
+      "devices_tested": 0,
+      "materials_tested": 0,
+      "evidence": ""
+    }
+  },
+  "providers": {
+    "supabase": { "status": "not_run", "evidence": "" },
+    "resend": { "status": "not_run", "evidence": "" },
+    "google_sheets": { "status": "not_run", "evidence": "" },
+    "cloudinary": { "status": "not_run", "evidence": "" }
+  },
+  "gates": {
+    "artwork_approval": { "status": "not_run", "evidence": "" },
+    "bilingual_copy_review": { "status": "not_run", "evidence": "" },
+    "font_rendering": { "status": "not_run", "evidence": "" },
+    "qr_scan_matrix": { "status": "not_run", "evidence": "" },
+    "provider_smoke": { "status": "not_run", "evidence": "" },
+    "pilot_signoff": { "status": "not_run", "evidence": "" }
+  }
+}

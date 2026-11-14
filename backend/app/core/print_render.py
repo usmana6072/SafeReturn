@@ -185,7 +185,7 @@ def load_bundle(settings):
 
 
 def build_manifest(bundle, rows):
-    if not rows or sum(int(r["copies"]) for r in rows) > 500:
+    if not rows or sum(int(r["copies"]) for r in rows) > 5000:
         raise PrintUnavailable("invalid_occurrences")
     result = {
         "renderer": RENDERER,

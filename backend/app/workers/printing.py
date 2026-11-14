@@ -4,15 +4,17 @@ import argparse
 import json
 from uuid import uuid4
 
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.v1.printing import enqueue, occurrences
+from app.api.v1.printing import binding_matches, enqueue, occurrences
 from app.core.config import Settings
 from app.core.print_render import PrintUnavailable, digest, render_pdf
 from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt
 from app.db.runtime import worker_transaction
 from app.db.session import Database
+from app.db.template_registry import gate, order_specs
 from app.integrations.print_storage import PrintStore
 
 
@@ -22,11 +24,21 @@ class LeaseLost(Exception):
 
 def claim(database, s, job_id=None):
     owner = s.print_worker_id[:60] + ":" + uuid4().hex
+    financial_filter = (
+        " AND public.sr_financial_order_clear(order_id) "
+        if getattr(s, "financial_review_enabled", False)
+        else " "
+    )
     with worker_transaction(database, owner) as db:
+        gate(db)
+        if db.execute(text("SELECT to_regprocedure('public.sr_typed_print_handoff()') IS NOT NULL")).scalar_one() is True:
+            db.execute(text("SELECT public.sr_typed_print_handoff()"))
         row = (
             db.execute(
                 text(
-                    """SELECT * FROM public.durable_jobs WHERE (job_kind='print.render' OR (job_kind='allocation.finalize' AND idempotency_key LIKE 'print.request:%')) AND (CAST(:id AS uuid) IS NULL OR id=:id) AND ((status IN('pending','retry') AND next_attempt_at<=clock_timestamp()) OR (status='leased' AND lease_until<=clock_timestamp())) ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1"""
+                    """SELECT * FROM public.durable_jobs WHERE (job_kind='print.render' OR (job_kind='allocation.finalize' AND idempotency_key LIKE 'print.request:%')) AND (CAST(:id AS uuid) IS NULL OR id=:id) AND ((status IN('pending','retry') AND next_attempt_at<=clock_timestamp()) OR (status='leased' AND lease_until<=clock_timestamp()))"""
+                    + financial_filter
+                    + "ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1"
                 ),
                 {"id": job_id},
             )
@@ -52,7 +64,12 @@ def claim(database, s, job_id=None):
         return dict(row, lease_owner=owner, attempt_count=row["attempt_count"] + 1)
 
 
-def fence(db, lease):
+def fence(db, lease, *, admit=True):
+    gate(db)
+    if db.execute(text("SELECT to_regprocedure('public.sr_print_worker_order_lock(uuid)') IS NOT NULL")).scalar_one() is True:
+        db.execute(text("SELECT public.sr_print_worker_order_lock(:id)"), {"id": lease["order_id"]})
+    if admit:
+        order_specs(db,lease["order_id"])
     ok = db.execute(
         text(
             "SELECT id FROM public.durable_jobs WHERE id=:id AND status='leased' AND lease_owner=:owner AND attempt_count=:attempt AND lease_until>clock_timestamp() FOR UPDATE"
@@ -85,7 +102,19 @@ def complete(db, lease):
 def run_one(database, s, storage=None, job_id=None):
     if not s.print_enabled:
         raise PrintUnavailable("print_disabled")
-    lease = claim(database, s, job_id)
+    try:
+        lease = claim(database, s, job_id)
+    except SQLAlchemyError as error:
+        if (
+            getattr(
+                getattr(getattr(error, "orig", None), "diag", None),
+                "constraint_name",
+                None,
+            )
+            == "financial_review_fence"
+        ):
+            return False
+        raise
     if lease is None:
         return False
     try:
@@ -102,7 +131,7 @@ def run_one(database, s, storage=None, job_id=None):
             return True
         with worker_transaction(database, lease["lease_owner"]) as db:
             fence(db, lease)
-            rows = occurrences(db, lease["order_id"])
+            rows = occurrences(db, lease["order_id"], s)
             manifest = json.loads(
                 decrypt(
                     s,
@@ -112,12 +141,7 @@ def run_one(database, s, storage=None, job_id=None):
                     lease["payload_key_version"],
                 )
             )
-            if [
-                (str(r["qr_id"]), int(r["copies"]), r["public_token"]) for r in rows
-            ] != [
-                (o["qr_id"], o["copies"], o["url"].rsplit("/", 1)[1])
-                for o in manifest["occurrences"]
-            ]:
+            if not binding_matches(rows, manifest):
                 raise PrintUnavailable("binding_changed")
             job = db.execute(
                 text("SELECT template_fingerprint FROM public.print_jobs WHERE id=:id"),
@@ -144,8 +168,9 @@ def run_one(database, s, storage=None, job_id=None):
         )
         (storage or PrintStore(s)).upload(key, data)
         with worker_transaction(database, lease["lease_owner"]) as db:
-            rows = occurrences(db, lease["order_id"])
-            if not rows:
+            gate(db)
+            rows = occurrences(db, lease["order_id"], s)
+            if not rows or not binding_matches(rows, manifest):
                 raise PrintUnavailable("binding_changed")
             fence(db, lease)
             aid = uuid4()
@@ -185,9 +210,21 @@ def run_one(database, s, storage=None, job_id=None):
         return True
     except LeaseLost:
         return False
-    except (PrintUnavailable, ProfileCryptoUnavailable, SQLAlchemyError) as error:
+    except (
+        PrintUnavailable,
+        ProfileCryptoUnavailable,
+        SQLAlchemyError,
+        HTTPException,
+    ) as error:
         code = (
-            str(error)
+            (
+                "financial_review_required"
+                if isinstance(error.detail, dict)
+                and error.detail.get("code") == "FINANCIAL_REVIEW_REQUIRED"
+                else "print_policy_denied"
+            )
+            if isinstance(error, HTTPException)
+            else str(error)
             if isinstance(error, PrintUnavailable)
             else "database_recheck_failed"
             if isinstance(error, SQLAlchemyError)
@@ -197,7 +234,9 @@ def run_one(database, s, storage=None, job_id=None):
             code = "print_unavailable"
         try:
             with worker_transaction(database, lease["lease_owner"]) as db:
-                fence(db, lease)
+                # Failure bookkeeping cannot release an artifact and must remain
+                # possible after a security withdrawal denied admission.
+                fence(db, lease, admit=False)
                 if lease["print_job_id"]:
                     db.execute(
                         text(

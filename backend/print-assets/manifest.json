@@ -1,0 +1,13 @@
+{
+  "project": "fhuxryfkfrvycsojkzvq",
+  "asset_set_id": "0a7c508b-fc96-42d6-ba58-e367dbb8d08b",
+  "root": "/app/print-assets",
+  "files": {
+    "Amiri-Regular.ttf": "ab391c4147d054c48976e98322ad0eefe1427aa0e0502a12a4c75d80a70cfcd7",
+    "logo.svg": "6edd586082d2f2005252d4e745303cc1b2705cfad890d495575d51ed440beeea",
+    "OFL.txt": "72de68e5954f4fdd24702292ef5a32f003ca960ec9330dc86e5eefb5dffb9b22"
+  },
+  "font_source": "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf",
+  "license": "SIL OFL 1.1",
+  "status": "Selected development assets; no physical QA or publication approval"
+}

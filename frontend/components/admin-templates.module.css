@@ -1,0 +1,15 @@
+.screen { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; color: #17334b; font-size: .875rem; min-width: 0; }
+.screen, .screen * { box-sizing: border-box; }
+.screen h1 { font-size: 1.6rem; margin: 0; }
+.screen h2 { font-size: 1.05rem; margin: 0 0 .75rem; }
+.screen p { line-height: 1.65; margin: .5rem 0; overflow-wrap: anywhere; }
+.screen section, .screen article { min-width: 0; }
+.screen input:not([type=checkbox]), .screen select, .screen textarea { border: 1px solid #cbd5e1; border-radius: .5rem; padding: .6rem; background: white; color: #17334b; max-width: 100%; font-size: .875rem; }
+.screen textarea { width: 100%; direction: ltr; text-align: left; }
+.screen label { display: block; font-weight: 500; margin: .75rem 0; }
+.screen button { border: 1px solid #cbd5e1; background: #fff; border-radius: .5rem; padding: .55rem .8rem; margin: .25rem .4rem .25rem 0; color: #075d57; font-weight: 600; font-size: .8rem; cursor: pointer; }
+.screen button:disabled { opacity: .5; cursor: not-allowed; }
+.screen button:focus-visible, .screen a:focus-visible, .screen input:focus-visible, .screen textarea:focus-visible, .screen select:focus-visible { outline: 2px solid #0a756e; outline-offset: 3px; }
+.screen [role=alert] { background: #fff1f2; border-inline-start: 3px solid #be123c; padding: .75rem; color: #9f1239; }
+.screen pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
+@media (max-width: 640px) { .screen h1 { font-size: 1.35rem; } .screen select { display: block; width: 100%; } }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ownerApi, ownerSession } from "../../../../lib/qr-server";
 import { getLanguage } from "../../../../lib/i18n";
 import { Unavailable } from "../../../../components/customer";
+import { CustomerSubmit } from "../../../../components/customer-submit";
 
 type Message = {
   tag_type: string;
@@ -46,13 +47,13 @@ export default async function FinderMessagePage({ params, searchParams }: { para
           <option value="viewed">{ur ? "دیکھا گیا" : "Viewed"}</option>
           <option value="archived">{ur ? "محفوظ شدہ" : "Archived"}</option>
           <option value="flagged">{ur ? "رپورٹ کیا گیا" : "Flagged"}</option>
-        </select><button className="button">{ur ? "محفوظ کریں" : "Save status"}</button>
+        </select><CustomerSubmit ur={ur}>{ur ? "محفوظ کریں" : "Save status"}</CustomerSubmit>
       </form>
       <form action={changeMessage.bind(null, messageId)}>
         <input type="hidden" name="status" value="deleted" />
         <p>{ur ? "پیغام اِن باکس سے ہٹ جائے گا۔ قانونی اور تحفظ کی پالیسی کے تحت ریکارڈ برقرار رہ سکتا ہے۔" : "Deletion removes this message from your inbox. Records may remain under retention or legal obligations."}</p>
         <label><input type="checkbox" name="confirm" required /> {ur ? "میں یہ پیغام حذف کرنا چاہتا ہوں۔" : "I want to delete this message."}</label>
-        <button className="button secondary">{ur ? "پیغام حذف کریں" : "Delete message"}</button>
+        <CustomerSubmit ur={ur} secondary>{ur ? "پیغام حذف کریں" : "Delete message"}</CustomerSubmit>
       </form>
     </article>
   </>;

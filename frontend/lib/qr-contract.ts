@@ -1,7 +1,8 @@
+import {assertBackendOperation} from './api/quarantine';
 import { ApiError, validateOrigin } from "./api/transport";
 
-export type Tag = { qr_id: string; pair_id: string; tag_type: "lost" | "ice";
-  pair_reference: string;
+export type Tag = { qr_id: string; pair_id: string | null; tag_type: "lost" | "ice";
+  pair_reference: string | null;
   profile_label: string | null; public_status: string; published: boolean; editable: boolean;
   profile_version: number; preference_version: number;
   physical_products?: {product_name_snapshot: string; variant_name_snapshot: string; copies: number}[] };
@@ -24,6 +25,7 @@ export function qrClient(origin: string, token?: string, transport: typeof fetch
   const base = validateOrigin(origin);
   return async function request<T>(path: string, method = "GET", body?: unknown, version?: number, key?: string): Promise<T> {
     if (!/^\/(me\/|public\/qr\/)/.test(path) || path.includes("..") || path.includes("#")) throw new ApiError("configuration");
+    assertBackendOperation(method,"/api/v1"+path);
     const response = await transport(`${base}/api/v1${path}`, { method, cache: "no-store", redirect: "error",
       signal: AbortSignal.timeout(8000), headers: { Accept: "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
