@@ -2,7 +2,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {financeCommand,parseFinance,type FinanceDecision,type FinanceSnapshot} from '../lib/independent-finance';
 
-/** Production callers never pass released=true. The relay is independently closed. */
 export function IndependentFinance({orderId,ur=false,released=false}:{orderId?:string;ur?:boolean;released?:boolean}) {
  const [data,setData]=useState<FinanceSnapshot|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[attempt,setAttempt]=useState('');
  const [decision,setDecision]=useState<FinanceDecision>({decision:'verify',bank_verified:false,reason:''});
@@ -20,7 +19,6 @@ export function IndependentFinance({orderId,ur=false,released=false}:{orderId?:s
  return <section aria-label="Independent QR finance" dir={ur?'rtl':'ltr'}><h2>{ur?'الگ QR ادائیگی کا جائزہ':'Independent QR payment review'}</h2>
  {!released&&<p>{ur?'تصفیہ کی تصدیق اور مالی مطابقت الگ منظوری تک بند ہیں۔ آپ اوپر ادائیگی کی کوششیں اور نجی رسیدیں دیکھ سکتے ہیں۔':'Settlement verification and reconciliation are disabled pending a separate finance release. Payment attempts and private evidence remain available above.'}</p>}
  <button type="button" disabled={!released||!orderId||busy} onClick={()=>void load()}>{ur?'مالی مطابقت لوڈ کریں':'Load reconciliation'}</button>
- <button type="button" disabled>{ur?'تصفیہ کی تصدیق ابھی دستیاب نہیں':'Settlement verification not released'}</button>
  {data&&data.order_id===orderId&&<><h3>{data.order_number}</h3><p>Amount due: {data.currency} {data.amount_due}</p><p>Payment: {data.payment_status} · Allocation: {data.allocation.state} {data.allocation.reason_code}</p><p>{data.allocation.allocated_count} of {data.allocation.requested_count} logical identities allocated. Copies do not add identities.</p><ul>{data.signals.map(s=><li key={s}>{s}</li>)}</ul>
  <form onSubmit={submit}><fieldset disabled={busy||!data.can_review}><legend>Independent settlement decision</legend><label>Payment attempt<select required value={attempt} onChange={e=>setAttempt(e.target.value)}><option value="">Select attempt</option>{data.attempts.map(a=><option key={a.attempt_id} value={a.attempt_id}>{a.attempt_id} · {a.state} · {a.amount}</option>)}</select></label>
  {data.attempts.filter(a=>a.attempt_id===attempt).map(a=><p key={a.attempt_id}>Customer-submitted reference (not verified): {a.sender_holder.transfer_reference??'Not supplied'}</p>)}
