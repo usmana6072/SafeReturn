@@ -1,31 +1,72 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
-import {financeCommand,parseFinance,type FinanceDecision,type FinanceSnapshot} from '../lib/independent-finance';
+import { useEffect, useRef, useState } from 'react';
+import { parseAllocation, type Allocation } from '../lib/allocation';
 
-export function IndependentFinance({orderId,ur=false,released=false}:{orderId?:string;ur?:boolean;released?:boolean}) {
- const [data,setData]=useState<FinanceSnapshot|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[attempt,setAttempt]=useState('');
- const [decision,setDecision]=useState<FinanceDecision>({decision:'verify',bank_verified:false,reason:''});
- const keys=useRef(new Map<string,string>()),running=useRef(false),currentOrder=useRef(orderId);
- currentOrder.current=orderId;
- useEffect(()=>{setData(null);setAttempt('');setMessage('');setDecision({decision:'verify',bank_verified:false,reason:''});keys.current.clear();},[orderId]);
- async function load(){if(!released||!orderId||running.current)return;running.current=true;setBusy(true);setData(null);setMessage('');try{const value=parseFinance(await financeCommand({action:'read',order_id:orderId}));if(currentOrder.current!==orderId)return;if(value.order_id!==orderId)throw Error('Order response mismatch');setData(value);}catch{setMessage(ur?'مالی ریکارڈ دستیاب نہیں۔':'Finance records are unavailable.');}finally{setBusy(false);running.current=false;}}
- async function submit(e:React.FormEvent){e.preventDefault();if(!released||!data?.can_review||data.order_id!==orderId||!attempt||running.current)return;
-  if(decision.decision==='verify'&&(!decision.bank_verified||decision.settled_amount!==data.amount_due||decision.settled_currency!==data.currency)){setMessage('Confirm independent bank settlement and match the order amount and currency.');return;}
-  running.current=true;setBusy(true);setMessage('');const signature=JSON.stringify({attempt,decision});if(!keys.current.has(signature))keys.current.set(signature,crypto.randomUUID());
-  try{await financeCommand({action:'review',attempt_id:attempt,body:decision,key:keys.current.get(signature)!});if(currentOrder.current!==data.order_id)return;setData(null);setMessage('Review recorded by the server. Reload reconciliation to see current payment and allocation states.');}
-  catch(e){setMessage(e instanceof Error?e.message:'Review not confirmed.');}finally{setBusy(false);running.current=false;}
- }
- async function retry(){if(!released||!data||data.allocation.state!=='reconciliation_pending'||running.current||!window.confirm('Retry allocation for this entire verified order? Existing QR identities will not be reassigned.'))return;const signature='retry:'+data.order_id;if(!keys.current.has(signature))keys.current.set(signature,crypto.randomUUID());running.current=true;setBusy(true);try{await financeCommand({action:'retry',order_id:data.order_id,key:keys.current.get(signature)!});setData(null);setMessage('Retry recorded by the server. Reload reconciliation for the allocation result.');}catch(e){setMessage(e instanceof Error?e.message:'Retry not confirmed.');}finally{setBusy(false);running.current=false;}}
- return <section aria-label="Independent QR finance" dir={ur?'rtl':'ltr'}><h2>{ur?'الگ QR ادائیگی کا جائزہ':'Independent QR payment review'}</h2>
- {!released&&<p>{ur?'تصفیہ کی تصدیق اور مالی مطابقت الگ منظوری تک بند ہیں۔ آپ اوپر ادائیگی کی کوششیں اور نجی رسیدیں دیکھ سکتے ہیں۔':'Settlement verification and reconciliation are disabled pending a separate finance release. Payment attempts and private evidence remain available above.'}</p>}
- <button type="button" disabled={!released||!orderId||busy} onClick={()=>void load()}>{ur?'مالی مطابقت لوڈ کریں':'Load reconciliation'}</button>
- {data&&data.order_id===orderId&&<><h3>{data.order_number}</h3><p>Amount due: {data.currency} {data.amount_due}</p><p>Payment: {data.payment_status} · Allocation: {data.allocation.state} {data.allocation.reason_code}</p><p>{data.allocation.allocated_count} of {data.allocation.requested_count} logical identities allocated. Copies do not add identities.</p><ul>{data.signals.map(s=><li key={s}>{s}</li>)}</ul>
- <form onSubmit={submit}><fieldset disabled={busy||!data.can_review}><legend>Independent settlement decision</legend><label>Payment attempt<select required value={attempt} onChange={e=>setAttempt(e.target.value)}><option value="">Select attempt</option>{data.attempts.map(a=><option key={a.attempt_id} value={a.attempt_id}>{a.attempt_id} · {a.state} · {a.amount}</option>)}</select></label>
- {data.attempts.filter(a=>a.attempt_id===attempt).map(a=><p key={a.attempt_id}>Customer-submitted reference (not verified): {a.sender_holder.transfer_reference??'Not supplied'}</p>)}
- <label>Decision<select value={decision.decision} onChange={e=>setDecision({decision:e.target.value as FinanceDecision['decision'],bank_verified:false,reason:decision.reason})}><option value="verify">Verify settlement</option><option value="reject">Reject attempt</option><option value="request_more_info">Request more information</option></select></label>
- {decision.decision==='verify'&&<><label>Independently settled amount<input required pattern="[0-9]+\.[0-9]{2}" value={decision.settled_amount??''} onChange={e=>setDecision({...decision,settled_amount:e.target.value})}/></label><label>Settlement currency<input required maxLength={3} value={decision.settled_currency??''} onChange={e=>setDecision({...decision,settled_currency:e.target.value})}/></label><label>Independent bank reference<input required minLength={4} maxLength={120} value={decision.bank_match_reference??''} onChange={e=>setDecision({...decision,bank_match_reference:e.target.value})}/></label><label><input type="checkbox" required checked={decision.bank_verified} onChange={e=>setDecision({...decision,bank_verified:e.target.checked})}/>I independently checked settlement with the receiving bank. A customer receipt alone is insufficient.</label></>}
- <label>Verification notes<textarea required minLength={4} maxLength={1000} value={decision.reason} onChange={e=>setDecision({...decision,reason:e.target.value})}/></label><button type="submit">Submit finance decision</button></fieldset></form>
- {data.allocation.state==='reconciliation_pending'&&<button type="button" disabled={busy||data.payment_status!=='verified'} onClick={()=>void retry()}>Retry whole-order allocation</button>}
- <h3>Review history (latest {data.history_limit})</h3>{data.reviews.map(r=><article key={r.review_id}><p>{r.decision} · {r.reviewed_at}</p><p>{r.reason}</p><p>{r.bank_verified?'Bank verification recorded':'No verified settlement'} {r.settled_amount} {r.settled_currency}</p></article>)}<p>Unavailable checks: {data.unavailable_checks.join(', ')}</p></>}
- <p role="status">{message}</p></section>;
+export function IndependentFinance({ orderId, ur = false }: { orderId?: string; ur?: boolean }) {
+    const [value, setValue] = useState<Allocation | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [message, setMessage] = useState('');
+    const key = useRef<string | null>(null);
+
+    async function load() {
+        if (!orderId || busy)
+            return;
+        setBusy(true);
+        setMessage('');
+        try {
+            const response = await fetch('/payments/api?path=' + encodeURIComponent(`/admin/orders/${orderId}/qr-allocation`), { cache: 'no-store' });
+            if (!response.ok)
+                throw Error(response.status === 403 ? 'Finance permission and recent MFA are required.' : 'Allocation records are unavailable.');
+            setValue(parseAllocation(await response.json()));
+        } catch (error) {
+            setValue(null);
+            setMessage(error instanceof Error ? error.message : 'Allocation records are unavailable.');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function retry() {
+        if (!orderId || !value || value.state !== 'reconciliation_pending' || busy)
+            return;
+        setBusy(true);
+        setMessage('');
+        key.current ??= crypto.randomUUID();
+        try {
+            const response = await fetch('/payments/api', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    path: `/admin/orders/${orderId}/qr-allocation/retry`,
+                    key: key.current,
+                    body: { confirmed: true },
+                }),
+            });
+            if (!response.ok)
+                throw Error(response.status === 403 ? 'Finance permission and recent MFA are required.' : 'Allocation retry was not completed.');
+            const result = await response.json();
+            setValue(parseAllocation(result.allocation));
+            key.current = null;
+            setMessage(ur ? 'تخصیص مکمل ہو گئی۔' : 'Allocation completed. Print handoff is now pending.');
+        } catch (error) {
+            setMessage(error instanceof Error ? error.message : 'Allocation retry was not completed.');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    useEffect(() => {
+        setValue(null);
+        key.current = null;
+        if (orderId)
+            void load();
+    }, [orderId]);
+
+    return <section aria-label="QR allocation reconciliation" dir={ur ? 'rtl' : 'ltr'}>
+        <h2>{ur ? 'QR کی تخصیص' : 'QR allocation'}</h2>
+        <button type="button" disabled={!orderId || busy} onClick={() => void load()}>{ur ? 'تخصیص کی حالت تازہ کریں' : 'Load reconciliation'}</button>
+        {value && <><p>Allocation: <strong>{value.state}</strong>{value.reason_code ? ` (${value.reason_code})` : ''}</p><p>{value.allocated_count} / {value.requested_count} QR identities allocated.</p></>}
+        {value?.state === 'reconciliation_pending' && <button type="button" disabled={busy} onClick={() => void retry()}>{ur ? 'دوبارہ تخصیص کی کوشش' : 'Retry whole-order allocation'}</button>}
+        <p role="status">{message}</p>
+    </section>;
 }
