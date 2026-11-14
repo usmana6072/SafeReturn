@@ -260,6 +260,38 @@ def test_new_allocation_routes_reject_anonymous_requests():
     )
 
 
+def test_quarantined_finance_and_allocation_routes_fail_closed_for_staff(fixture):
+    ctx, _, _, _ = fixture
+    app = create_app(Settings())
+    app.dependency_overrides[get_auth_context] = lambda: ctx
+    client = ASGIClient(app)
+    oid = uuid4()
+    attempt = uuid4()
+    review_body = {
+        "decision": "verify",
+        "bank_verified": True,
+        "bank_match_reference": "SYNTHETIC-BANK-REF",
+        "settled_amount": "123.00",
+        "settled_currency": "PKR",
+        "reason": "Synthetic authorization boundary check",
+    }
+
+    responses = [
+        client.post(f"/api/v1/admin/payment-attempts/{attempt}/reviews", json=review_body),
+        client.get(f"/api/v1/admin/orders/{oid}/qr-allocation"),
+        client.post(
+            f"/api/v1/admin/orders/{oid}/qr-allocation/retry",
+            json={"confirmed": True},
+        ),
+    ]
+    assert [response.status_code for response in responses] == [503, 503, 503]
+    assert not any(
+        "sr_typed_settle" in str(call.args[0])
+        or "sr_typed_allocation_retry" in str(call.args[0])
+        for call in ctx.session.execute.call_args_list
+    )
+
+
 def test_http_validation_does_not_echo_token_or_price(fixture):
     ctx, _, _, _ = fixture
     app = create_app(Settings())
@@ -268,7 +300,7 @@ def test_http_validation_does_not_echo_token_or_price(fixture):
         f"/api/v1/admin/orders/{uuid4()}/qr-allocation/retry",
         json={"confirmed": True, "public_token": "PRIVATE_TOKEN_CANARY"},
     )
-    assert response.status_code == 422 and "PRIVATE_TOKEN_CANARY" not in response.text
+    assert response.status_code == 503 and "PRIVATE_TOKEN_CANARY" not in response.text
 
 
 @pytest.fixture

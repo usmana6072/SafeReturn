@@ -1,4 +1,3 @@
-import { OwnerCollection } from "../../../components/owner-collection";
-export default async function Page({ searchParams }: { searchParams: Promise<{cursor?: string; search?: string; filter?: string}> }) {
-  return <OwnerCollection mode="my-qr" {...await searchParams} />;
-}
+import { IndependentQRs } from "../../../components/independent-qr";
+import { getLanguage } from "../../../lib/i18n";
+export default async function Page() { return <IndependentQRs ur={await getLanguage() === "ur"}/>; }

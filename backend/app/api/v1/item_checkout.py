@@ -1,7 +1,7 @@
 """Versioned single-identity checkout; allocation belongs to verified settlement."""
 
 import json
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -74,6 +74,18 @@ def normalize(items):
     ]
 
 
+def charges(subtotal, settings):
+    shipping = settings.checkout_shipping_pkr
+    rate = getattr(settings, "single_qr_checkout_tax_percent", None)
+    tax = ((subtotal + shipping) * rate / Decimal("100")).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    ) if rate is not None else settings.checkout_tax_pkr
+    total = subtotal + shipping + tax
+    if total > Decimal("9999999999.99"):
+        fail(422, "TOTAL_OUT_OF_RANGE")
+    return shipping, tax, total
+
+
 def snapshots(context, items, settings):
     normalized = normalize(items)
     session = context.session
@@ -141,10 +153,7 @@ def snapshots(context, items, settings):
                 "line_total": f"{amount:.2f}",
             }
         )
-    if subtotal + settings.checkout_shipping_pkr + settings.checkout_tax_pkr > Decimal(
-        "9999999999.99"
-    ):
-        fail(422, "TOTAL_OUT_OF_RANGE")
+    charges(subtotal, settings)
     return result, subtotal
 
 
@@ -192,7 +201,7 @@ def create_quote(body: ItemQuoteRequest, context: Authenticated, request: Reques
                 body.shipping_address_version,
             )
         items, subtotal = snapshots(context, body.items, settings)
-        total = subtotal + settings.checkout_shipping_pkr + settings.checkout_tax_pkr
+        shipping, tax, total = charges(subtotal, settings)
         qid = uuid4()
         cipher, version = encrypt(
             settings, qid, "checkout_address", address.model_dump_json()
@@ -213,8 +222,8 @@ def create_quote(body: ItemQuoteRequest, context: Authenticated, request: Reques
                 "cipher": cipher,
                 "version": version,
                 "subtotal": subtotal,
-                "shipping": settings.checkout_shipping_pkr,
-                "tax": settings.checkout_tax_pkr,
+                "shipping": shipping,
+                "tax": tax,
                 "total": total,
             },
         ).scalar_one()
@@ -224,8 +233,8 @@ def create_quote(body: ItemQuoteRequest, context: Authenticated, request: Reques
             "expires_at": expires,
             "currency_code": "PKR",
             "subtotal_pkr": f"{subtotal:.2f}",
-            "shipping_pkr": f"{settings.checkout_shipping_pkr:.2f}",
-            "tax_pkr": f"{settings.checkout_tax_pkr:.2f}",
+            "shipping_pkr": f"{shipping:.2f}",
+            "tax_pkr": f"{tax:.2f}",
             "total_pkr": f"{total:.2f}",
             "discount_pkr": "0.00",
             "items": public_items(items),
@@ -313,6 +322,10 @@ def confirm_quote(
             fail(409, "QUOTE_TOTAL_MISMATCH")
         payload = row["payload"]
         revalidate(context, payload, settings)
+        if charges(row["subtotal_pkr"], settings) != (
+            row["shipping_pkr"], row["tax_pkr"], row["total_pkr"]
+        ):
+            fail(409, "QUOTE_STALE")
         address = Address.model_validate_json(
             decrypt(
                 settings,

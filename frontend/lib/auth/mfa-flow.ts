@@ -5,7 +5,15 @@ export type MfaState = { error?: string; factor?: string; secret?: string };
 export async function runMfa(previous: MfaState, form: FormData, origin: string | null, expectedOrigin: string, authenticate: typeof staffSecurity): Promise<MfaState & { destination?: string }> {
   let destination: string | undefined;
   try {
-    if (origin !== expectedOrigin) throw new Error();
+    let originOk = origin === expectedOrigin;
+    if (!originOk && process.env.NODE_ENV === 'development' && origin) {
+      try {
+        const oUrl = new URL(origin), cUrl = new URL(expectedOrigin);
+        const loopbacks = ['localhost', '127.0.0.1', '[::1]'];
+        if (loopbacks.includes(oUrl.hostname) && loopbacks.includes(cUrl.hostname) && oUrl.port === cUrl.port) originOk = true;
+      } catch { /* ignore */ }
+    }
+    if (!originOk) throw new Error();
     const session = await authenticate();
     const factors = await session.client.auth.mfa.listFactors();
     if (factors.error) throw new Error();

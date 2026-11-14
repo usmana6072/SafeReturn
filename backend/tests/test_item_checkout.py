@@ -240,6 +240,28 @@ def test_release_gate_is_fail_closed(setup):
     assert error.value.status_code == 503
 
 
+@pytest.mark.parametrize("subtotal,expected", [("180.00", "14.00"), ("60.00", "8.00"), ("0.10", "5.01")])
+def test_percentage_tax_includes_delivery_and_rounds_half_up(setup, subtotal, expected):
+    _, _, settings, _ = setup
+    settings.checkout_shipping_pkr = Decimal("100.00")
+    settings.single_qr_checkout_tax_percent = Decimal("5")
+    settings.checkout_tax_pkr = None
+    shipping, tax, total = api.charges(Decimal(subtotal), settings)
+    assert shipping == Decimal("100.00")
+    assert tax == Decimal(expected)
+    assert total == Decimal(subtotal) + shipping + tax
+
+
+def test_charge_policy_change_invalidates_open_quote(setup, monkeypatch):
+    ctx, req, settings, _ = setup
+    ctx, req, quote, statements = confirmation(setup, monkeypatch)
+    settings.single_qr_checkout_tax_percent = Decimal("5")
+    with pytest.raises(HTTPException) as error:
+        api.confirm_quote(UUID(int=999), api.ConfirmRequest(accept_total=str(quote["total_pkr"]), accept_currency="PKR"), ctx, req)
+    assert error.value.detail["code"] == "QUOTE_STALE"
+    assert not any("INSERT INTO public.orders" in sql for sql, _ in statements)
+
+
 def confirmation(setup, monkeypatch, **changes):
     ctx, req, settings, _ = setup
     snapshots, subtotal = api.snapshots(ctx, [item()], settings)
@@ -380,10 +402,15 @@ def test_migration_preserves_legacy_body_and_gates_runtime():
     assert "Cannot mix purchase models" in new
 
 
+@pytest.mark.parametrize("percentage", [False, True])
 def test_quote_persists_private_address_and_exposes_only_safe_totals(
-    setup, monkeypatch
+    setup, monkeypatch, percentage
 ):
     ctx, req, settings, _ = setup
+    if percentage:
+        settings.checkout_shipping_pkr = Decimal("100.00")
+        settings.single_qr_checkout_tax_percent = Decimal("5")
+        settings.checkout_tax_pkr = None
     frozen, subtotal = api.snapshots(ctx, [item()], settings)
     monkeypatch.setattr(api, "snapshots", lambda *args: (frozen, subtotal))
     monkeypatch.setattr(api, "admission", lambda *args: None)
@@ -405,7 +432,10 @@ def test_quote_persists_private_address_and_exposes_only_safe_totals(
 
     ctx.session.execute.side_effect = execute
     result = api.create_quote(request(), ctx, req)
-    assert result["subtotal_pkr"] == "61.50" and result["total_pkr"] == "114.00"
+    assert result["subtotal_pkr"] == "61.50"
+    assert result["total_pkr"] == ("169.58" if percentage else "114.00")
+    assert result["tax_pkr"] == ("8.08" if percentage else "2.50")
+    assert statements[-1][1]["tax"] == Decimal(result["tax_pkr"])
     assert result["identity_count"] == 1 and not result["stock_reserved"]
     assert "registry_specs" not in repr(result)
     assert ADDRESS["address"] not in repr(result)

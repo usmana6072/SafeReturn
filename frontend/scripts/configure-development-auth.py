@@ -20,6 +20,8 @@ target = ROOT / "frontend/.env.local"
 text = target.read_text(encoding="utf-8-sig") if target.exists() else ""
 existing = dotenv_values(target, interpolate=False) if target.exists() else {}
 assert not existing.get("SAFERETURN_SUPABASE_URL") or existing["SAFERETURN_SUPABASE_URL"].rstrip("/") == PROJECT_URL
+if existing.get("SAFERETURN_API_ORIGIN") in {"http://127.0.0.1:8030", "https://safereturn-backend-dev.onrender.com"}:
+    values["SAFERETURN_API_ORIGIN"] = existing["SAFERETURN_API_ORIGIN"]
 for name, value in values.items():
     text = re.sub(r"(?m)^\s*" + re.escape(name) + r"\s*=.*(?:\n|$)", "", text)
     text = text.rstrip() + f"\n{name}={value}\n"

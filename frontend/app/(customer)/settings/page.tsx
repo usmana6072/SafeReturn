@@ -3,6 +3,7 @@ import { ownerApi, ownerSession } from "../../../lib/qr-server";
 import { Unavailable } from "../../../components/customer";
 import Link from "next/link";
 import { getLanguage } from "../../../lib/i18n";
+import { CustomerSubmit } from "../../../components/customer-submit";
 
 type Consent = {id:string;purpose:string;version:string|null;timestamp:string;active:boolean;state_scope:"recorded_event"};
 type History = {items:Consent[];has_more:boolean};
@@ -40,7 +41,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <form action={requestAccountDeletion} className="account-form">
         <label>{ur ? "وجہ (اختیاری)" : "Reason (optional)"}<textarea name="reason" maxLength={1000} /></label>
         <label><input type="checkbox" name="confirm" required /> {ur ? "میں اکاؤنٹ حذف کرنے کا جائزہ چاہتا ہوں۔" : "I confirm that I want an account-deletion review."}</label>
-        <button className="button secondary">{ur ? "درخواست بھیجیں" : "Submit deletion request"}</button>
+        <CustomerSubmit ur={ur} secondary>{ur ? "درخواست بھیجیں" : "Submit deletion request"}</CustomerSubmit>
       </form>
     </div>
   </>;

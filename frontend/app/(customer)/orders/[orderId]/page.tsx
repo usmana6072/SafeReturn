@@ -6,11 +6,22 @@ import { getLanguage } from "../../../../lib/i18n";
 import { Unavailable } from "../../../../components/customer";
 import { orderStatus } from "../../../../lib/order-status";
 import { CancellationRequest, type CancellationSummary } from "../../../../components/cancellation-request";
+import { customerOperationAvailable } from "../../../../lib/customer-capabilities";
+import { uuid } from "../../../../lib/qr-contract";
+import { notFound } from "next/navigation";
 type LogicalItem={id:string;product_name_snapshot:string;qr_type_snapshot:string;quantity:number;unit_price_snapshot:string;line_total:string;sizes:{id:string;variant_name_snapshot:string;size_mm_snapshot:string;copies:number}[]};
 type Order = {allocation?:Allocation;commerce_model?:"single_qr";identity_count?:number;logical_items?:LogicalItem[]; order_revision?:number; cancellation_request?:CancellationSummary|null; order_number:string; order_status:string; payment_status:string; fulfillment_status:string; currency_code:string; total_pkr:string; pair_count:number; print_status:string; items:{id:string;product_name_snapshot:string;variant_name_snapshot:string;sku_snapshot:string;size_mm_snapshot:string;material_snapshot:string|null;quantity:number;unit_price_snapshot:string;line_total:string}[]; qr_uses:{id:string;order_item_id:string;tag_type_snapshot:string;copies:number}[]; shipping_snapshot:{recipient_name:string;phone:string;address:string;city:string;province:string|null;postal_code:string|null} };
 type Shipment = {id:string;carrier:string|null;tracking_reference:string|null;status:string;packed_at:string|null;dispatched_at:string|null;delivered_at:string|null};
 export default async function OrderPage({params}:{params:Promise<{orderId:string}>}) {
  const ur=await getLanguage()==="ur",session=await ownerSession(),{orderId}=await params;
+ if (!uuid(orderId)) notFound();
+ if (!customerOperationAvailable("GET", `/me/orders/${orderId}`)) {
+   let deliveries: Shipment[] | null = null;
+   try { const response = await ownerApi(session.token)<{items:Shipment[]}>(`/me/orders/${orderId}/shipments`); if (Array.isArray(response.items)) deliveries = response.items; } catch { /* Keep independent payment navigation available. */ }
+   return <><h1>{ur ? "آرڈر اور ترسیل" : "Order and delivery"}</h1><p className="alert">{ur ? "آئٹمز، تخصیص، پرنٹنگ اور منسوخی کی تفصیلات فی الحال دستیاب نہیں۔" : "Item, allocation, print and cancellation details are currently unavailable."}</p>
+   <section className="card"><h2>{ur ? "ترسیل" : "Shipments"}</h2>{deliveries === null ? <Unavailable ur={ur}/> : deliveries.length ? deliveries.map(s=><article key={s.id}><h3>{s.carrier || (ur ? "ترسیل" : "Shipment")}</h3><p>{orderStatus(s.status,ur)}</p><p><bdi>{s.tracking_reference}</bdi></p>{s.delivered_at&&<p>{ur ? "ترسیل کی تصدیق" : "Delivery recorded"}: <time dateTime={s.delivered_at}>{s.delivered_at}</time></p>}</article>) : <p>{ur ? "ابھی کوئی ترسیل درج نہیں۔" : "No shipments recorded yet."}</p>}</section>
+   <div className="actions"><Link className="button" href={`/payments/${orderId}`}>{ur ? "ادائیگی اور ثبوت" : "Payment and evidence"}</Link><Link className="button secondary" href="/orders">{ur ? "تمام آرڈرز" : "All orders"}</Link><Link className="button secondary" href="/my-qr">{ur ? "QR کی اہلیت" : "QR eligibility"}</Link></div></>;
+ }
  let order:Order,shipments:Shipment[];
  try { const api=ownerApi(session.token); [order,{items:shipments}]=await Promise.all([api<Order>(`/me/orders/${encodeURIComponent(orderId)}`),api<{items:Shipment[]}>(`/me/orders/${encodeURIComponent(orderId)}/shipments`)]); }
  catch {return <><h1>{ur?"آرڈر":"Order"}</h1><Unavailable ur={ur}/></>;}

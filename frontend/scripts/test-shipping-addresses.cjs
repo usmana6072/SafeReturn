@@ -31,7 +31,7 @@ async function main() {
         if (request.method() === 'DELETE') { items = items.filter(a => a.id !== data.id); return route.fulfill({ status:204 }); }
         return route.fulfill({ status:request.method()==='POST'?201:200,json:{book_version:version,item:items[0]} });
       }
-      if (url.pathname === '/checkout/api') { quotes.push(request.postDataJSON()); return route.fulfill({status:201,json:{quote_id:'00000000-0000-4000-8000-000000000003',expires_at:new Date(Date.now()+60000).toISOString(),subtotal_pkr:'10.00',shipping_pkr:'1.00',tax_pkr:'0.00',total_pkr:'11.00',currency_code:'PKR',new_pair_count:1}}); }
+      if (url.pathname === '/checkout/api') { quotes.push(request.postDataJSON()); return route.fulfill({status:201,json:{quote_id:'00000000-0000-4000-8000-000000000003',expires_at:new Date(Date.now()+60000).toISOString(),subtotal_pkr:'10.00',shipping_pkr:'1.00',tax_pkr:'0.00',total_pkr:'11.00',currency_code:'PKR',new_pair_count:1,lines:[]}}); }
       return route.fulfill({ contentType:'text/html', body:'<!doctype html><html><body><main id="root" class="container section"></main></body></html>' });
     });
     await page.goto('https://synthetic.test/'); for (const file of fs.readdirSync(path.resolve(__dirname,'../../tmp/task52a-web/.next/static/css'))) { if(file.endsWith('.css')) await page.addStyleTag({content:fs.readFileSync(path.resolve(__dirname,'../../tmp/task52a-web/.next/static/css',file),'utf8')}); } await page.addScriptTag({ path:path.join(out,'bundle.js') });
@@ -77,8 +77,8 @@ async function main() {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true);
     await page.evaluate(() => { document.documentElement.dir='ltr'; document.documentElement.lang='en'; window.show('manager',false); });
     await page.getByRole('button',{name:'Delete',exact:true}).waitFor();
-    page.once('dialog', dialog => dialog.accept());
     await page.getByRole('button',{name:'Delete',exact:true}).click();
+    await page.getByRole('button',{name:'Confirm deletion',exact:true}).click();
     await page.getByText('No saved addresses.',{exact:true}).waitFor();
     assert.equal(writes.at(-1).data.expected_version,2);
     assert.deepEqual(errors,[]);

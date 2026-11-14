@@ -4,9 +4,11 @@ const path=require('node:path'),fs=require('node:fs'),{spawn}=require('node:chil
 const {chromium}=require('@playwright/test'),{loadEnvConfig}=require('@next/env'),{createServerClient}=require('@supabase/ssr');
 const root=path.resolve(__dirname,'../..');loadEnvConfig(path.join(root,'frontend'),true,{info(){},error(){}});
 const origin='http://127.0.0.1:3100',project='https://fhuxryfkfrvycsojkzvq.supabase.co';
-if(process.env.SAFERETURN_WEB_ORIGIN!==origin||process.env.SAFERETURN_API_ORIGIN!=='http://127.0.0.1:8030'||process.env.SAFERETURN_SUPABASE_URL!==project||!process.env.SAFERETURN_SUPABASE_PUBLISHABLE_KEY?.startsWith('sb_publishable_'))throw Error('Pinned development frontend configuration required');
+const apiOrigin=process.env.SAFERETURN_API_ORIGIN;
+if(process.env.SAFERETURN_WEB_ORIGIN!==origin||!['http://127.0.0.1:8030','https://safereturn-backend-dev.onrender.com'].includes(apiOrigin)||process.env.SAFERETURN_SUPABASE_URL!==project||!process.env.SAFERETURN_SUPABASE_PUBLISHABLE_KEY?.startsWith('sb_publishable_'))throw Error('Pinned development frontend configuration required');
 const templateMode=process.argv.includes('--template-acceptance');
-const output=path.join(root,templateMode?'tmp/template-activation/live-acceptance.json':'tmp/live-acceptance-2026-10-25/genuine-staff-login.json');
+if(templateMode&&apiOrigin!=='http://127.0.0.1:8030')throw Error('Synthetic mutation acceptance is local candidate only');
+const output=path.join(root,templateMode?'tmp/template-activation/live-acceptance.json':apiOrigin.startsWith('https:')?'tmp/render-acceptance-2026-10-25/genuine-staff-login.json':'tmp/live-acceptance-2026-10-25/genuine-staff-login.json');
 (async()=>{let browser,stage="browser_launch";try{
  browser=await chromium.launch({headless:false});const context=await browser.newContext(),page=await context.newPage();
  stage='frontend_navigation';await page.goto(origin+'/login',{waitUntil:'domcontentloaded',timeout:120000});console.log('Browser ready. Sign in with your existing authorized staff account and complete the official MFA flow. Nothing entered will be captured in logs.');
@@ -19,7 +21,7 @@ const output=path.join(root,templateMode?'tmp/template-activation/live-acceptanc
   await new Promise(resolve=>setTimeout(resolve,1500));
  }
  if(!token){console.log('No completed staff login/MFA session captured. Complete the browser steps and rerun this helper.');return;}
- stage='acceptance_runner';const args=templateMode?[path.join(root,'backend/scripts/run_template_development_acceptance.py')]:[path.join(root,'backend/scripts/run_admin_read_acceptance.py'),'--staff-token-stdin','--session-only','--output',output];
+ stage='acceptance_runner';const args=templateMode?[path.join(root,'backend/scripts/run_template_development_acceptance.py')]:[path.join(root,'backend/scripts/run_admin_read_acceptance.py'),'--origin',apiOrigin,'--staff-token-stdin','--session-only','--output',output];
  const child=spawn(path.join(root,'backend/.venv/Scripts/python.exe'),args,{cwd:root,stdio:['pipe','pipe','pipe'],windowsHide:true});
  let stdout='';child.stdout.on('data',c=>{stdout+=c;});child.stderr.resume();child.stdin.end(token);token=undefined;
  const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('close',resolve);});

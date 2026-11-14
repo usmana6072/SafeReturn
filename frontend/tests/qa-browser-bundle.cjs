@@ -16,9 +16,11 @@ module.exports = function bundleQA(options = {}) {
         const classes = Object.fromEntries(names.map(name => [name,name === 'screen' ? (options.cssClass || 'qa-screen') : name]));
         return '({__esModule:true,default:'+JSON.stringify(classes)+'})';
       }
+      if (request.endsWith('.css')) return '({})';
       if (request === './admin-shell' && !options.wrapperPath) return '({useAdminRole:()=>window.qaRole})';
       if (options.wrapperPath && request === 'next/navigation') return '({usePathname:()=>location.pathname,useRouter:()=>({push:(href)=>location.assign(href),replace:(href)=>location.replace(href),refresh:()=>location.reload()})})';
       if (options.wrapperPath && (request.endsWith('/app/admin/actions') || request.endsWith('/app/auth/actions'))) return '({adminLanguage:async()=>{},logout:async()=>{}})';
+      if (options.wrapperPath && request.endsWith('/app/customer-actions')) return '({customerLanguage:async()=>{}})';
       if (request === 'next/link') return '({__esModule:true,default:({children,href,prefetch,...props})=>requireReact.createElement("a",{href,...props},children)})';
       const resolved = require.resolve(request, { paths: [path.dirname(file)] });
       return '__require(' + add(resolved) + ')';
@@ -32,7 +34,7 @@ module.exports = function bundleQA(options = {}) {
   const toast = add(path.resolve(__dirname, '../components/admin-toast.tsx'));
   const wrapper = options.wrapperPath ? add(path.resolve(__dirname, options.wrapperPath)) : undefined;
   const screen = 'requireReact.createElement(__require('+qa+')["'+(options.exportName || 'AdminQA')+'"], window.qaProps || {})';
-  const content = wrapper === undefined ? screen : 'requireReact.createElement(__require('+wrapper+').AdminShell,{security:window.qaSecurity,ur:window.qaUr||false},'+screen+')';
+  const content = wrapper === undefined ? screen : 'requireReact.createElement(__require('+wrapper+')["'+(options.wrapperExport || 'AdminShell')+'"],{security:window.qaSecurity,ur:window.qaUr||false},'+screen+')';
   const tree = 'requireReact.createElement(__require('+toast+').AdminToastProvider,null,'+content+')';
   const server = options.hydrate ? add(require.resolve('react-dom/server.browser')) : undefined;
   const mount = server === undefined ? '__require('+dom+').createRoot(document.getElementById("root")).render('+tree+')' : '(function(){const root=document.getElementById("root"),tree='+tree+';window.qaHydrationErrors=[];root.innerHTML=__require('+server+').renderToString(tree);__require('+dom+').hydrateRoot(root,tree,{onRecoverableError:(error)=>window.qaHydrationErrors.push(error.message)});})()';

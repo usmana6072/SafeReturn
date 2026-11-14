@@ -35,6 +35,12 @@ frontend/auth-task23-*.log
 /backend/tmp/
 /package-lock.json
 *.log
+.idea/
+.next/
+.next-*/
+frontend/.next/
+frontend/.next-*/
+frontend/nohup.out
 
 # Original uploaded fonts await licensing/compatibility review.
 /branding/Jameel Noori Nastaleeq.ttf

@@ -1,4 +1,5 @@
 "use client";
+import { canOrder, checkoutUnavailableMessage } from "../lib/checkout-availability";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CatalogProduct } from "../lib/catalog";
 import { cartKey, cartLines, readCart, type CopyRow } from "../lib/cart";
@@ -7,24 +8,24 @@ import { ItemCheckoutCart, ItemConfigurator } from "./item-checkout";
 import { readItemCart } from "../lib/item-cart";
 type Lang="en"|"ur";
 export function KitConfigurator({product,language}:{product:CatalogProduct;language:Lang}) {
- if(product.checkout_available===false)return <section><h2>{language==='ur'?'اپنا آرڈر':'Your order'}</h2><button type="button" className="button" disabled>{language==='ur'?'آرڈر کریں':'Order now'}</button><p role="status">{language==="ur"?"یہ مصنوعہ شائع ہو چکی ہے۔ آن لائن آرڈر ابھی دستیاب نہیں۔":"This product is published. Online ordering is not available yet."}</p><a href="/shop">{language==="ur"?"مصنوعات دیکھیں":"Back to Shop"}</a></section>;
+ if(!canOrder(product))return <section><h2>{language==='ur'?'اپنا آرڈر':'Your order'}</h2><button type="button" className="button" disabled>{language==='ur'?'آرڈر کریں':'Order now'}</button><p role="status">{checkoutUnavailableMessage(product, language)}</p><a href="/shop">{language==="ur"?"مصنوعات دیکھیں":"Back to Shop"}</a></section>;
  return product.commerce_model==="single_qr"?<ItemConfigurator product={product} language={language}/>:<LegacyKitConfigurator product={product} language={language}/>;
 }
 function LegacyKitConfigurator({product,language}:{product:CatalogProduct;language:Lang}) {
  const ur=language==="ur",[rows,setRows]=useState<CopyRow[]>(product.variants.map(v=>({variant_id:v.variant_id,lost:0,ice:0}))),[status,setStatus]=useState("");
  const lost=rows.reduce((n,r)=>n+r.lost,0),ice=rows.reduce((n,r)=>n+r.ice,0);
- function add(){
+ function handleAction(redirectUrl: string){
   try {
    if(lost+ice>product.max_order_copies){setStatus(ur?"تمام سائز ملا کر کاپیوں کی حد سے تجاوز ہے۔":"Combined copies across sizes exceed this product’s limit.");return;}
    const ids=new Set(product.variants.map(v=>v.variant_id));
    const merged=[...readCart().filter(r=>!ids.has(r.variant_id)),...rows.filter(r=>r.lost+r.ice>0)];
    if(merged.reduce((n,r)=>n+r.lost,0)<1||merged.reduce((n,r)=>n+r.ice,0)<1){setStatus(ur?"Lost اور ICE دونوں کی کم از کم ایک کاپی شامل کریں۔":"Include at least one Lost and one ICE copy.");return;}
    if(merged.length>25){setStatus(ur?"کارٹ میں بہت زیادہ ویریئنٹس ہیں۔":"Too many variants in this cart.");return;}
-   localStorage.setItem(cartKey,JSON.stringify(merged));location.href="/cart";
+   localStorage.setItem(cartKey,JSON.stringify(merged));location.href=redirectUrl;
   }catch{setStatus(ur?"کارٹ محفوظ نہیں ہو سکا۔":"Cart could not be saved.");}
  }
 
- return <section aria-label={ur?"جوڑے کی ترتیب":"Configure kit"}><h2>{ur?"پرنٹ کی تعداد":"Printed copies"}</h2><p>PKR {product.price_per_copy} {ur?"فی کاپی، تمام سائز":"per copy, all sizes"} · {ur?"زیادہ سے زیادہ کاپیاں":"Maximum combined copies"}: {product.max_order_copies}</p><p>{ur?"ایک نیا جوڑا، دو QR پروفائل۔ اضافی کاپیاں نیا QR نہیں بناتیں۔":"One new pair, two QR profiles. Extra printed copies do not create new QR identities."}</p>{product.variants.map((v,i)=><fieldset key={v.variant_id}><legend>{v.name} · <bdi>{v.currency_code} {product.price_per_copy}</bdi></legend>{(["lost","ice"] as const).map(tag=><label key={tag} className="copy-count">{tag==="lost"?ur?"Lost کاپیاں":"Lost copies":ur?"ICE کاپیاں":"ICE copies"} — {v.name}<input type="number" min={0} max={100} value={rows[i][tag]} onChange={e=>setRows(rows.map((r,n)=>n===i?{...r,[tag]:Math.max(0,Math.min(100,Math.trunc(Number(e.target.value))||0))}:r))}/></label>)}</fieldset>)}<p>{ur?"کل کاپیاں":"Total copies"}: {lost+ice} · Lost {lost} · ICE {ice}</p><p role="status">{status}</p><button onClick={add}>{ur?"کارٹ میں شامل کریں":"Add to cart"}</button><a href="/cart">{ur?"کارٹ دیکھیں":"View cart"}</a></section>;
+ return <section aria-label={ur?"جوڑے کی ترتیب":"Configure kit"}><h2>{ur?"پرنٹ کی تعداد":"Printed copies"}</h2><p>PKR {product.price_per_copy} {ur?"فی کاپی، تمام سائز":"per copy, all sizes"} · {ur?"زیادہ سے زیادہ کاپیاں":"Maximum combined copies"}: {product.max_order_copies}</p><p>{ur?"ایک نیا جوڑا، دو QR پروفائل۔ اضافی کاپیاں نیا QR نہیں بناتیں۔":"One new pair, two QR profiles. Extra printed copies do not create new QR identities."}</p>{product.variants.map((v,i)=><fieldset key={v.variant_id}><legend>{v.name} · <bdi>{v.currency_code} {product.price_per_copy}</bdi></legend>{(["lost","ice"] as const).map(tag=><label key={tag} className="copy-count">{tag==="lost"?ur?"Lost کاپیاں":"Lost copies":ur?"ICE کاپیاں":"ICE copies"} — {v.name}<input type="number" min={0} max={100} value={rows[i][tag]} onChange={e=>setRows(rows.map((r,n)=>n===i?{...r,[tag]:Math.max(0,Math.min(100,Math.trunc(Number(e.target.value))||0))}:r))}/></label>)}</fieldset>)}<p>{ur?"کل کاپیاں":"Total copies"}: {lost+ice} · Lost {lost} · ICE {ice}</p><p role="status">{status}</p><div style={{display:"flex",gap:"12px",alignItems:"center",flexWrap:"wrap",marginBlockStart:"1rem"}}><button type="button" className="button secondary" onClick={()=>handleAction("/cart")}>{ur?"کارٹ میں شامل کریں":"Add to cart"}</button><button type="button" className="button" onClick={()=>handleAction("/checkout")}>{ur?"ابھی خریدیں":"Buy now"}</button></div><a href="/cart" style={{display:"inline-block",marginBlockStart:"1rem"}}>{ur?"کارٹ دیکھیں":"View cart"}</a></section>;
 }
 export function CheckoutCart({products,language,checkout=false}:{products:CatalogProduct[];language:Lang;checkout?:boolean}) {
  const [legacy,setLegacy]=useState<boolean|null>(null);

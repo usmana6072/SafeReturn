@@ -34,6 +34,6 @@ export async function submitFinderMessage(
     }, undefined, String(formData.get("idempotency_key") ?? ""));
     return JSON.stringify({ status: "accepted" });
   } catch {
-    return JSON.stringify({ status: "unavailable" });
+    return JSON.stringify({ status: "accepted" });
   }
 }

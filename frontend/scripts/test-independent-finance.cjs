@@ -1,0 +1,14 @@
+// Execute prepared transport and closed route with real quarantine; zero upstream calls.
+const fs=require('fs'),path=require('path'),vm=require('vm'),ts=require('typescript'),assert=require('assert/strict');
+const {NextRequest}=require('next/server');let calls=0,authorized=true,finance=true;const cache=new Map();
+function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file);const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,URL,URLSearchParams,Request,Response,AbortSignal,TextDecoder,Uint8Array,process:{env:{SAFERETURN_API_ORIGIN:'https://backend.synthetic.invalid'}},fetch:async()=>{calls++;throw Error('Upstream forbidden');},require(n){if(n==='next/server')return require(n);if(n.endsWith('/auth/server'))return{verifiedSession:async()=>authorized?{token:'synthetic'}:null};if(n.endsWith('/auth/staff'))return{staffState:async()=>({mfa_verified:true,roles:finance?['finance']:['operations'],capabilities:['payments.review']})};if(n.endsWith('/auth/config'))return{authConfig:()=>({origin:'https://finance.test'})};if(n==='./transport')return{validateOrigin:x=>x};if(n.startsWith('.'))return load(path.resolve(path.dirname(file),n)+'.ts');throw Error(n);}});cache.set(file,m.exports);return m.exports;}
+const oid='00000000-0000-4000-8000-000000000001';
+const request=c=>new NextRequest('https://finance.test/admin/payments/finance-api',{method:'POST',headers:{Origin:'https://finance.test','Content-Type':'application/json'},body:JSON.stringify(c)});
+(async()=>{const relay=load(path.join(__dirname,'../lib/api/independent-finance-relay.ts')).independentFinanceRelay;const route=load(path.join(__dirname,'../app/admin/payments/finance-api/route.ts'));
+ const commands=[{action:'read',order_id:oid},{action:'retry',order_id:oid,key:'synthetic-key'},{action:'review',attempt_id:oid,key:'synthetic-key',body:{decision:'verify',bank_verified:true,bank_match_reference:'SYNTHETIC',settled_amount:'294.00',settled_currency:'PKR',reason:'Independent confirmation'}}];
+ for(const command of commands){assert.equal((await route.POST(request(command))).status,503);assert.equal((await relay(request(command))).status,503);}
+ authorized=false;assert.equal((await relay(request(commands[0]))).status,401);authorized=true;finance=false;assert.equal((await relay(request(commands[0]))).status,403);finance=true;
+ assert.equal((await relay(request({...commands[0],path:'/admin/anything'}))).status,422);
+ assert.equal((await relay(request({...commands[2],body:{...commands[2].body,bank_verified:false}}))).status,422);
+ assert.equal(calls,0);console.log('PASS closed route, typed relay validation, finance/auth denial and actual quarantine: zero upstream requests.');
+})().catch(e=>{console.error(e);process.exitCode=1;});
