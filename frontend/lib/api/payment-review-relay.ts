@@ -12,14 +12,33 @@ const headers = {
   'Referrer-Policy': 'no-referrer',
 };
 
-function failure(status: number) {
-  const code = status === 401 ? 'AUTH_REQUIRED'
+function failure(status: number, upstreamCode?: string) {
+  const code = ['PAYMENT_CLOSED', 'SETTLEMENT_MISMATCH', 'ORDER_RECONCILIATION_REQUIRED', 'BANK_VERIFICATION_REQUIRED'].includes(upstreamCode ?? '')
+    ? upstreamCode
+    : status === 401 ? 'AUTH_REQUIRED'
     : status === 403 ? 'FORBIDDEN'
       : status === 404 ? 'NOT_FOUND'
       : status === 409 ? 'PAYMENT_CLOSED'
         : status === 400 || status === 422 ? 'VALIDATION_ERROR'
           : status === 429 ? 'RATE_LIMITED' : 'PROVIDER_UNAVAILABLE';
   return NextResponse.json({ error: { code } }, { status, headers });
+}
+
+async function upstreamFailure(response: Response) {
+  try {
+    const value: unknown = await response.json();
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const detail = (value as Record<string, unknown>).detail;
+      if (typeof detail === 'string')
+        return failure(response.status, detail);
+      if (detail && typeof detail === 'object' && !Array.isArray(detail)
+        && typeof (detail as Record<string, unknown>).code === 'string')
+        return failure(response.status, (detail as Record<string, string>).code);
+    }
+  } catch {
+    // Keep the upstream status mapping when the response is not JSON.
+  }
+  return failure(response.status);
 }
 
 function body(value: unknown) {
@@ -89,7 +108,7 @@ export async function paymentReviewRelay(request: NextRequest) {
         body: JSON.stringify(payload),
       },
     );
-    if (!response.ok) return failure(response.status);
+    if (!response.ok) return upstreamFailure(response);
     return NextResponse.json(paymentReview(await response.json()), { headers });
   } catch (error) {
     return failure(error instanceof StaffAccessError && [401, 403].includes(error.status) ? error.status : 503);

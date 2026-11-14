@@ -96,6 +96,8 @@ export function AdminPayments({ ur = false, orderId, attemptId }: {
     function openReview(attempt: Attempt, decision: 'verify' | 'reject') {
         setError('');
         setNotice('');
+        if (review?.attemptId === attempt.attempt_id && review.decision === decision)
+            return;
         setReview({
             attemptId: attempt.attempt_id,
             decision,
