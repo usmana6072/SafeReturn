@@ -483,9 +483,15 @@ def review_payment(
                     {"sid": context.principal.session_id, "aid": attempt_id, "bank_verified": body.bank_verified,
                      "amount": Decimal(body.settled_amount), "currency": body.settled_currency,
                      "fingerprint": fingerprint, "reason": body.reason}).scalar_one())
-                # Existing legacy worker cannot consume the typed handoff. The
-                # DB helper persists bank truth, all claims, audit and durable
-                # events atomically; print admission stays closed in Phase 5.
+                allocation = value.get("allocation")
+                if isinstance(allocation, dict) and allocation.get("state") == "reconciliation_pending" and allocation.get("reason_code") == "stock_shortage":
+                    value = typed_result(context.session.execute(text(
+                        "SELECT public.sr_typed_payment_autogenerate(:sid,:oid,:seed)"
+                    ), {
+                        "sid": context.principal.session_id,
+                        "oid": order["id"],
+                        "seed": str(attempt_id),
+                    }).scalar_one())
                 context.session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
                 context.session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
                 return value, UUID(value["review_id"])

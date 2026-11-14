@@ -1,5 +1,20 @@
 # Phase 5: verified settlement and permanent QR allocation
 
+## Payment-triggered inventory amendment
+
+Migration `0053_payment_qr_autogeneration` adds a finance-authorized payment path for
+verified `single_qr` orders that have a `stock_shortage`. It creates only the exact
+missing `lost`/`ice` quantities from the immutable order snapshot in standalone QR
+batches, records the generated identities in the existing inventory tables and audit
+log, and retries whole-order allocation in the same transaction. It never generates
+extra stock or partially allocates an order. The worker-only typed print handoff then
+continues the existing print workflow; print configuration and a running print worker
+are still required.
+
+The existing Operations-only inventory-generation endpoint remains Operations-only.
+This payment path is not a general inventory control and cannot be called without an
+authenticated finance session with MFA.
+
 Source implementation is complete. Migration `0041_verified_qr_allocation` follows `0040_item_checkout` and is authored, not applied. Customer admission stays disabled. Phase 6 printing/fulfillment has not been started.
 
 ## Approved shortage policy
