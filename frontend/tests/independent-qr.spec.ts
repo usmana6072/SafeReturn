@@ -12,13 +12,13 @@ test('one delivered identity activates with explicit confirmation; uncertain ret
  await page.route('**/independent-qr/api**',r=>{
   if(r.request().method()==='GET')return r.fulfill({json:{items:[active?{...first,ownership_status:'active',public_status:'active',revision:3,can_activate:false}:first,second],next_cursor:null,activation_released:true}});
   const input=r.request().postDataJSON();writes.push(input);
-  if(input.action==='begin')return r.fulfill({status:201,json:{intent_id:id(6),logical_item_id:first.logical_item_id,qr_id:first.qr_id,expires_at:'2026-10-22T10:00:00Z',method:'delivered_purchaser'}});
+  if(input.action==='begin')return r.fulfill({status:201,json:{intent_id:id(6),logical_item_id:first.logical_item_id,qr_id:first.qr_id,expires_at:new Date(Date.now()+60000).toISOString(),method:'delivered_purchaser'}});
   if(++confirmations===1)return r.fulfill({status:503,json:{error:{code:'PRIVATE_CANARY'}}});active=true;return r.fulfill({status:201,json:{status:'active'}});
  });
  await mount(page);await page.getByRole('button',{name:'Begin activation',exact:true}).first().click();
  await expect(page.getByRole('button',{name:'Confirm activation',exact:true})).toBeDisabled();await page.getByLabel('I am the purchaser and want to activate this QR.',{exact:true}).check();
  await page.getByRole('button',{name:'Confirm activation',exact:true}).click();await expect(page.getByRole('status')).toContainText('uncertain');await page.getByRole('button',{name:'Confirm activation',exact:true}).click();
- await expect(page.getByRole('link',{name:'Edit this profile'})).toHaveCount(1);await expect(page.getByRole('button',{name:'Begin activation',exact:true})).toHaveCount(1);
+ await expect(page.getByText('Profile editing is currently unavailable.')).toHaveCount(1);await expect(page.getByRole('button',{name:'Begin activation',exact:true})).toHaveCount(1);
  expect(writes[1].key).toBe(writes[2].key);expect(writes[1].body).toEqual({intent_id:id(6),confirmed:true});expect(JSON.stringify(writes)).not.toContain('public_token');expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);expect(await page.locator('body').innerText()).not.toContain('PRIVATE_CANARY');
 });
 test('public availability changes only the selected identity; denied refresh clears rows',async({page})=>{

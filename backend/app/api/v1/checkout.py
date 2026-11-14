@@ -117,7 +117,14 @@ def configured(request):
 
 def record(context, request, operation, payload, work):
     require_verified_account(context)
-    s = configured(request)
+    if operation.startswith("checkout.item_"):
+        from app.core.checkout_readiness import runtime_checkout_blockers
+        blockers = runtime_checkout_blockers(request.app.state.settings)
+        if blockers:
+            fail(503, blockers[0])
+        s = request.app.state.settings
+    else:
+        s = configured(request)
     session = context.session
     from app.db.template_registry import gate
     gate(session)

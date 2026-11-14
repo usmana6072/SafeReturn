@@ -149,12 +149,35 @@ def public_catalog(request, response, sku=None):
     if database is None:
         raise AccessError(503)
     with api_transaction(database) as session:
-        return (
+        items = (
             session.execute(
                 text("SELECT public.sr_public_catalog(:sku)"), {"sku": sku}
             ).scalar_one()
             or []
         )
+        # Explain blocked purchases without exposing account details or granting
+        # public callers access to release/configuration writes.
+        if any(p.get("commerce_model") == "single_qr" for p in items):
+            readiness = session.execute(text("""SELECT
+                public.sr_single_checkout_enabled() AS released,
+                public.sr_checkout_payment_instructions() IS NOT NULL AS instructions
+            """)).mappings().one()
+            reasons = []
+            from app.core.checkout_readiness import runtime_checkout_blockers
+            reasons.extend(runtime_checkout_blockers(request.app.state.settings))
+            if readiness["released"] is not True:
+                reasons.append("SINGLE_QR_CHECKOUT_NOT_RELEASED")
+            if readiness["instructions"] is not True:
+                reasons.append("PAYMENT_INSTRUCTIONS_UNAVAILABLE")
+            for product in items:
+                if product.get("commerce_model") == "single_qr":
+                    # Only restrict the authoritative catalog decision; never
+                    # turn a previously ineligible product into an eligible one.
+                    product["checkout_available"] = product.get("checkout_available") is True and not reasons
+                    product["checkout_unavailable_reasons"] = reasons or (
+                        [] if product["checkout_available"] else ["PRODUCT_UNAVAILABLE"]
+                    )
+        return items
 
 
 @public_router.get(

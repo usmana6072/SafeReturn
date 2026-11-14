@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.encoders import jsonable_encoder
 from pydantic import Field, field_validator
 from sqlalchemy import text
@@ -78,6 +78,18 @@ class AllocationRetry(Closed):
         if not value:
             raise ValueError("Explicit allocation confirmation required")
         return value
+
+
+def quarantined_finance_review(context: Authenticated):
+    """Keep the mixed-model writer closed at the API boundary as well as in the UI."""
+    require_staff(context, "finance")
+    fail(503, "FINANCE_REVIEW_NOT_RELEASED")
+
+
+def quarantined_allocation(context: Authenticated):
+    """Keep the existing allocation endpoints closed pending the replacement release."""
+    require_staff(context, "finance", "operations")
+    fail(503, "QR_ALLOCATION_NOT_RELEASED")
 
 
 def typed_result(value):
@@ -424,7 +436,11 @@ def finalize_evidence(
     )
 
 
-@router.post("/admin/payment-attempts/{attempt_id}/reviews", operation_id="API-241")
+@router.post(
+    "/admin/payment-attempts/{attempt_id}/reviews",
+    operation_id="API-241",
+    dependencies=[Depends(quarantined_finance_review)],
+)
 def review_payment(
     attempt_id: UUID, body: ReviewRequest, context: Authenticated, request: Request
 ):
@@ -572,13 +588,21 @@ def review_payment(
     )
 
 
-@router.get("/admin/orders/{order_id}/qr-allocation", operation_id="typed-allocation-status")
+@router.get(
+    "/admin/orders/{order_id}/qr-allocation",
+    operation_id="typed-allocation-status",
+    dependencies=[Depends(quarantined_allocation)],
+)
 def allocation_status(order_id: UUID, context: Authenticated):
     require_staff(context, "finance", "operations")
     return typed_result(context.session.execute(text("SELECT public.sr_typed_allocation_status(:id)"), {"id": order_id}).scalar_one())
 
 
-@router.post("/admin/orders/{order_id}/qr-allocation/retry", operation_id="typed-allocation-retry")
+@router.post(
+    "/admin/orders/{order_id}/qr-allocation/retry",
+    operation_id="typed-allocation-retry",
+    dependencies=[Depends(quarantined_allocation)],
+)
 def retry_allocation(order_id: UUID, body: AllocationRetry, context: Authenticated, request: Request):
     require_staff(context, "finance", "operations")
 

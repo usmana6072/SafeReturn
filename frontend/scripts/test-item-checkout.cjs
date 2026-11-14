@@ -1,7 +1,7 @@
 /* Execute real TS contracts/relay with synthetic memory state; no environment edits. */
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict'),ts=require('typescript');
 const {NextRequest}=require('next/server'),root=path.resolve(__dirname,'..');
-function compile(file,require,globals={}){const box={exports:{},require,...globals};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,box);return box.exports;}
+function compile(file,dependency,globals={}){const box={exports:{},require:n=>n.endsWith("/api/quarantine")?require("../tests/load-quarantine.cjs")(globals.fetch):dependency(n),...globals};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,box);return box.exports;}
 const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0'),pid=id(1),vid=id(2),iid=id(3),oid=id(4);
 let stored='[]';const cart=compile('lib/item-cart.ts',()=>{throw Error();},{localStorage:{getItem:()=>stored}});
 stored=JSON.stringify([{product_id:pid,identity_group:null,price_per_copy:'0.01',public_token:'PRIVATE_CANARY',sizes:[{variant_id:vid,copies:2,unit_price:'0.01'}]}]);
@@ -25,7 +25,8 @@ const request=(path,source=origin)=>new NextRequest(origin+'/checkout/api',{meth
 async function main(){
  authorized=false;assert.equal((await relay.POST(request('/me/checkout/item-quotes'))).status,401);assert.equal(calls.length,0);authorized=true;
  assert.equal((await relay.POST(request('/me/checkout/item-quotes','https://other.invalid'))).status,403);assert.equal(calls.length,0);
- for(const target of ['/me/checkout/item-quotes','/me/checkout/item-quotes/'+oid+'/confirm','/me/checkout/quotes'])assert.equal((await relay.POST(request(target))).status,201);
+ for(const target of ['/me/checkout/item-quotes','/me/checkout/item-quotes/'+oid+'/confirm'])assert.equal((await relay.POST(request(target))).status,201);
+ assert.equal((await relay.POST(request('/me/checkout/quotes'))).status,503);
  assert.equal(calls[0].options.headers.Authorization,'Bearer synthetic-token');assert.equal(calls[0].options.headers['Idempotency-Key'],'synthetic-key');assert.equal(calls[0].url,upstream+'/api/v1/me/checkout/item-quotes');
  assert.equal((await relay.POST(request('/admin/qr-inventory'))).status,400);unavailable=true;const response=await relay.POST(request('/me/checkout/item-quotes'));assert.equal(response.status,503);assert(!JSON.stringify(await response.json()).includes('PRIVATE_CANARY'));
  console.log('PASS item cart, typed order summaries and checkout relay: merge/separation, no price fields, counts, session/origin, retry key, safe failures');

@@ -44,12 +44,18 @@ def main():
     args = parser.parse_args()
     if args.session_only and not (args.staff_token_file or args.staff_token_stdin):
         parser.error("--session-only requires an existing private session input")
-    assert args.origin == "http://127.0.0.1:8030", "Existing development backend only"
+    assert args.origin in {"http://127.0.0.1:8030", "https://safereturn-backend-dev.onrender.com"}, "Approved development backends only"
+    if args.origin != "http://127.0.0.1:8030":
+        assert args.session_only, "Remote acceptance is current-session only; no catalog probing"
     env = dotenv_values(ROOT / "backend/.env", interpolate=False)
     assert env.get("SAFERETURN_SUPABASE_URL", "").rstrip("/") == f"https://{PROJECT}.supabase.co"
     result = {"assessment_date": "2026-10-25", "checked_at_utc": datetime.now(UTC).isoformat(), "project": PROJECT, "read_only": True, "catalog": {}, "http": {}, "staff": {"supplied": bool(args.staff_token_file or args.staff_token_stdin)}}
     for key in ("SAFERETURN_DASHBOARD_ENABLED", "SAFERETURN_PRINT_TEMPLATE_MANAGEMENT_ENABLED", "SAFERETURN_STAFF_DIRECTORY_ENABLED", "SAFERETURN_SUPPORT_DEV_ENABLED"):
         result.setdefault("configured_flags", {})[key] = str(os.environ.get(key, env.get(key) or "false")).lower() in {"true", "1"}
+    result["configuration_source"] = "local development environment"
+    if args.origin.startswith("https:"):
+        result["configured_flags"] = {key: None for key in result["configured_flags"]}
+        result["configuration_source"] = "remote settings not inspected; no local flag values inferred"
     result["auth_configuration"] = {"expected_project": True, "symmetric_jwt_fallback": False, "session_input_in_config": any(v and any(s in k for s in ("ACCESS_TOKEN", "SESSION_TOKEN", "STORAGE_STATE", "COOKIE")) for k, v in env.items())}
     tables = ["staff_roles", "products", "orders", "support_cases", "support_case_events", "notification_outbox", "privacy_exports", "finance_sheet_sync", "print_artifacts", "payment_evidence", "audit_events"]
     helpers = ["sr_account_session_state", "sr_is_staff", "sr_dashboard_trend", "sr_export_list", "sr_export_authorized", "sr_retention_held"]

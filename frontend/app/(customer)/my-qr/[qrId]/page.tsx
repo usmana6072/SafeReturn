@@ -6,10 +6,12 @@ import { ApiError } from "../../../../lib/api/transport";
 import { getLanguage } from "../../../../lib/i18n";
 import { Unavailable } from "../../../../components/customer";
 import { ProfileEditor, ContactEditor, PreferenceEditor, PrivacyDisable } from "../../../../components/qr-forms";
+import { customerOperationAvailable } from "../../../../lib/customer-capabilities";
 export default async function Page({ params, searchParams }: { params: Promise<{qrId: string}>; searchParams: Promise<{saved?: string}> }) {
   const { qrId } = await params;
   if (!uuid(qrId)) notFound();
   const ur = await getLanguage() === "ur", session = await ownerSession(), api = ownerApi(session.token);
+  if (!customerOperationAvailable("GET", `/me/qr/${qrId}`)) return <><h1>{ur ? "QR پروفائل" : "QR profile"}</h1><p className="alert">{ur ? "پروفائل کی ترمیم اور اشاعت فی الحال دستیاب نہیں۔ آپ کی نجی معلومات میں کوئی تبدیلی نہیں کی گئی۔" : "Profile editing and publication are currently unavailable. Your private information has not been changed."}</p><Link className="button secondary" href="/my-qr">{ur ? "میرے QR کوڈز" : "My QR codes"}</Link></>;
   let tag: Tag, profile: Profile | undefined, contacts: Contacts | undefined, prefs: Preferences | undefined;
   try {
     tag = await api<Tag>(`/me/qr/${qrId}`);

@@ -2,7 +2,7 @@ import {test,expect} from "@playwright/test";
 const bundle=require("./qa-browser-bundle.cjs");
 const pid="00000000-0000-4000-8000-000000000010",v1="00000000-0000-4000-8000-000000000001",v2="00000000-0000-4000-8000-000000000002",qid="00000000-0000-4000-8000-000000000030",oid="00000000-0000-4000-8000-000000000040",aid="00000000-0000-4000-8000-000000000050";
 const key="safereturn-item-cart-v2";
-const product={product_id:pid,name:"Lost sticker",commerce_model:"single_qr",qr_type:"lost",price_per_copy:"12.30",max_order_copies:10,variants:[{variant_id:v1,name:"35 mm"},{variant_id:v2,name:"45 mm"}]};
+const product={product_id:pid,name:"Lost sticker",commerce_model:"single_qr",checkout_available:true,qr_type:"lost",price_per_copy:"12.30",max_order_copies:10,variants:[{variant_id:v1,name:"35 mm"},{variant_id:v2,name:"45 mm"}]};
 const cart=[{product_id:pid,identity_group:null,sizes:[{variant_id:v1,copies:2},{variant_id:v2,copies:3}]}];
 const instructions={version:"synthetic-v1",bank_name:"Synthetic Bank",account_title:"Synthetic payee",account_number:"SYNTHETIC-ACCOUNT",raast_id:"SYNTHETIC-RAAST",instructions_en:"Synthetic official instructions",instructions_ur:"منظور شدہ آزمائشی ہدایات",currency_code:"PKR"};
 async function mount(page:any,exportName:string,props:any,storage:any=cart){
@@ -13,6 +13,29 @@ async function mount(page:any,exportName:string,props:any,storage:any=cart){
  await page.addScriptTag({content:bundle({componentPath:exportName==="KitConfigurator"?"../components/checkout.tsx":exportName==="PaymentForm"?"../components/payments.tsx":"../components/item-checkout.tsx",exportName})});
 }
 async function fillAddress(page:any){for(const [label,value] of [["Recipient name","Synthetic"],["Phone","+923001234567"],["Street address","Synthetic street"],["City","Lahore"]])await page.getByLabel(label,{exact:true}).fill(value);await page.getByLabel("I confirm the shipping phone and address.",{exact:true}).check();}
+
+test('phone requires country code; three copies do not require a separate identity',async({page})=>{
+ const commands:any[]=[];
+ await page.route('**/checkout/api',r=>{commands.push(r.request().postDataJSON());return r.fulfill({status:503,json:{error:{code:'PROVIDER_UNAVAILABLE'}}});});
+ const threeCopies=[{product_id:pid,identity_group:null,sizes:[{variant_id:v1,copies:3}]}];
+ await mount(page,'ItemCheckoutCart',{products:[product],language:'en',checkout:true},threeCopies);
+ await fillAddress(page);
+ const phone=page.getByLabel('Phone',{exact:true});
+ await phone.fill('3001234567');
+ await page.getByLabel('I confirm the shipping phone and address.',{exact:true}).check();
+ await page.getByRole('button',{name:'Get final quote',exact:true}).click();
+ expect(await phone.evaluate((el:HTMLInputElement)=>el.validity.patternMismatch)).toBe(true);
+ await expect(phone).toBeFocused();
+ expect(commands).toHaveLength(0);
+ await expect(page.locator('#checkout-phone-help')).toContainText('Country code required');
+ await phone.fill('+923001234567');
+ await page.getByLabel('I confirm the shipping phone and address.',{exact:true}).check();
+ await page.getByRole('button',{name:'Get final quote',exact:true}).click();
+ await expect(page.getByRole('status')).toContainText('preserved');
+ expect(commands).toHaveLength(1);
+ expect(commands[0].body.items).toEqual(threeCopies);
+ expect(commands[0].body.address.phone).toBe('+923001234567');
+});
 
 test("single-type multi-size quote and submit retain legacy cart and server totals",async({page},info)=>{
  const commands:any[]=[];let uncertain=true;
@@ -39,9 +62,9 @@ test("stale quotes and denial preserve cart and hide private errors",async({page
 
 test("private evidence retry never declares verified payment",async({page})=>{
  let uploaded=0,finalized=0;const commands:any[]=[];
- await page.route("**/payments/api**",async r=>{if(r.request().method()==="GET")return r.fulfill({json:r.request().url().includes("payment-instructions")?instructions:{items:[]}});const c=r.request().postDataJSON();commands.push(c);if(c.path.endsWith("/payment-attempts"))return r.fulfill({json:{attempt_id:aid}});if(c.path.endsWith("/evidence-uploads"))return r.fulfill({json:{upload_url:"https://private-storage.synthetic.invalid/evidence",upload_token:"synthetic-private-grant"}});finalized++;return r.fulfill({status:finalized===1?503:200,json:finalized===1?{error:{code:"UNAVAILABLE"}}:{received:true}});});
+ await page.route("**/payments/api**",async r=>{if(r.request().method()==="GET")return r.fulfill({json:r.request().url().includes("payment-instructions")?instructions:{items:[]}});const c=r.request().postDataJSON();commands.push(c);if(c.path.endsWith("/payment-attempts"))return r.fulfill({json:{attempt_id:aid,state:"under_review"}});if(c.path.endsWith("/evidence-uploads"))return r.fulfill({json:{upload_url:"https://private-storage.synthetic.invalid/evidence",upload_token:"synthetic-private-grant"}});finalized++;return r.fulfill({status:finalized===1?503:200,json:finalized===1?{error:{code:"UNAVAILABLE"}}:{received:true}});});
  await page.route("https://private-storage.synthetic.invalid/**",r=>{uploaded++;return r.fulfill({status:200,headers:{"Access-Control-Allow-Origin":"*"},body:""});});
- await mount(page,"PaymentForm",{orderId:oid,language:"en"});await expect(page.getByText("Synthetic Bank",{exact:true})).toBeVisible();await page.getByLabel("Sender holder name",{exact:true}).fill("Synthetic holder");await page.getByLabel("Sender account",{exact:true}).fill("SYNTHETIC");await page.getByRole("button",{name:"Submit for review",exact:true}).click();await page.getByLabel("Optional private evidence",{exact:true}).setInputFiles({name:"proof.png",mimeType:"image/png",buffer:Buffer.from("synthetic-proof")});await page.getByRole("button",{name:"Upload evidence",exact:true}).click();await expect(page.getByRole("status")).toHaveText("UNAVAILABLE");await page.getByRole("button",{name:"Upload evidence",exact:true}).click();await expect(page.getByRole("status")).toHaveText("Evidence received. Payment remains under review.");expect(uploaded).toBe(1);const final=commands.filter(c=>c.path.endsWith("evidence-finalize"));expect(final[0].key).toBe(final[1].key);expect(await page.evaluate(()=>localStorage.getItem("safereturn-item-cart-v2"))).not.toContain("synthetic-private-grant");
+ await mount(page,"PaymentForm",{orderId:oid,language:"en"});await expect(page.getByText("Synthetic Bank",{exact:true})).toBeVisible();await page.getByLabel("Sender holder name",{exact:true}).fill("Synthetic holder");await page.getByLabel("Sender account",{exact:true}).fill("SYNTHETIC");await page.getByRole("button",{name:"Submit for review",exact:true}).click();await page.getByLabel("Optional private evidence",{exact:true}).setInputFiles({name:"proof.png",mimeType:"image/png",buffer:Buffer.from("synthetic-proof")});await page.getByRole("button",{name:"Upload evidence",exact:true}).click();await expect(page.getByRole("status")).toContainText("Request not confirmed");await page.getByRole("button",{name:"Upload evidence",exact:true}).click();await expect(page.getByRole("status")).toHaveText("Evidence received. Payment remains under review.");expect(uploaded).toBe(1);const final=commands.filter(c=>c.path.endsWith("evidence-finalize"));expect(final[0].key).toBe(final[1].key);expect(await page.evaluate(()=>localStorage.getItem("safereturn-item-cart-v2"))).not.toContain("synthetic-private-grant");
 });
 
 test("Urdu single-QR cart fits mobile and unavailable size blocks quote",async({page},info)=>{
@@ -50,4 +73,28 @@ test("Urdu single-QR cart fits mobile and unavailable size blocks quote",async({
 
 test('published browse-only product cannot request checkout and preserves its cart',async({page})=>{let writes=0;await page.route('**/checkout/api',r=>{writes++;return r.fulfill({status:503,json:{error:{code:'SINGLE_QR_CHECKOUT_NOT_RELEASED'}}});});await mount(page,'ItemCheckoutCart',{products:[{...product,checkout_available:false}],language:'en',checkout:true});await fillAddress(page);await expect(page.getByRole('button',{name:'Get final quote',exact:true})).toBeDisabled();await expect(page.getByRole('alert')).toContainText('unavailable for ordering');expect(writes).toBe(0);expect(await page.evaluate(key=>localStorage.getItem(key),key)).not.toBeNull();});
 
-test('browse-only published product shows order availability instead of an Add to cart button',async({page})=>{await mount(page,'KitConfigurator',{product:{...product,checkout_available:false},language:'en'},[]);await expect(page.getByText('This product is published. Online ordering is not available yet.')).toBeVisible();await expect(page.getByRole('button',{name:'Order now',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'Add to cart',exact:true})).toHaveCount(0);await expect(page.getByRole('link',{name:'Back to Shop'})).toHaveAttribute('href','/shop');});
+test('missing availability fails closed and both backend blockers are explained',async({page})=>{
+ await mount(page,'KitConfigurator',{product:{...product,checkout_available:undefined,checkout_unavailable_reasons:['SINGLE_QR_CHECKOUT_NOT_RELEASED','PAYMENT_INSTRUCTIONS_UNAVAILABLE']},language:'en'},[]);
+ await expect(page.getByRole('button',{name:'Order now',exact:true})).toBeDisabled();
+ await expect(page.getByRole('status')).toHaveText('Online purchasing has not been enabled, and approved Bank / Raast payment instructions are not available.');
+});
+
+test('fractional copies are rejected without saving or rounding',async({page})=>{
+ await mount(page,'ItemConfigurator',{product,language:'en'},[]);
+ await page.getByLabel('35 mm',{exact:true}).fill('1.5');
+ await page.getByRole('button',{name:'Add to cart',exact:true}).click();
+ await expect(page.getByRole('status')).toHaveText('Enter whole copy counts within the product limit.');
+ expect(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)!),key)).toEqual([]);
+});
+
+for(const [code,message] of [['SINGLE_QR_CHECKOUT_NOT_RELEASED','Online purchasing has not been enabled.'],['PAYMENT_INSTRUCTIONS_UNAVAILABLE','Approved Bank / Raast payment instructions are unavailable.'],['AUTH_REQUIRED','Please sign in again.']]){
+ test(`quote failure explains ${code} and preserves cart`,async({page})=>{
+  await page.route('**/checkout/api',r=>r.fulfill({status:503,json:{error:{code}}}));
+  await mount(page,'ItemCheckoutCart',{products:[product],language:'en',checkout:true});await fillAddress(page);
+  await page.getByRole('button',{name:'Get final quote',exact:true}).click();
+  await expect(page.getByRole('status')).toContainText(message);
+  expect(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)!),key)).toEqual(cart);
+ });
+}
+
+test('browse-only published product shows order availability instead of an Add to cart button',async({page})=>{await mount(page,'KitConfigurator',{product:{...product,checkout_available:false},language:'en'},[]);await expect(page.getByText('Online ordering is not available yet.')).toBeVisible();await expect(page.getByRole('button',{name:'Order now',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'Add to cart',exact:true})).toHaveCount(0);await expect(page.getByRole('link',{name:'Back to Shop'})).toHaveAttribute('href','/shop');});

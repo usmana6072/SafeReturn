@@ -1,4 +1,2 @@
-import { OwnerCollection } from "../../../components/owner-collection";
-export default async function Page({ searchParams }: { searchParams: Promise<{cursor?: string}> }) {
-  return <OwnerCollection mode="dashboard" cursor={(await searchParams).cursor} />;
-}
+import { CustomerDashboard } from "../../../components/customer-dashboard";
+export default function Page() { return <CustomerDashboard/>; }

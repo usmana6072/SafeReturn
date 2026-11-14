@@ -9,6 +9,7 @@ const origin = 'https://synthetic.test';
 let session = { token: 'synthetic-token' }, calls = [], status = 200;
 const code = ts.transpileModule(fs.readFileSync(path.join(__dirname,'../app/account/shipping-addresses/api/route.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const sandbox = { exports:{}, AbortSignal, process:{env:{SAFERETURN_API_ORIGIN:'https://synthetic-api.test'}}, fetch: async (url, options) => { calls.push({url,options}); return new Response(status===204?null:JSON.stringify(status>=400?{error:{message:'PRIVATE_BACKEND_CANARY'}}:{book_version:0,items:[]}),{status,headers:{'Content-Type':'application/json'}}); }, require: name => {
+  if(name.endsWith('/api/quarantine')) return require('../tests/load-quarantine.cjs')((...args)=>sandbox.fetch(...args));
   if(name==='next/server') return require(name);
   if(name.endsWith('/auth/server')) return {verifiedSession:async()=>session};
   if(name.endsWith('/auth/config')) return {authConfig:()=>({origin})};

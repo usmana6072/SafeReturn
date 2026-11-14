@@ -14,9 +14,20 @@ const attempts = new Map<string, { count: number; until: number }>();
 
 async function sameOrigin() {
   const origin = (await headers()).get("origin");
-  const matches = origin === authConfig().origin;
+  const configOrigin = authConfig().origin;
+  let matches = origin === configOrigin;
+  if (!matches && process.env.NODE_ENV === "development" && origin) {
+    try {
+      const oUrl = new URL(origin);
+      const cUrl = new URL(configOrigin);
+      const loopbacks = ["localhost", "127.0.0.1", "[::1]"];
+      if (loopbacks.includes(oUrl.hostname) && loopbacks.includes(cUrl.hostname) && oUrl.port === cUrl.port) {
+        matches = true;
+      }
+    } catch { /* Ignore URL parse errors */ }
+  }
   if (!matches && process.env.NODE_ENV === "development") {
-    console.info("Auth local request rejected: origin mismatch");
+    console.info("Auth local request rejected: origin mismatch", { origin, configOrigin });
   }
   return matches;
 }
@@ -52,9 +63,14 @@ export async function submitIdentity(mode: "login" | "signup", _previous: FormSt
         options: { data: { display_name: name },
           emailRedirectTo: `${authConfig().origin}/auth/callback` } })
       : await client.auth.signInWithPassword({ email, password });
-    if (result.error) return { status: "error", reason: result.error.code === "over_email_send_rate_limit"
-      ? "email_limited" : result.error.status === 429 ? "limited"
-        : (result.error.status ?? 400) >= 500 ? "unavailable" : "denied" };
+    if (result.error) {
+      if (process.env.NODE_ENV === "development") {
+        console.info(`[Auth Sign-In Error] code=${result.error.code}, status=${result.error.status}, message=${result.error.message}`);
+      }
+      return { status: "error", reason: result.error.code === "over_email_send_rate_limit"
+        ? "email_limited" : result.error.status === 429 ? "limited"
+          : (result.error.status ?? 400) >= 500 ? "unavailable" : "denied" };
+    }
     signedIn = !!result.data.session;
     if (!signedIn) return { status: "confirmation" };
   } catch { return { status: "error", reason: "unavailable" }; }

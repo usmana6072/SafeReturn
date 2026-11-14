@@ -1,7 +1,7 @@
 /* Actual TypeScript contracts/relay under synthetic Auth/transport, no listener. */
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),ts=require('typescript');
 const {NextRequest}=require('next/server');
-function compile(file,req,globals={}){const s={exports:{},require:req,...globals};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,s);return s.exports;}
+function compile(file,req,globals={}){const s={exports:{},require:n=>n.endsWith("/api/quarantine")?require("../tests/load-quarantine.cjs")(globals.fetch):req(n),...globals};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,s);return s.exports;}
 const I=compile('lib/inventory-contract.ts',()=>{throw Error();}),C=compile('lib/independent-qr.ts',n=>{if(n==='./inventory-contract')return I;throw Error(n);});
 const id='00000000-0000-4000-8000-000000000001',origin='https://owner.synthetic.invalid',upstream='https://api.synthetic.invalid';
 const item={logical_item_id:id,qr_id:id,order_id:id,product_name_snapshot:'Synthetic',tag_type:'lost',ownership_status:'unclaimed',public_status:'unactivated',revision:2,activated_at:null,can_activate:true};

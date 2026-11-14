@@ -11,7 +11,9 @@ export async function orderMetadataRelay(r: NextRequest) {
     try {
         if (r.method !== 'GET')
             return fail(405);
-        if (r.headers.get('sec-fetch-site') === 'cross-site' || r.headers.has('origin') && r.headers.get('origin') !== authConfig().origin)
+        const origin = r.headers.get('origin');
+        const allowedOrigin = !origin || origin === authConfig().origin || (process.env.NODE_ENV === 'development' && (origin.includes('localhost') || origin.includes('127.0.0.1')));
+        if (r.headers.get('sec-fetch-site') === 'cross-site' || !allowedOrigin)
             return fail(403);
         const session = await verifiedSession();
         if (!session)

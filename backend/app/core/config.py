@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     print_lease_seconds: int = Field(default=180, ge=30, le=900)
     print_max_attempts: int = Field(default=5, ge=1, le=10)
     checkout_enabled: bool = False
+    single_qr_checkout_enabled: bool = False
+    # Percentage of subtotal plus shipping; independent checkout only.
+    single_qr_checkout_tax_percent: Decimal | None = Field(
+        default=None, ge=0, le=100, decimal_places=4, allow_inf_nan=False
+    )
     checkout_shipping_pkr: Decimal | None = Field(
         default=None, ge=0, le=999999, decimal_places=2
     )
