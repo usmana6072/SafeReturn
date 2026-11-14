@@ -31,6 +31,11 @@
 .facts dt { color: #64748b; margin-block-end: 4px; }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.reviewForm { padding: 16px; display: grid; gap: 12px; border-block: 1px solid #e2e8f0; background: #f8fafc; }
+.reviewForm h3 { margin: 0; font-size: 14px; }
+.reviewForm textarea { min-height: 72px; }
+.approve { background: #15803d !important; color: white; border-color: #15803d !important; }
+.disapprove { background: #b91c1c !important; color: white; border-color: #b91c1c !important; }
 .muted { color: #64748b; }
 .history { margin: 0; padding-inline-start: 18px; display: grid; gap: 12px; }
 .history p { white-space: pre-wrap; }

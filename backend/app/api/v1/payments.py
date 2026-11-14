@@ -80,12 +80,6 @@ class AllocationRetry(Closed):
         return value
 
 
-def quarantined_finance_review(context: Authenticated):
-    """Keep the mixed-model writer closed at the API boundary as well as in the UI."""
-    require_staff(context, "finance")
-    fail(503, "FINANCE_REVIEW_NOT_RELEASED")
-
-
 def quarantined_allocation(context: Authenticated):
     """Keep the existing allocation endpoints closed pending the replacement release."""
     require_staff(context, "finance", "operations")
@@ -439,7 +433,6 @@ def finalize_evidence(
 @router.post(
     "/admin/payment-attempts/{attempt_id}/reviews",
     operation_id="API-241",
-    dependencies=[Depends(quarantined_finance_review)],
 )
 def review_payment(
     attempt_id: UUID, body: ReviewRequest, context: Authenticated, request: Request

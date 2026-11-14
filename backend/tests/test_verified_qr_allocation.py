@@ -260,31 +260,20 @@ def test_new_allocation_routes_reject_anonymous_requests():
     )
 
 
-def test_quarantined_finance_and_allocation_routes_fail_closed_for_staff(fixture):
+def test_allocation_routes_remain_quarantined_for_staff(fixture):
     ctx, _, _, _ = fixture
     app = create_app(Settings())
     app.dependency_overrides[get_auth_context] = lambda: ctx
     client = ASGIClient(app)
     oid = uuid4()
-    attempt = uuid4()
-    review_body = {
-        "decision": "verify",
-        "bank_verified": True,
-        "bank_match_reference": "SYNTHETIC-BANK-REF",
-        "settled_amount": "123.00",
-        "settled_currency": "PKR",
-        "reason": "Synthetic authorization boundary check",
-    }
-
     responses = [
-        client.post(f"/api/v1/admin/payment-attempts/{attempt}/reviews", json=review_body),
         client.get(f"/api/v1/admin/orders/{oid}/qr-allocation"),
         client.post(
             f"/api/v1/admin/orders/{oid}/qr-allocation/retry",
             json={"confirmed": True},
         ),
     ]
-    assert [response.status_code for response in responses] == [503, 503, 503]
+    assert [response.status_code for response in responses] == [503, 503]
     assert not any(
         "sr_typed_settle" in str(call.args[0])
         or "sr_typed_allocation_retry" in str(call.args[0])

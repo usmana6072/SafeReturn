@@ -65,23 +65,18 @@ export async function paymentReadRelay(r: NextRequest) {
             return new Response(bytes, { headers: { ...headers, 'Content-Type': type, 'Content-Disposition': 'inline; filename="private-payment-evidence"' } });
         }
 
-        let result;
-        if (!response || !response.ok || response.status !== 200) {
-            result = { items: [{ attempt_id: crypto.randomUUID(), state: 'submitted', amount: '300.00', currency_code: 'PKR', evidence: [], sender_account: 'PK36MEZN0000001234567890', sender_holder: { holder: 'Customer', transfer_reference: 'REF-001' } }] };
-        } else {
-            const type = response.headers.get('content-type')?.split(';')[0].trim() ?? '';
-            if (type !== 'application/json')
-                throw Error();
-            const parsed = attempts(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await read(response, 2 * 1024 * 1024))), true);
-            if (parsed.items.length === 0) {
-                result = { items: [{ attempt_id: crypto.randomUUID(), state: 'submitted', amount: '300.00', currency_code: 'PKR', evidence: [], sender_account: 'PK36MEZN0000001234567890', sender_holder: { holder: 'Customer', transfer_reference: 'REF-001' } }] };
-            } else {
-                result = parsed;
-            }
-        }
+        if (!response || !response.ok || response.status !== 200)
+            return fail(response?.status ?? 503);
+        const type = response.headers.get('content-type')?.split(';')[0].trim() ?? '';
+        if (type !== 'application/json')
+            throw Error();
+        const result = attempts(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await read(response, 2 * 1024 * 1024))), true);
         if (!permitted(await staffState(session.token)))
             return fail(403);
-        return NextResponse.json(result, { headers });
+        return NextResponse.json(
+            { items: result.items.map(({ attempt_id, state, amount, currency_code, evidence }) => ({ attempt_id, state, amount, currency_code, evidence })) },
+            { headers },
+        );
     }
     catch (e) {
         return fail(e instanceof StaffAccessError && [401, 403].includes(e.status) ? e.status : 503);

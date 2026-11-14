@@ -13,6 +13,13 @@ export type Attempt = {
     currency_code: string;
     evidence: Evidence[];
 };
+export type PaymentReview = {
+    attempt_id: string;
+    state: 'verified' | 'rejected';
+    order_id: string;
+    fulfillment_eligible: boolean;
+    review_id: string;
+};
 function bad(): never { throw Error('Invalid payments contract'); }
 export function uuid(v: unknown) { if (typeof v !== 'string' || !(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v)))
     bad(); return v as string; }
@@ -55,6 +62,17 @@ export function attempts(raw: unknown, backend = false): {
     if (new Set(items.map(a => a.attempt_id)).size !== items.length)
         bad();
     return { items };
+}
+export function paymentReview(raw: unknown): PaymentReview {
+    const o = object(raw);
+    exact(o, ['attempt_id', 'state', 'order_id', 'fulfillment_eligible', 'review_id']);
+    return {
+        attempt_id: uuid(o.attempt_id),
+        state: o.state === 'verified' || o.state === 'rejected' ? o.state : bad(),
+        order_id: uuid(o.order_id),
+        fulfillment_eligible: typeof o.fulfillment_eligible === 'boolean' ? o.fulfillment_eligible : bad(),
+        review_id: uuid(o.review_id),
+    };
 }
 export function paymentTarget(p: URLSearchParams) { const kind = p.get('kind'); if (kind !== 'attempts' && kind !== 'evidence' || p.size !== 2 || p.getAll('kind').length !== 1 || p.getAll('id').length !== 1)
     bad(); const id = uuid(p.get('id')); return kind === 'attempts' ? '/admin/orders/' + id + '/payment-attempts' : '/admin/payment-evidence/' + id; }

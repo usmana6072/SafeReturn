@@ -1,4 +1,4 @@
-import { attempts, paymentTarget, safeEvidence, type Evidence } from './admin-payments-contract';
+import { attempts, paymentReview, paymentTarget, safeEvidence, uuid, type Evidence } from './admin-payments-contract';
 export class PaymentReadError extends Error {
     constructor(public status: number) { super('Payment read unavailable'); }
 }
@@ -9,3 +9,23 @@ export async function readEvidence(e: Evidence, signal?: AbortSignal) { const qu
     throw new PaymentReadError(r.status); if (r.headers.get('content-type')?.split(';')[0].trim() !== e.content_type)
     throw new PaymentReadError(422); const blob = await r.blob(); if (blob.size !== e.bytes_size)
     throw new PaymentReadError(422); safeEvidence(new Uint8Array(await blob.arrayBuffer()), e.content_type); return blob; }
+export async function reviewPayment(attemptId: string, payload: {
+    decision: 'verify' | 'reject';
+    reason: string;
+    bank_verified?: boolean;
+    bank_match_reference?: string;
+    settled_amount?: string;
+    settled_currency?: string;
+}, signal?: AbortSignal) {
+    const id = uuid(attemptId);
+    const r = await fetch('/admin/payments/review-api?attempt_id=' + encodeURIComponent(id), {
+        method: 'POST',
+        cache: 'no-store',
+        redirect: 'error',
+        signal: signal ?? AbortSignal.timeout(20000),
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new PaymentReadError(r.status);
+    return paymentReview(await r.json());
+}

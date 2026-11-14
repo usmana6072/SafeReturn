@@ -129,10 +129,6 @@ export const quarantineOperations = [
     "/api/v1/admin/support-cases/{case_id}/independent-qr"
   ],
   [
-    "POST",
-    "/api/v1/admin/payment-attempts/{attempt_id}/reviews"
-  ],
-  [
     "GET",
     "/api/v1/admin/orders/{order_id}/qr-allocation"
   ],
