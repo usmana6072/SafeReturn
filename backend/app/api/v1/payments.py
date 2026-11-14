@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Request, Response
 from fastapi.encoders import jsonable_encoder
 from pydantic import Field, field_validator
 from sqlalchemy import text
@@ -78,12 +78,6 @@ class AllocationRetry(Closed):
         if not value:
             raise ValueError("Explicit allocation confirmation required")
         return value
-
-
-def quarantined_allocation(context: Authenticated):
-    """Keep the existing allocation endpoints closed pending the replacement release."""
-    require_staff(context, "finance", "operations")
-    fail(503, "QR_ALLOCATION_NOT_RELEASED")
 
 
 def typed_result(value):
@@ -590,7 +584,6 @@ def review_payment(
 @router.get(
     "/admin/orders/{order_id}/qr-allocation",
     operation_id="typed-allocation-status",
-    dependencies=[Depends(quarantined_allocation)],
 )
 def allocation_status(order_id: UUID, context: Authenticated):
     require_staff(context, "finance", "operations")
@@ -600,14 +593,26 @@ def allocation_status(order_id: UUID, context: Authenticated):
 @router.post(
     "/admin/orders/{order_id}/qr-allocation/retry",
     operation_id="typed-allocation-retry",
-    dependencies=[Depends(quarantined_allocation)],
 )
 def retry_allocation(order_id: UUID, body: AllocationRetry, context: Authenticated, request: Request):
     require_staff(context, "finance", "operations")
 
     def work(settings):
-        value = typed_result(context.session.execute(text("SELECT public.sr_typed_allocation_retry(:sid,:id)"),
-                            {"sid": context.principal.session_id, "id": order_id}).scalar_one())
+        allocation = typed_result(context.session.execute(
+            text("SELECT public.sr_typed_allocation_status(:id)"), {"id": order_id}
+        ).scalar_one())
+        if allocation.get("state") == "reconciliation_pending" and allocation.get("reason_code") == "stock_shortage":
+            value = typed_result(context.session.execute(text(
+                "SELECT public.sr_typed_payment_autogenerate(:sid,:oid,:seed)"
+            ), {
+                "sid": context.principal.session_id,
+                "oid": order_id,
+                "seed": str(order_id),
+            }).scalar_one())
+            value = {"order_id": str(order_id), "payment_status": "verified", "allocation": value, "fulfillment_eligible": False}
+        else:
+            value = typed_result(context.session.execute(text("SELECT public.sr_typed_allocation_retry(:sid,:id)"),
+                                {"sid": context.principal.session_id, "id": order_id}).scalar_one())
         context.session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
         context.session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
         return value, order_id

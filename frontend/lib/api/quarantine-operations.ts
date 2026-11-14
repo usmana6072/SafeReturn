@@ -130,14 +130,6 @@ export const quarantineOperations = [
   ],
   [
     "GET",
-    "/api/v1/admin/orders/{order_id}/qr-allocation"
-  ],
-  [
-    "POST",
-    "/api/v1/admin/orders/{order_id}/qr-allocation/retry"
-  ],
-  [
-    "GET",
     "/api/v1/me/tag-pairs/{pair_id}/activation-history"
   ],
   [

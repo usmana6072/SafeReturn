@@ -260,7 +260,7 @@ def test_new_allocation_routes_reject_anonymous_requests():
     )
 
 
-def test_allocation_routes_remain_quarantined_for_staff(fixture):
+def test_allocation_routes_are_available_for_staff(fixture):
     ctx, _, _, _ = fixture
     app = create_app(Settings())
     app.dependency_overrides[get_auth_context] = lambda: ctx
@@ -273,12 +273,7 @@ def test_allocation_routes_remain_quarantined_for_staff(fixture):
             json={"confirmed": True},
         ),
     ]
-    assert [response.status_code for response in responses] == [503, 503]
-    assert not any(
-        "sr_typed_settle" in str(call.args[0])
-        or "sr_typed_allocation_retry" in str(call.args[0])
-        for call in ctx.session.execute.call_args_list
-    )
+    assert [response.status_code for response in responses] == [200, 200]
 
 
 def test_http_validation_does_not_echo_token_or_price(fixture):
@@ -289,7 +284,7 @@ def test_http_validation_does_not_echo_token_or_price(fixture):
         f"/api/v1/admin/orders/{uuid4()}/qr-allocation/retry",
         json={"confirmed": True, "public_token": "PRIVATE_TOKEN_CANARY"},
     )
-    assert response.status_code == 503 and "PRIVATE_TOKEN_CANARY" not in response.text
+    assert response.status_code == 422 and "PRIVATE_TOKEN_CANARY" not in response.text
 
 
 @pytest.fixture
