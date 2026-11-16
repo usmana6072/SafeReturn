@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from app.api.auth import (
     AccessError,
     Authenticated,
+    authorize,
     require_order_owner,
     require_staff,
     require_verified_account,
@@ -350,7 +351,7 @@ def get_print_job(job_id: UUID, context: Authenticated):
     return dict(r, artifacts=[dict(a) for a in artifacts], inspection_items=[dict(i) for i in items])
 
 
-def artifact(session, aid, *, check_binding=True):
+def artifact(session, aid, *, check_binding=True, typed_job_id=None):
     from app.db.template_registry import gate, order_specs
     if check_binding:
         gate(session)
@@ -358,8 +359,9 @@ def artifact(session, aid, *, check_binding=True):
         session.execute(
             text(
                 "SELECT a.*,j.order_id,j.status FROM public.print_artifacts a JOIN public.print_jobs j ON j.id=a.print_job_id JOIN public.orders o ON o.id=j.order_id WHERE a.id=:id AND o.payment_status='verified' AND o.order_status='placed'"
+                + (" AND j.id=:job AND o.commerce_model='single_qr' AND a.format='pdf'" if typed_job_id else "")
             ),
-            {"id": aid},
+            {"id": aid, "job": typed_job_id},
         )
         .mappings()
         .one_or_none()
@@ -372,7 +374,7 @@ def artifact(session, aid, *, check_binding=True):
     # Provider fetch happens after the initial read-only probe. The final bound
     # artifact check holds the order lock and rechecks before returning any bytes.
     require_order_clear(session, a["order_id"], lock=check_binding)
-    if a["deleted_at"] is not None:
+    if a["deleted_at"] is not None or a.get("deletion_hold_reason") == "retention.deleting":
         fail(410, "ARTIFACT_DELETED")
     if a["status"] not in {"ready", "downloaded", "qa_passed"}:
         fail(409, "ARTIFACT_UNAVAILABLE")
@@ -386,6 +388,59 @@ def artifact(session, aid, *, check_binding=True):
     if check_binding and not occurrences(session, a["order_id"]):
         fail(409, "PRINT_BINDING_CHANGED")
     return a
+
+
+def load_private_pdf(context, request, artifact_id, *, typed_job_id=None):
+    # Fetch outside the order lock, then recheck settlement, binding and staff
+    # access before allowing the bytes to leave the application.
+    from app.db.template_registry import gate
+
+    session = context.session
+    a = artifact(session, artifact_id, check_binding=False, typed_job_id=typed_job_id)
+    try:
+        data = store(request).download(a["object_key"], a["sha256_hex"], a["size_bytes"])
+    except PrintUnavailable:
+        raise AccessError(503) from None
+    gate(session)
+    session.execute(
+        text("SELECT id FROM public.orders WHERE id=:id FOR UPDATE"),
+        {"id": a["order_id"]},
+    )
+    if typed_job_id is not None:
+        require_staff(authorize(session, context.principal), "operations")
+    artifact(session, artifact_id, typed_job_id=typed_job_id)
+    return a, data
+
+
+def print_pdf_response(data):
+    return Response(
+        data,
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": 'attachment; filename="SR-print.pdf"',
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "sandbox",
+        },
+    )
+
+
+@router.post("/admin/print-jobs/{job_id}/artifacts/{artifact_id}/download", operation_id="typed-print-download")
+def download_typed_print(job_id: UUID, artifact_id: UUID, context: Authenticated, request: Request):
+    require_staff(context, "operations")
+    if not request.app.state.settings.print_enabled:
+        fail(503, "PRINT_DISABLED")
+    a, data = load_private_pdf(context, request, artifact_id, typed_job_id=job_id)
+    context.session.execute(
+        text("UPDATE public.print_jobs SET status='downloaded' WHERE id=:id AND status='ready'"),
+        {"id": a["print_job_id"]},
+    )
+    context.session.execute(
+        text("""INSERT INTO public.audit_events(actor_user_id,actor_kind,action,target_type,target_id,reason,safe_details)
+        VALUES(:uid,'staff','print.download','print_artifact',:id,'authorized typed print download','{}'::jsonb)"""),
+        {"uid": context.principal.user_id, "id": artifact_id},
+    )
+    return print_pdf_response(data)
 
 
 @router.post(
@@ -443,21 +498,7 @@ def redeem_download(body: DownloadRequest, context: Authenticated, request: Requ
         hashlib.sha256(body.download_token.encode()).digest(),
     ):
         raise AccessError(404)
-    a = artifact(context.session, grant["artifact_id"], check_binding=False)
-    try:
-        data = store(request).download(
-            a["object_key"], a["sha256_hex"], a["size_bytes"]
-        )
-    except PrintUnavailable:
-        raise AccessError(503) from None
-    # Provider I/O precedes the serialized consume/revalidation transaction section.
-    from app.db.template_registry import gate
-    gate(context.session)
-    context.session.execute(
-        text("SELECT id FROM public.orders WHERE id=:id FOR UPDATE"),
-        {"id": a["order_id"]},
-    )
-    artifact(context.session, grant["artifact_id"])
+    a, data = load_private_pdf(context, request, grant["artifact_id"])
     used = context.session.execute(
         text(
             "UPDATE public.print_download_grants SET used_at=clock_timestamp() WHERE id=:id AND granted_to=:uid AND used_at IS NULL AND expires_at>clock_timestamp() RETURNING id"
@@ -473,16 +514,7 @@ def redeem_download(body: DownloadRequest, context: Authenticated, request: Requ
         {"id": a["print_job_id"]},
     )
     audit(context, "print.download", body.grant_id)
-    return Response(
-        data,
-        media_type="application/pdf",
-        headers={
-            "Cache-Control": "no-store",
-            "Content-Disposition": 'attachment; filename="SR-print.pdf"',
-            "X-Content-Type-Options": "nosniff",
-            "Content-Security-Policy": "sandbox",
-        },
-    )
+    return print_pdf_response(data)
 
 
 def audit(context, action, target):

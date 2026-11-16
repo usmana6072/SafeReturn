@@ -51,6 +51,7 @@ export type Detail = OrderJob & {
     order_id: string;
     attempt_count: number;
     artifacts: Artifact[];
+    typed_order?: true;
 };
 function bad(): never { throw Error('Invalid print metadata contract'); }
 function object(v: unknown) { if (!v || typeof v !== 'object' || Array.isArray(v))
@@ -124,7 +125,7 @@ function orderJob(v: unknown, backend: boolean, extra: string[] = []): OrderJob 
 export function parseOrder(raw: unknown, backend = false) { const p = object(raw); exact(p, ['items']); if (!Array.isArray(p.items) || p.items.length > 1000)
     bad(); const items = p.items.map(v => orderJob(v, backend)); if (new Set(items.map(j => j.id)).size !== items.length)
     bad(); return { items }; }
-export function parseDetail(raw: unknown, target: string, backend = false): Detail { const o = object(raw), inspection = backend && Object.hasOwn(o, 'inspection_items'); const base = orderJob(o, backend, ['order_id', 'attempt_count', 'artifacts', ...(inspection ? ['inspection_items'] : [])]); if (base.id !== uuid(target) || !Array.isArray(o.artifacts) || o.artifacts.length > 100)
+export function parseDetail(raw: unknown, target: string, backend = false): Detail { const o = object(raw), inspection = backend && Object.hasOwn(o, 'inspection_items'), typed = !backend && Object.hasOwn(o, 'typed_order'); const base = orderJob(o, backend, ['order_id', 'attempt_count', 'artifacts', ...(inspection ? ['inspection_items'] : []), ...(typed ? ['typed_order'] : [])]); if (base.id !== uuid(target) || !Array.isArray(o.artifacts) || o.artifacts.length > 100 || typed && o.typed_order !== true)
     bad(); if (inspection) {
     if (!Array.isArray(o.inspection_items) || o.inspection_items.length > 50)
         bad();
@@ -136,5 +137,5 @@ export function parseDetail(raw: unknown, target: string, backend = false): Deta
         one(i.qr_type_snapshot, ['lost', 'ice']);
     }
 } const artifacts = o.artifacts.map(v => { const a = object(v); exact(a, ['id', 'format', 'size_bytes', 'sha256_hex', 'deleted_at']); return { id: uuid(a.id), format: one(a.format, ['pdf', 'svg', 'other_approved']), size_bytes: integer(a.size_bytes, 1), sha256_hex: hash(a.sha256_hex), deleted_at: a.deleted_at === null ? null : date(a.deleted_at) }; }); if (new Set(artifacts.map(a => a.id)).size !== artifacts.length)
-    bad(); return { ...base, order_id: uuid(o.order_id), attempt_count: integer(o.attempt_count), artifacts }; }
+    bad(); return { ...base, order_id: uuid(o.order_id), attempt_count: integer(o.attempt_count), artifacts, ...((typed || inspection && (o.inspection_items as unknown[]).length > 0) ? { typed_order: true } : {}) }; }
 export function countLabel(c: Count) { return c.is_exact ? String(c.value) : c.value + '+ (lower bound)'; }

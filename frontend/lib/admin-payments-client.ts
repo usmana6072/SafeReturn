@@ -9,8 +9,11 @@ export function paymentReadError(e: unknown) {
         : status === 403 ? 'Current Finance role and MFA are required.'
             : status === 404 ? 'Evidence is missing or unavailable.'
                 : status === 409 && code === 'PAYMENT_CLOSED' ? 'This payment has already been finalized. Refresh the records.'
+                    : status === 409 && code === 'PAYMENT_EVIDENCE_REQUIRED' ? 'The customer must submit a payment receipt before this payment can be approved.'
                     : status === 409 && code === 'SETTLEMENT_MISMATCH' ? 'The settlement amount or currency does not match the payment.'
                         : status === 409 && code === 'ORDER_RECONCILIATION_REQUIRED' ? 'The order must be reconciled before approval.'
+                            : status === 409 && code === 'RESERVATION_RECONCILIATION_REQUIRED' ? 'The order reservation must be reconciled before approval.'
+                            : status === 409 && code === 'PAYMENT_CONFLICT' ? 'Payment approval conflicts with an existing record. Check whether this bank match reference was already used.'
                             : status === 422 && code === 'BANK_VERIFICATION_REQUIRED' ? 'Confirm bank verification and provide a valid bank match reference.'
                                 : status === 422 ? 'Invalid request, evidence metadata or content.'
                                     : status === 429 ? 'Request limit reached; wait before retrying.'
@@ -29,14 +32,14 @@ export async function reviewPayment(attemptId: string, payload: {
     bank_match_reference?: string;
     settled_amount?: string;
     settled_currency?: string;
-}, signal?: AbortSignal) {
+}, idempotencyKey: string, signal?: AbortSignal) {
     const id = uuid(attemptId);
     const r = await fetch('/admin/payments/review-api?attempt_id=' + encodeURIComponent(id), {
         method: 'POST',
         cache: 'no-store',
         redirect: 'error',
         signal: signal ?? AbortSignal.timeout(20000),
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify(payload),
     });
     if (!r.ok) {

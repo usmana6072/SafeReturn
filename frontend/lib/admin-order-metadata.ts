@@ -45,7 +45,7 @@ export function metadataQuery(p: URLSearchParams) { const out = new URLSearchPar
             one(v, orderStates);
             break;
         case 'payment_status':
-            one(v, paymentStates);
+            one(v, [...paymentStates, 'pending']);
             break;
         case 'created_from':
         case 'created_before':

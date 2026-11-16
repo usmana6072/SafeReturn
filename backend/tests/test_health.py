@@ -96,6 +96,7 @@ def test_contract_and_unimplemented_routes():
         "/api/v1/admin/payment-evidence/{evidence_id}",
         "/api/v1/admin/orders/{order_id}/print-jobs",
         "/api/v1/admin/print-jobs/{job_id}",
+        "/api/v1/admin/print-jobs/{job_id}/artifacts/{artifact_id}/download",
         "/api/v1/admin/print-jobs/{job_id}/qa",
         "/api/v1/admin/print-downloads",
         "/api/v1/me/orders/{order_id}/print-summary",

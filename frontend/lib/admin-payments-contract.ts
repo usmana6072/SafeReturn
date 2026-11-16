@@ -1,4 +1,4 @@
-// Closed read-only payments contract. No verification or reconciliation targets.
+import { parseAllocation, type Allocation } from './allocation';
 export const maxEvidenceBytes = 5000000;
 export const evidenceTypes = ['image/png', 'image/jpeg', 'application/pdf'] as const;
 export type Evidence = {
@@ -19,6 +19,7 @@ export type PaymentReview = {
     order_id: string;
     fulfillment_eligible: boolean;
     review_id: string;
+    allocation?: Allocation;
 };
 function bad(): never { throw Error('Invalid payments contract'); }
 export function uuid(v: unknown) { if (typeof v !== 'string' || !(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v)))
@@ -65,13 +66,16 @@ export function attempts(raw: unknown, backend = false): {
 }
 export function paymentReview(raw: unknown): PaymentReview {
     const o = object(raw);
-    exact(o, ['attempt_id', 'state', 'order_id', 'fulfillment_eligible', 'review_id']);
+    const typed = Object.hasOwn(o, 'allocation');
+    exact(o, ['attempt_id', 'state', 'order_id', 'fulfillment_eligible', 'review_id', ...(typed ? ['allocation'] : [])]);
+    if (typed && o.state !== 'verified') bad();
     return {
         attempt_id: uuid(o.attempt_id),
         state: o.state === 'verified' || o.state === 'rejected' ? o.state : bad(),
         order_id: uuid(o.order_id),
         fulfillment_eligible: typeof o.fulfillment_eligible === 'boolean' ? o.fulfillment_eligible : bad(),
         review_id: uuid(o.review_id),
+        ...(typed ? { allocation: parseAllocation(o.allocation) } : {}),
     };
 }
 export function paymentTarget(p: URLSearchParams) { const kind = p.get('kind'); if (kind !== 'attempts' && kind !== 'evidence' || p.size !== 2 || p.getAll('kind').length !== 1 || p.getAll('id').length !== 1)

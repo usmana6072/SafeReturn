@@ -45,9 +45,12 @@ export function IndependentFinance({ orderId, ur = false }: { orderId?: string; 
             if (!response.ok)
                 throw Error(response.status === 403 ? 'Finance permission and recent MFA are required.' : 'Allocation retry was not completed.');
             const result = await response.json();
-            setValue(parseAllocation(result.allocation));
+            const allocation = parseAllocation(result.allocation);
+            setValue(allocation);
             key.current = null;
-            setMessage(ur ? 'تخصیص مکمل ہو گئی۔' : 'Allocation completed. Print handoff is now pending.');
+            setMessage(allocation.state === 'allocated'
+                ? (ur ? 'تخصیص مکمل ہو گئی۔' : 'Allocation completed. The print job will appear after processing.')
+                : (ur ? 'تخصیص ابھی مکمل نہیں ہوئی۔' : 'Allocation is still pending reconciliation.'));
         } catch (error) {
             setMessage(error instanceof Error ? error.message : 'Allocation retry was not completed.');
         } finally {

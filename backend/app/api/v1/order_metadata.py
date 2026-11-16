@@ -116,7 +116,7 @@ router = APIRouter(route_class=MetadataRoute)
 QUERY_SCHEMAS = {
     "order_number": {"type": "string", "minLength": 1, "maxLength": 40},
     "order_status": {"type": "string", "enum": list(ORDERS)},
-    "payment_status": {"type": "string", "enum": list(PAYMENTS)},
+    "payment_status": {"type": "string", "enum": [*PAYMENTS, "pending"]},
     "created_from": {"type": "string", "format": "date-time"},
     "created_before": {"type": "string", "format": "date-time"},
     "sort": {"type": "string", "enum": ["newest", "oldest"], "default": "newest"},
@@ -170,7 +170,7 @@ async def order_metadata(request: Request, context: Authenticated):
             status is not None
             and status not in ORDERS
             or payment is not None
-            and payment not in PAYMENTS
+            and payment not in (*PAYMENTS, "pending")
         ):
             raise ValueError()
         direction = q.get("sort", "newest")
@@ -262,7 +262,8 @@ async def order_metadata(request: Request, context: Authenticated):
       AND o.created_at<=:as_of
       AND (CAST(:number AS text) IS NULL OR o.order_number=:number)
       AND (CAST(:status AS text) IS NULL OR o.order_status=:status)
-      AND (CAST(:payment AS text) IS NULL OR o.payment_status=:payment)
+      AND (CAST(:payment AS text) IS NULL OR o.payment_status=:payment
+        OR (:payment='pending' AND o.payment_status IN ('awaiting_transfer','proof_submitted','under_review')))
       AND (CAST(:start AS timestamptz) IS NULL OR o.created_at>=:start)
       AND (CAST(:end AS timestamptz) IS NULL OR o.created_at<:end)
       AND (CAST(:after AS timestamptz) IS NULL OR (o.created_at,o.id){comparison}(:after,:ident))

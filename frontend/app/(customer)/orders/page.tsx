@@ -37,7 +37,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         <p>{ur ? "ادائیگی" : "Payment"}: <bdi>{orderStatus(order.payment_status, ur)}</bdi></p>
         <p>{ur ? "فراہمی" : "Fulfillment"}: <bdi>{orderStatus(order.fulfillment_status, ur)}</bdi></p>
         <Link className="button secondary" href={`/orders/${order.id}`}>{ur ? "آرڈر دیکھیں" : "View order"}</Link>
-        <Link className="button secondary" href={`/payments/${order.id}`}>{ur ? "ادائیگی اور ثبوت" : "Payment and evidence"}</Link>
+        <Link className="button secondary" href={`/checkout?orderId=${order.id}`}>
+          {order.order_status === 'placed' && ['awaiting_transfer', 'rejected'].includes(order.payment_status)
+            ? (ur ? 'ادائیگی مکمل کریں' : 'Complete payment')
+            : (ur ? 'ادائیگی کی تفصیلات' : 'Payment details')}
+        </Link>
       </article>)}</div>}
     {next && <Link className="button secondary" href={"/orders?cursor="+encodeURIComponent(next)}>{ur ? "اگلے آرڈرز" : "Next orders"}</Link>}
   </>;

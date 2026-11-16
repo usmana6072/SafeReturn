@@ -22,7 +22,7 @@ BIN = ROOT / ".local-tools/pg17-core/pgsql/bin"
 
 
 @contextmanager
-def local_cluster():
+def local_cluster(revision='0052_typed_finance_audit'):
     if os.environ.get("SAFERETURN_INDEPENDENT_FINANCE_REHEARSAL") != "1":
         raise RuntimeError("Explicit isolated rehearsal approval required")
     state = ROOT / "tmp" / ("finance-pg-" + uuid4().hex)
@@ -75,10 +75,10 @@ def local_cluster():
             cfg=Config(str(ROOT/'backend/alembic.ini'))
             cfg.set_main_option('script_location',str(ROOT/'backend/alembic'))
             cfg.attributes['connection']=c
-            command.upgrade(cfg,'0052_typed_finance_audit')
-            assert c.execute(text('SELECT version_num FROM public.alembic_version')).scalar_one()=='0052_typed_finance_audit'
+            command.upgrade(cfg, revision)
+            assert c.execute(text('SELECT version_num FROM public.alembic_version')).scalar_one() == revision
         engine.dispose()
-        print(f'LOCAL_REHEARSAL {state.name} port={port} migrations=0052 synthetic_auth=true',flush=True)
+        print(f'LOCAL_REHEARSAL {state.name} port={port} migrations={revision} synthetic_auth=true',flush=True)
         yield url,connect,state
     finally:
         # Stop only this freshly created and path-verified cluster. Preserve logs.

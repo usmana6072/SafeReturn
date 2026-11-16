@@ -88,6 +88,16 @@ code in the API process. The readiness endpoint remains protected by
 `SAFERETURN_READINESS_TOKEN` and checks PostgreSQL connectivity without exposing
 connection details.
 
+For paid typed orders, the Operations Print Jobs page lists the automatically
+created job and offers **Download PDF** once rendering completes. Apply Alembic
+through `0054_payment_qr_recovery` before releasing this flow. Run one dedicated
+printing worker replica from the same image with the start command
+`python -m app.workers.printing --poll-seconds 5` and no HTTP health check. Enable
+`SAFERETURN_PRINT_ENABLED` on the API and worker, and configure the worker's
+dedicated database login, matching data keys, reviewed template assets and private
+print storage. Payment approval and QR allocation record the durable handoff;
+the worker queues and renders it. Operations downloads the PDF for fulfillment.
+
 `ops/release-preflight.ps1` performs only HTTPS liveness and authorized
 readiness checks. It does not run migrations, write application data, call
 providers, or deploy. Run it against staging before any authorized promotion:

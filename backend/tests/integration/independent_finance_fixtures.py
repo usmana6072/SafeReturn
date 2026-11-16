@@ -10,7 +10,7 @@ def actor(c, uid):
     c.execute(text("SELECT set_config('safereturn.actor_id',:id,true),set_config('safereturn.mfa_verified','true',true)"), {"id":str(uid)})
 
 
-def seed(pg):
+def seed(pg, assets=None):
     staff, customer, sid, category, asset, policy = (uuid4() for _ in range(6))
     catalog = {}
     with pg.connect() as c:
@@ -45,9 +45,9 @@ def seed(pg):
         )
         c.execute(
             text(
-                "INSERT INTO public.print_template_asset_sets(asset_set_id,font_path,font_sha256,logo_path,logo_sha256,review_reference,reviewed_at) VALUES(:id,'synthetic/font.ttf',:hash,'synthetic/logo.svg',:hash,'SYNTHETIC fixture',now())"
+                "INSERT INTO public.print_template_asset_sets(asset_set_id,font_path,font_sha256,logo_path,logo_sha256,review_reference,reviewed_at) VALUES(:id,:font_path,:font_sha,:logo_path,:logo_sha,'SYNTHETIC fixture',now())"
             ),
-            {"id": asset, "hash": "a" * 64},
+            {"id": asset, **(assets or {"font_path": "synthetic/font.ttf", "font_sha": "a" * 64, "logo_path": "synthetic/logo.svg", "logo_sha": "a" * 64})},
         )
         c.execute(
             text(
@@ -153,7 +153,7 @@ def seed(pg):
         c.commit()
     return pg, staff, customer, sid, catalog
 
-def make_order(case, kinds=("lost",), copies=3):
+def make_order(case, kinds=("lost",), copies=3, *, submit_payment=True):
     pg, _staff, customer, _, catalog = case
     oid, address = uuid4(), uuid4()
     with pg.connect() as c:
@@ -211,7 +211,7 @@ def make_order(case, kinds=("lost",), copies=3):
                 "INSERT INTO public.payment_attempts(order_id,provider_key,idempotency_key,amount,state) VALUES(:id,'manual_bank',:key,:amount,'submitted') RETURNING id"
             ),
             {"id": oid, "key": uuid4().hex, "amount": len(kinds) * copies},
-        ).scalar_one()
+        ).scalar_one() if submit_payment else None
         c.commit()
     return oid, aid, len(kinds) * copies
 

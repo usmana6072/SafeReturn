@@ -2,6 +2,10 @@
 
 import argparse
 import json
+import logging
+import signal
+from threading import Event
+from time import monotonic
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -264,18 +268,37 @@ def run_one(database, s, storage=None, job_id=None):
 
 def main():
     p = argparse.ArgumentParser(
-        description="One bounded private-print worker iteration; no daemon"
+        description="Private print worker; one lease per iteration"
     )
-    p.add_argument("--once", action="store_true", required=True)
-    p.parse_args()
+    mode = p.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--once", action="store_true")
+    mode.add_argument("--poll-seconds", type=int)
+    args = p.parse_args()
+    if args.poll_seconds is not None and not 5 <= args.poll_seconds <= 300:
+        p.error("--poll-seconds must be between 5 and 300")
     s = Settings()
+    if not s.print_enabled:
+        raise SystemExit("Private printing is disabled")
     database = Database.from_settings(
         s.model_copy(update={"database_url": s.worker_database_url})
     )
     if not database or not s.worker_database_url:
         raise SystemExit("Dedicated worker configuration required")
     try:
-        run_one(database, s)
+        if args.once:
+            run_one(database, s)
+        else:
+            stopped = Event()
+            for stop in (signal.SIGINT, signal.SIGTERM):
+                signal.signal(stop, lambda *_: stopped.set())
+            logger = logging.getLogger(__name__)
+            while not stopped.is_set():
+                started = monotonic()
+                try:
+                    run_one(database, s)
+                except SQLAlchemyError:
+                    logger.warning("Private print queue temporarily unavailable")
+                stopped.wait(max(0, args.poll_seconds - (monotonic() - started)))
     finally:
         database.close()
 

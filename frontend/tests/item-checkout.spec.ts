@@ -37,14 +37,31 @@ test('phone requires country code; three copies do not require a separate identi
  expect(commands[0].body.address.phone).toBe('+923001234567');
 });
 
-test("single-type multi-size quote and submit retain legacy cart and server totals",async({page},info)=>{
+test("quote confirmation opens the required payment step and preserves server totals",async({page},info)=>{
  const commands:any[]=[];let uncertain=true;
  await page.route("**/checkout/api",async r=>{const command=r.request().postDataJSON();commands.push(command);if(command.path.endsWith("/confirm")){if(uncertain){uncertain=false;return r.fulfill({status:503,json:{error:{code:"UNAVAILABLE",message:"PRIVATE_CANARY"}}});}return r.fulfill({status:201,json:{order_id:oid}});}return r.fulfill({status:201,json:{quote_id:qid,expires_at:new Date(Date.now()+60000).toISOString(),currency_code:"PKR",subtotal_pkr:"61.50",shipping_pkr:"50.00",tax_pkr:"2.50",total_pkr:"114.00",identity_count:1,payment_instructions:instructions,items:[{product_name:"Lost sticker",qr_type:"lost",quantity:5,unit_price:"12.30",line_total:"61.50",sizes:[{name:"35 mm",copies:2},{name:"45 mm",copies:3}]}]}});});
  await mount(page,"ItemCheckoutCart",{products:[product],language:"en",checkout:true});await fillAddress(page);await page.getByRole("button",{name:"Get final quote",exact:true}).click();
+ const paymentRequests:unknown[]=[];
+ const paymentStep=`https://item-checkout.test/checkout?orderId=${oid}`;
+ await page.route(paymentStep, route => route.fulfill({contentType:'text/html',body:`<!doctype html><div id="root"></div><script>window.qaProps=${JSON.stringify({orderId:oid,language:'en'})};${bundle({componentPath:'../components/customer-payment.tsx',exportName:'PaymentForm'})}</script>`}));
+ await page.route('**/payments/api**', route => {
+  if (route.request().method() === 'POST') paymentRequests.push(route.request().postDataJSON());
+  return route.fulfill({json:route.request().url().includes('payment-instructions')?instructions:{items:[],payment_due:'114.00',currency_code:'PKR',payment_open:true}});
+ });
  await expect(page.getByRole("heading",{name:"Review order"})).toBeVisible();await expect(page.getByText("5 × PKR 12.30 = PKR 61.50",{exact:true})).toBeVisible();await expect(page.getByText("Payment evidence is not verified payment.",{exact:true})).toBeVisible();
  await page.screenshot({path:info.outputPath("quote-en.png"),fullPage:true});expect(commands[0].body).toMatchObject({commerce_model:"single_qr",items:cart});expect(JSON.stringify(commands[0].body)).not.toMatch(/price|qr_uses|public_token/);
- await page.getByLabel("I accept the total and shipping details.",{exact:true}).check();await page.getByRole("button",{name:"Submit order",exact:true}).click();await expect(page.getByRole("status")).toContainText("preserved");expect(await page.evaluate(key=>localStorage.getItem(key),key)).not.toBeNull();
- await page.getByRole("button",{name:"Submit order",exact:true}).click();await expect(page.getByRole("heading",{name:"Order submitted."})).toBeVisible();expect(commands[1].key).toBe(commands[2].key);expect(await page.evaluate(key=>localStorage.getItem(key),key)).toBeNull();expect(await page.evaluate(()=>localStorage.getItem("safereturn-cart-v1"))).toBe("legacy-cart-canary");expect(await page.locator("body").innerText()).not.toContain("PRIVATE_CANARY");await page.screenshot({path:info.outputPath("submitted-en.png"),fullPage:true});
+ await page.getByLabel("I accept the total and shipping details.",{exact:true}).check();await page.getByRole("button",{name:"Continue to payment",exact:true}).click();await expect(page.getByRole("status")).toContainText("preserved");expect(await page.evaluate(key=>localStorage.getItem(key),key)).not.toBeNull();
+ await page.getByRole("button",{name:"Continue to payment",exact:true}).click();
+ await expect(page).toHaveURL(paymentStep);
+ await expect(page.getByRole('heading',{name:'Complete payment'})).toBeVisible();
+ await expect(page.getByText('PKR 114.00',{exact:true})).toBeVisible();
+ await page.getByLabel('Sender holder name').fill('Synthetic holder');
+ await page.getByLabel('Sender account').fill('SYNTHETIC');
+ const file=page.getByLabel('Payment receipt (required)');
+ await page.getByRole('button',{name:'Submit payment for review'}).click();
+ await expect(file).toBeFocused();
+ expect(paymentRequests).toHaveLength(0);
+ expect(commands[1].key).toBe(commands[2].key);expect(await page.evaluate(key=>localStorage.getItem(key),key)).toBeNull();expect(await page.evaluate(()=>localStorage.getItem("safereturn-cart-v1"))).toBe("legacy-cart-canary");expect(await page.locator("body").innerText()).not.toContain("PRIVATE_CANARY");
 });
 
 test("default product lines merge and explicit identity groups stay separate",async({page})=>{
@@ -57,14 +74,29 @@ test("default product lines merge and explicit identity groups stay separate",as
 test("stale quotes and denial preserve cart and hide private errors",async({page})=>{
  const commands:any[]=[];
  await page.route("**/checkout/api",r=>{const c=r.request().postDataJSON();commands.push(c);return c.path.endsWith("/confirm")?r.fulfill({status:409,json:{error:{code:"QUOTE_STALE",message:"PRIVATE_CANARY"}}}):r.fulfill({json:{quote_id:qid,expires_at:new Date(Date.now()+60000).toISOString(),items:[],payment_instructions:instructions,subtotal_pkr:"61.50",shipping_pkr:"50.00",tax_pkr:"2.50",total_pkr:"114.00",currency_code:"PKR"}});});
- await mount(page,"ItemCheckoutCart",{products:[product],language:"en",checkout:true});await fillAddress(page);await page.getByRole("button",{name:"Get final quote",exact:true}).click();await page.getByLabel("I accept the total and shipping details.",{exact:true}).check();await page.getByRole("button",{name:"Submit order",exact:true}).click();await expect(page.getByRole("status")).toContainText("fresh quote");expect(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)!),key)).toEqual(cart);expect(await page.locator("body").innerText()).not.toContain("PRIVATE_CANARY");await page.getByRole("button",{name:"Get final quote",exact:true}).click();await expect(page.getByRole("heading",{name:"Review order"})).toBeVisible();expect(commands[0].key).not.toBe(commands[2].key);
+ await mount(page,"ItemCheckoutCart",{products:[product],language:"en",checkout:true});await fillAddress(page);await page.getByRole("button",{name:"Get final quote",exact:true}).click();await page.getByLabel("I accept the total and shipping details.",{exact:true}).check();await page.getByRole("button",{name:"Continue to payment",exact:true}).click();await expect(page.getByRole("status")).toContainText("fresh quote");expect(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)!),key)).toEqual(cart);expect(await page.locator("body").innerText()).not.toContain("PRIVATE_CANARY");await page.getByRole("button",{name:"Get final quote",exact:true}).click();await expect(page.getByRole("heading",{name:"Review order"})).toBeVisible();expect(commands[0].key).not.toBe(commands[2].key);
 });
 
 test("private evidence retry never declares verified payment",async({page})=>{
  let uploaded=0,finalized=0;const commands:any[]=[];
- await page.route("**/payments/api**",async r=>{if(r.request().method()==="GET")return r.fulfill({json:r.request().url().includes("payment-instructions")?instructions:{items:[]}});const c=r.request().postDataJSON();commands.push(c);if(c.path.endsWith("/payment-attempts"))return r.fulfill({json:{attempt_id:aid,state:"under_review"}});if(c.path.endsWith("/evidence-uploads"))return r.fulfill({json:{upload_url:"https://private-storage.synthetic.invalid/evidence",upload_token:"synthetic-private-grant"}});finalized++;return r.fulfill({status:finalized===1?503:200,json:finalized===1?{error:{code:"UNAVAILABLE"}}:{received:true}});});
- await page.route("https://private-storage.synthetic.invalid/**",r=>{uploaded++;return r.fulfill({status:200,headers:{"Access-Control-Allow-Origin":"*"},body:""});});
- await mount(page,"PaymentForm",{orderId:oid,language:"en"});await expect(page.getByText("Synthetic Bank",{exact:true})).toBeVisible();await page.getByLabel("Sender holder name",{exact:true}).fill("Synthetic holder");await page.getByLabel("Sender account",{exact:true}).fill("SYNTHETIC");await page.getByRole("button",{name:"Submit for review",exact:true}).click();await page.getByLabel("Optional private evidence",{exact:true}).setInputFiles({name:"proof.png",mimeType:"image/png",buffer:Buffer.from("synthetic-proof")});await page.getByRole("button",{name:"Upload evidence",exact:true}).click();await expect(page.getByRole("status")).toContainText("Request not confirmed");await page.getByRole("button",{name:"Upload evidence",exact:true}).click();await expect(page.getByRole("status")).toHaveText("Evidence received. Payment remains under review.");expect(uploaded).toBe(1);const final=commands.filter(c=>c.path.endsWith("evidence-finalize"));expect(final[0].key).toBe(final[1].key);expect(await page.evaluate(()=>localStorage.getItem("safereturn-item-cart-v2"))).not.toContain("synthetic-private-grant");
+ await page.route("**/payments/api**",async r=>{if(r.request().method()==="GET")return r.fulfill({json:r.request().url().includes("payment-instructions")?instructions:{items:[],payment_due:'114.00',currency_code:'PKR',payment_open:true}});const c=r.request().postDataJSON();commands.push(c);if(c.path.endsWith("/payment-attempts"))return r.fulfill({json:{attempt_id:aid,state:"initiated"}});if(c.path.endsWith("/evidence-uploads"))return r.fulfill({json:{upload_url:"https://item-checkout.test/synthetic-storage/evidence",upload_token:"synthetic-private-grant"}});finalized++;return r.fulfill({status:finalized===1?503:200,json:finalized===1?{error:{code:"UNAVAILABLE"}}:{received:true,payment_state:'under_review'}});});
+ await page.route("**/synthetic-storage/evidence",r=>{uploaded++;return r.fulfill({status:200,body:""});});
+ await mount(page,"PaymentForm",{orderId:oid,language:"en"});
+ await expect(page.getByText("Synthetic Bank",{exact:true})).toBeVisible();
+ await page.getByLabel("Sender holder name",{exact:true}).fill("Synthetic holder");
+ await page.getByLabel("Sender account",{exact:true}).fill("SYNTHETIC");
+ await page.getByLabel("Payment receipt (required)",{exact:true}).setInputFiles({name:"Bank receipt (1).png",mimeType:"image/png",buffer:Buffer.from("synthetic-proof")});
+ const submit=page.getByRole('button',{name:'Submit payment for review'});
+ await submit.click();
+ await expect(page.getByRole('status')).toContainText('could not be confirmed');
+ await expect(page.getByText(/Your payment details are saved/)).toBeVisible();
+ await submit.click();
+ await expect(page.getByRole('status')).toHaveText('Payment details and receipt submitted. Your payment is under review.');
+ expect(uploaded).toBe(1);
+ expect(commands.filter(c=>c.path.endsWith('payment-attempts'))).toHaveLength(1);
+ const final=commands.filter(c=>c.path.endsWith('evidence-finalize'));
+ expect(final[0].key).toBe(final[1].key);
+ expect(await page.evaluate(()=>localStorage.getItem('safereturn-item-cart-v2'))).not.toContain('synthetic-private-grant');
 });
 
 test("Urdu single-QR cart fits mobile and unavailable size blocks quote",async({page},info)=>{

@@ -230,6 +230,7 @@ def create_payment_attempt(
         ).first()
         if active:
             fail(409, "PAYMENT_ALREADY_PENDING")
+        state = "initiated" if order.get("commerce_model") == "single_qr" else "submitted"
         aid = uuid4()
         account, version = encrypt(s, aid, "sender_account", body.sender_account)
         holder, _ = encrypt(
@@ -245,7 +246,7 @@ def create_payment_attempt(
         )
         context.session.execute(
             text("""INSERT INTO public.payment_attempts(id,order_id,provider_key,idempotency_key,amount,currency_code,state,sender_account_ciphertext,sender_holder_ciphertext,sender_key_version,sender_reference_masked)
-        VALUES(:id,:oid,'manual_bank',:key,:amount,:currency,'submitted',:account,:holder,:version,:masked)"""),
+        VALUES(:id,:oid,'manual_bank',:key,:amount,:currency,:state,:account,:holder,:version,:masked)"""),
             {
                 "id": aid,
                 "oid": order_id,
@@ -254,25 +255,19 @@ def create_payment_attempt(
                 ).hexdigest(),
                 "amount": order["total_pkr"],
                 "currency": order["currency_code"],
+                "state": state,
                 "account": account,
                 "holder": holder,
                 "version": version,
                 "masked": "****" + body.sender_account[-4:],
             },
         )
-        context.session.execute(
-            text(
-                "UPDATE public.payment_attempts SET state='under_review' WHERE id=:id"
-            ),
-            {"id": aid},
-        )
-        context.session.execute(
-            text("UPDATE public.orders SET payment_status='under_review' WHERE id=:id"),
-            {"id": order_id},
-        )
+        if state == "submitted":
+            move_payment_to_review(context, order_id, aid)
+            state = "under_review"
         return {
             "attempt_id": str(aid),
-            "state": "under_review",
+            "state": state,
             "sender_account_masked": "****" + body.sender_account[-4:],
             "evidence_upload_allowed": True,
             "payment_due": f"{order['total_pkr']:.2f}",
@@ -292,13 +287,51 @@ def create_payment_attempt(
 def list_payment_attempts(order_id: UUID, context: Authenticated):
     require_verified_account(context)
     require_order_owner(context, order_id)
+    order = context.session.execute(
+        text("SELECT order_status,payment_status,total_pkr,currency_code FROM public.orders WHERE id=:id"),
+        {"id": order_id},
+    ).mappings().one()
     rows = context.session.execute(
         text(
-            "SELECT id,provider_key,state,amount,currency_code,sender_reference_masked,created_at FROM public.payment_attempts WHERE order_id=:id ORDER BY created_at DESC,id DESC"
+            """SELECT p.id,p.provider_key,p.state,p.amount,p.currency_code,p.sender_reference_masked,p.created_at,
+            EXISTS(SELECT 1 FROM public.payment_evidence e WHERE e.attempt_id=p.id) AS evidence_received
+            FROM public.payment_attempts p WHERE p.order_id=:id ORDER BY p.created_at DESC,p.id DESC"""
         ),
         {"id": order_id},
     ).mappings()
-    return {"items": [dict(r, amount=f"{r['amount']:.2f}") for r in rows]}
+    return {
+        "items": [dict(r, amount=f"{r['amount']:.2f}") for r in rows],
+        "payment_due": f"{order['total_pkr']:.2f}",
+        "currency_code": order["currency_code"],
+        "payment_open": order["order_status"] == "placed" and order["payment_status"] not in {"verified", "refunded"},
+    }
+
+
+def move_payment_to_review(context, order_id, attempt_id):
+    context.session.execute(
+        text("UPDATE public.payment_attempts SET state='under_review' WHERE id=:id"),
+        {"id": attempt_id},
+    )
+    context.session.execute(
+        text("UPDATE public.orders SET payment_status='under_review' WHERE id=:id"),
+        {"id": order_id},
+    )
+
+
+def evidence_received(context, attempt_id):
+    return context.session.execute(
+        text("SELECT EXISTS(SELECT 1 FROM public.payment_evidence WHERE attempt_id=:id)"),
+        {"id": attempt_id},
+    ).scalar_one()
+
+
+def require_open_evidence(context, attempt_id):
+    order, attempt = lock_attempt(context, attempt_id)
+    if order["order_status"] != "placed" or attempt["state"] not in {"under_review", "submitted", "initiated"}:
+        fail(409, "PAYMENT_CLOSED")
+    if evidence_received(context, attempt_id):
+        fail(409, "EVIDENCE_ALREADY_RECEIVED")
+    return order, attempt
 
 
 @router.post(
@@ -311,16 +344,7 @@ def authorize_evidence_upload(
     require_payment_owner(context, attempt_id)
 
     def work(s):
-        a = (
-            context.session.execute(
-                text("SELECT state FROM public.payment_attempts WHERE id=:id"),
-                {"id": attempt_id},
-            )
-            .mappings()
-            .one()
-        )
-        if a["state"] not in {"under_review", "submitted", "initiated"}:
-            fail(409, "PAYMENT_CLOSED")
+        require_open_evidence(context, attempt_id)
         count = context.session.execute(
             text(
                 "SELECT count(*) FROM public.idempotency_records WHERE actor_user_id=:uid AND operation=:op"
@@ -386,33 +410,28 @@ def finalize_evidence(
     def work(s):
         if payload["expires"] < time.time():
             fail(409, "UPLOAD_EXPIRED")
+        order, attempt = require_open_evidence(context, attempt_id)
         storage(request).verify(payload)
-        _, a = lock_attempt(context, attempt_id)
-        if a["state"] not in {"under_review", "submitted", "initiated"}:
-            fail(409, "PAYMENT_CLOSED")
-        old = context.session.execute(
-            text("SELECT id FROM public.payment_evidence WHERE object_key=:key"),
-            {"key": payload["object_key"]},
-        ).scalar_one_or_none()
-        eid = old or uuid4()
-        if not old:
-            context.session.execute(
-                text(
-                    "INSERT INTO public.payment_evidence(id,attempt_id,object_key,sha256_hex,content_type,bytes_size) VALUES(:id,:aid,:key,:hash,:type,:size)"
-                ),
-                {
-                    "id": eid,
-                    "aid": attempt_id,
-                    "key": payload["object_key"],
-                    "hash": body.sha256,
-                    "type": payload["content_type"],
-                    "size": payload["bytes_size"],
-                },
-            )
+        eid = uuid4()
+        context.session.execute(
+            text(
+                "INSERT INTO public.payment_evidence(id,attempt_id,object_key,sha256_hex,content_type,bytes_size) VALUES(:id,:aid,:key,:hash,:type,:size)"
+            ),
+            {
+                "id": eid,
+                "aid": attempt_id,
+                "key": payload["object_key"],
+                "hash": body.sha256,
+                "type": payload["content_type"],
+                "size": payload["bytes_size"],
+            },
+        )
+        if order.get("commerce_model") == "single_qr" and attempt["state"] != "under_review":
+            move_payment_to_review(context, order["id"], attempt_id)
         return {
             "evidence_id": str(eid),
             "received": True,
-            "payment_state": a["state"],
+            "payment_state": "under_review" if order.get("commerce_model") == "single_qr" else attempt["state"],
         }, eid
 
     return record(
@@ -435,14 +454,18 @@ def review_payment(
 
     def work(s):
         order, a = lock_attempt(context, attempt_id)
+        typed = order.get("commerce_model") == "single_qr"
+        if typed and a["state"] == "initiated":
+            fail(409, "PAYMENT_EVIDENCE_REQUIRED")
         if (
             a["state"] not in {"under_review", "submitted"}
             or order["payment_status"] == "verified"
         ):
             fail(409, "PAYMENT_CLOSED")
+        if typed and body.decision == "verify" and not evidence_received(context, attempt_id):
+            fail(409, "PAYMENT_EVIDENCE_REQUIRED")
         fingerprint = None
         if body.decision == "verify":
-            typed = order.get("commerce_model", "legacy_pair") == "single_qr"
             from app.api.v1.financial_disputes import require_order_clear
 
             if not typed:
@@ -479,7 +502,7 @@ def review_payment(
                      "fingerprint": fingerprint, "reason": body.reason}).scalar_one())
                 allocation = value.get("allocation")
                 if isinstance(allocation, dict) and allocation.get("state") == "reconciliation_pending" and allocation.get("reason_code") == "stock_shortage":
-                    value = typed_result(context.session.execute(text(
+                    value["allocation"] = typed_result(context.session.execute(text(
                         "SELECT public.sr_typed_payment_autogenerate(:sid,:oid,:seed)"
                     ), {
                         "sid": context.principal.session_id,
