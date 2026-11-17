@@ -5,7 +5,7 @@ import io
 import json
 import re
 import threading
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -130,9 +130,16 @@ def digest(value):
     return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 
-def asset_bytes(asset):
+def asset_bytes(asset, *, asset_root=None):
     try:
-        data = Path(asset["path"]).read_bytes()
+        path = Path(asset["path"])
+        frozen_path = PurePosixPath(asset["path"])
+        if asset_root and frozen_path.parent == PurePosixPath("/app/print-assets"):
+            root = Path(asset_root).resolve()
+            path = (root / frozen_path.name).resolve()
+            if not path.is_relative_to(root):
+                raise ValueError()
+        data = path.read_bytes()
         if len(data) > 5_000_000 or hashlib.sha256(data).hexdigest() != asset["sha256"]:
             raise ValueError()
         return data
@@ -245,12 +252,12 @@ def checked_logo(data):
     return svg2rlg(io.BytesIO(data))
 
 
-def render_pdf(manifest):
+def render_pdf(manifest, *, asset_root=None):
     if manifest.get("renderer") != RENDERER:
         raise PrintUnavailable("unsupported_renderer")
     with LOCK:
-        font_data = asset_bytes(manifest["font"])
-        logo = checked_logo(asset_bytes(manifest["logo"]))
+        font_data = asset_bytes(manifest["font"], asset_root=asset_root)
+        logo = checked_logo(asset_bytes(manifest["logo"], asset_root=asset_root))
         font_name = "SR" + manifest["font"]["sha256"][:16]
         if font_name not in pdfmetrics.getRegisteredFontNames():
             pdfmetrics.registerFont(

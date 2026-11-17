@@ -13,12 +13,29 @@ const headers = {
     'Content-Security-Policy': 'sandbox',
 };
 
+async function hasRequestBody(request: NextRequest) {
+    if (request.headers.has('content-encoding') || Number(request.headers.get('content-length') ?? 0) !== 0)
+        return true;
+    if (!request.body) return false;
+    // Next.js wraps POSTs in a stream even when the browser sent no bytes.
+    const reader = request.body.getReader();
+    try {
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) return false;
+            if (value.byteLength) return true;
+        }
+    } finally {
+        await reader.cancel();
+    }
+}
+
 export async function POST(request: NextRequest) {
     const fail = (status: number) => NextResponse.json({ error: 'Print download unavailable' }, { status, headers });
     try {
         if (request.headers.get('origin') !== authConfig().origin || request.headers.get('sec-fetch-site') === 'cross-site')
             return fail(403);
-        if (request.body || request.nextUrl.searchParams.size !== 2) return fail(422);
+        if (request.nextUrl.searchParams.size !== 2 || await hasRequestBody(request)) return fail(422);
         let job: string, artifact: string;
         try {
             job = uuid(request.nextUrl.searchParams.get('job'));
@@ -35,7 +52,7 @@ export async function POST(request: NextRequest) {
             headers: { Authorization: `Bearer ${session.token}`, Accept: 'application/pdf' },
         });
         if (!result.ok) return fail([401, 403, 404, 409, 410, 429].includes(result.status) ? result.status : 503);
-        if (result.status !== 200 || result.headers.get('content-type') !== 'application/pdf' || !result.body) return fail(503);
+        if (result.status !== 200 || result.headers.get('content-type')?.split(';')[0].trim() !== 'application/pdf' || !result.body) return fail(503);
         return new Response(result.body, { headers: { ...headers, 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="SR-print.pdf"' } });
     } catch (error) {
         return fail(error instanceof StaffAccessError && [401, 403].includes(error.status) ? error.status : 503);

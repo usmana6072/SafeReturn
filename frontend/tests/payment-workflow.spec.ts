@@ -1,6 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { Readable } from 'node:stream';
+import path from 'node:path';
 
 const bundle = require('./qa-browser-bundle.cjs');
+const { harness } = require('./quarantine-fixture.cjs');
+const { NextRequestAdapter } = require('next/dist/server/web/spec-extension/adapters/next-request');
 const origin = 'https://payments.test';
 const order = '00000000-0000-0000-0000-000000000701';
 const attempt = '00000000-0000-0000-0000-000000000702';
@@ -79,24 +84,49 @@ test('evidence form closes after the receipt and stays closed after reloading', 
     await expect(page.getByRole('button', { name: 'Submit payment for review' })).toHaveCount(0);
 });
 
-test('a ready typed print job offers a PDF download', async ({ page }) => {
+test('the real download relay serves a ready PDF from an empty streamed POST', async ({ page }) => {
     let status = 'queued';
+    let unavailable = true;
+    const pdf = '%PDF-1.4\n%%EOF';
+    const endpoint = `/admin/print-jobs/download-api?job=${job}&artifact=${artifact}`;
+    const fixture = harness({ origin, respond(url: string, init: RequestInit) {
+        expect(new URL(url).pathname).toBe(`/api/v1/admin/print-jobs/${job}/artifacts/${artifact}/download`);
+        expect(init.method).toBe('POST');
+        if (unavailable) return Response.json({}, { status: 503 });
+        status = 'downloaded';
+        return new Response(pdf, { headers: { 'content-type': 'application/pdf' } });
+    } });
+    const { POST } = fixture.load(path.resolve(__dirname, '../app/admin/print-jobs/download-api/route.ts'));
+    function request(url: string, headers: Record<string, string>, bytes: Buffer[] = []) {
+        return NextRequestAdapter.fromNodeNextRequest({ url, method: 'POST', headers, body: Readable.from(bytes) }, new AbortController().signal);
+    }
+    const withBody = await POST(request(origin + endpoint, { origin }, [Buffer.from('unexpected')]));
+    expect(withBody.status).toBe(422);
+    expect(fixture.state.calls).toHaveLength(0);
+
     await page.route('**/admin/print-jobs/metadata-api?*', route => route.fulfill({ json: {
         id: job, order_id: order, status, job_revision: 1, template_fingerprint: 'a'.repeat(64), attempt_count: 1, failure_category: null, typed_order: true,
-        artifacts: status === 'queued' ? [] : [{ id: artifact, format: 'pdf', size_bytes: 15, sha256_hex: 'a'.repeat(64), deleted_at: null }],
+        artifacts: status === 'queued' ? [] : [{ id: artifact, format: 'pdf', size_bytes: Buffer.byteLength(pdf), sha256_hex: 'a'.repeat(64), deleted_at: null }],
     } }));
-    await page.route(`**/admin/print-jobs/download-api?job=${job}&artifact=${artifact}`, route => {
-        expect(route.request().method()).toBe('POST');
-        status = 'downloaded';
-        return route.fulfill({ contentType: 'application/pdf', body: '%PDF-1.4\n%%EOF' });
+    await page.route(`**${endpoint}`, async route => {
+        const incoming = route.request();
+        expect(incoming.method()).toBe('POST');
+        const response = await POST(request(incoming.url(), await incoming.allHeaders()));
+        return route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
     });
     await mount(page, '../components/admin-print-jobs.tsx', 'AdminPrintJobs', { jobId: job });
     await expect(page.getByText('queued', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Download PDF' })).toHaveCount(0);
     status = 'ready';
     await page.getByRole('button', { name: 'Refresh Print Job' }).click();
+    await page.getByRole('button', { name: 'Download PDF' }).click();
+    await expect(page.getByRole('alert')).toHaveText('The print file could not be downloaded. Try again.');
+    unavailable = false;
     const downloading = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Download PDF' }).click();
-    expect((await downloading).suggestedFilename()).toBe('SR-print.pdf');
+    const saved = await downloading;
+    expect(saved.suggestedFilename()).toBe('SR-print.pdf');
+    expect(await readFile(await saved.path(), 'utf8')).toBe(pdf);
+    await expect(page.getByRole('link', { name: 'Save PDF' })).toBeVisible();
     await expect(page.getByText('downloaded', { exact: true })).toBeVisible();
 });

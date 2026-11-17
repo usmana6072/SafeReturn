@@ -1,0 +1,23 @@
+services:
+  - type: worker
+    name: safereturn-print-worker
+    runtime: docker
+    branch: main
+    plan: starter
+    numInstances: 1
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: python -m app.workers.printing --poll-seconds 5
+    envVars:
+      - key: SAFERETURN_PRINT_ENABLED
+        value: "true"
+      - key: SAFERETURN_WORKER_DATABASE_URL
+        sync: false
+      - key: SAFERETURN_PROFILE_DATA_KEYS
+        sync: false
+      - key: SAFERETURN_PROFILE_DATA_KEY_VERSION
+        sync: false
+      - key: SAFERETURN_SUPABASE_URL
+        sync: false
+      - key: SAFERETURN_SUPABASE_STORAGE_SERVICE_KEY
+        sync: false

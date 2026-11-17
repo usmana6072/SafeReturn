@@ -428,8 +428,6 @@ def print_pdf_response(data):
 @router.post("/admin/print-jobs/{job_id}/artifacts/{artifact_id}/download", operation_id="typed-print-download")
 def download_typed_print(job_id: UUID, artifact_id: UUID, context: Authenticated, request: Request):
     require_staff(context, "operations")
-    if not request.app.state.settings.print_enabled:
-        fail(503, "PRINT_DISABLED")
     a, data = load_private_pdf(context, request, artifact_id, typed_job_id=job_id)
     context.session.execute(
         text("UPDATE public.print_jobs SET status='downloaded' WHERE id=:id AND status='ready'"),

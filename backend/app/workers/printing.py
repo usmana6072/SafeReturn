@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.auth import AccessError
 from app.api.v1.printing import binding_matches, enqueue, occurrences
 from app.core.config import Settings
 from app.core.print_render import PrintUnavailable, digest, render_pdf
@@ -20,6 +21,8 @@ from app.db.runtime import worker_transaction
 from app.db.session import Database
 from app.db.template_registry import gate, order_specs
 from app.integrations.print_storage import PrintStore
+
+logger = logging.getLogger(__name__)
 
 
 class LeaseLost(Exception):
@@ -160,7 +163,11 @@ def run_one(database, s, storage=None, job_id=None):
                 {"id": lease["print_job_id"]},
             )
         # No transaction held during shaping, PDF generation or HTTP.
-        data, info = render_pdf(manifest)
+        asset_root = getattr(s, "print_template_asset_root", None)
+        if asset_root:
+            data, info = render_pdf(manifest, asset_root=asset_root)
+        else:
+            data, info = render_pdf(manifest)
         key = (
             "order-print/"
             + str(lease["order_id"])
@@ -219,6 +226,7 @@ def run_one(database, s, storage=None, job_id=None):
         ProfileCryptoUnavailable,
         SQLAlchemyError,
         HTTPException,
+        AccessError,
     ) as error:
         code = (
             (
@@ -228,6 +236,8 @@ def run_one(database, s, storage=None, job_id=None):
                 else "print_policy_denied"
             )
             if isinstance(error, HTTPException)
+            else "print_policy_denied"
+            if isinstance(error, AccessError)
             else str(error)
             if isinstance(error, PrintUnavailable)
             else "database_recheck_failed"
@@ -236,6 +246,7 @@ def run_one(database, s, storage=None, job_id=None):
         )
         if not code or len(code) > 80:
             code = "print_unavailable"
+        logger.warning("Private print %s attempt failed: %s", lease["job_kind"], code)
         try:
             with worker_transaction(database, lease["lease_owner"]) as db:
                 # Failure bookkeeping cannot release an artifact and must remain
@@ -285,17 +296,22 @@ def main():
     if not database or not s.worker_database_url:
         raise SystemExit("Dedicated worker configuration required")
     try:
+        logging.basicConfig(level=logging.INFO)
+        try:
+            storage = PrintStore(s)
+        except PrintUnavailable as error:
+            raise SystemExit(f"Private print worker configuration: {error}") from None
         if args.once:
-            run_one(database, s)
+            run_one(database, s, storage)
         else:
             stopped = Event()
             for stop in (signal.SIGINT, signal.SIGTERM):
                 signal.signal(stop, lambda *_: stopped.set())
-            logger = logging.getLogger(__name__)
+            logger.info("Private print worker started with a %s second poll interval", args.poll_seconds)
             while not stopped.is_set():
                 started = monotonic()
                 try:
-                    run_one(database, s)
+                    run_one(database, s, storage)
                 except SQLAlchemyError:
                     logger.warning("Private print queue temporarily unavailable")
                 stopped.wait(max(0, args.poll_seconds - (monotonic() - started)))

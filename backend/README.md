@@ -93,10 +93,21 @@ created job and offers **Download PDF** once rendering completes. Apply Alembic
 through `0054_payment_qr_recovery` before releasing this flow. Run one dedicated
 printing worker replica from the same image with the start command
 `python -m app.workers.printing --poll-seconds 5` and no HTTP health check. Enable
-`SAFERETURN_PRINT_ENABLED` on the API and worker, and configure the worker's
+`SAFERETURN_PRINT_ENABLED` on the worker, and configure the worker's
 dedicated database login, matching data keys, reviewed template assets and private
 print storage. Payment approval and QR allocation record the durable handoff;
 the worker queues and renders it. Operations downloads the PDF for fulfillment.
+
+On Render, select `ops/render.print-worker.yaml` as the Blueprint path for the
+printing worker. It provisions one Starter background worker from `main` and
+prompts for the five environment values used by the worker. Use the same
+Supabase project and data encryption keys as the web service, and the dedicated
+worker database login. Operations can download existing eligible PDFs through
+the API while rendering is disabled. In the worker logs, look for `Private
+print worker started`. Verify an already paid and allocated order reaches
+`ready` with a PDF in **Print Jobs**. The worker picks up pending handoffs on
+startup. For an older order held for a stock shortage, use the admin **Retry
+allocation** action before checking **Print Jobs**.
 
 `ops/release-preflight.ps1` performs only HTTPS liveness and authorized
 readiness checks. It does not run migrations, write application data, call

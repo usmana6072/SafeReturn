@@ -43,6 +43,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             payment_reference_key="synthetic-bank-reference-key",
             profile_data_keys=json.dumps({"1": base64.b64encode(b"x" * 32).decode()}),
             print_enabled=True,
+            print_template_asset_root=str(assets),
         )
         signing_key = ec.generate_private_key(ec.SECP256R1())
         jwks = httpx.MockTransport(
@@ -53,9 +54,9 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             case = seed(
                 SimpleNamespace(connect=database.engine.connect),
                 {
-                    "font_path": str(font),
+                    "font_path": f"/app/print-assets/{font.name}",
                     "font_sha": hashlib.sha256(font.read_bytes()).hexdigest(),
-                    "logo_path": str(logo),
+                    "logo_path": f"/app/print-assets/{logo.name}",
                     "logo_sha": hashlib.sha256(logo.read_bytes()).hexdigest(),
                 },
             )
@@ -249,6 +250,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             download = (
                 f"/admin/print-jobs/{job['id']}/artifacts/{artifact['id']}/download"
             )
+            app.state.settings.print_enabled = False
             assert call("POST", download).status_code == 403
             response = call("POST", download, finance=True)
             assert response.status_code == 200, response.text
