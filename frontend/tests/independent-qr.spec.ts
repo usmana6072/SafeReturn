@@ -7,7 +7,7 @@ async function mount(page:any,ur=false){
  await page.route('https://owner.test/**',(r:any)=>r.request().resourceType()!=='document'?r.fallback():r.fulfill({contentType:'text/html',body:'<!doctype html><html><head><style>*{box-sizing:border-box}body{padding:16px;margin:0;font:16px sans-serif}label{display:block;margin:8px 0}section,article{min-width:0;overflow-wrap:anywhere}button{max-width:100%}</style></head><body><div id="root"></div></body></html>'}));
  await page.goto('https://owner.test/');await page.evaluate((ur:boolean)=>{(window as any).qaProps={ur};},ur);await page.addScriptTag({content:bundle({componentPath:'../components/independent-qr.tsx',exportName:'IndependentQRs'})});
 }
-test('one delivered identity activates with explicit confirmation; uncertain retry keeps key',async({page})=>{
+test('one print-ready identity activates with explicit confirmation; uncertain retry keeps key',async({page})=>{
  let active=false,confirmations=0;const writes:any[]=[];
  await page.route('**/independent-qr/api**',r=>{
   if(r.request().method()==='GET')return r.fulfill({json:{items:[active?{...first,ownership_status:'active',public_status:'active',revision:3,can_activate:false}:first,second],next_cursor:null,activation_released:true}});
@@ -37,4 +37,4 @@ test('Urdu mobile keeps unreleased activation disabled and explains account enti
 
 test('inconsistent activation payload is rejected without exposing actions',async({page})=>{let writes=0;await page.route('**/independent-qr/api**',r=>{if(r.request().method()!=='GET'){writes++;return r.fulfill({status:409,json:{}});}return r.fulfill({json:{items:[first],next_cursor:null,activation_released:false}});});await mount(page);await expect(page.getByText('Information unavailable. Refresh to retry.')).toBeVisible();await expect(page.getByRole('button',{name:'Begin activation',exact:true})).toHaveCount(0);expect(writes).toBe(0);});
 
-test('closed activation release is explained for a valid empty purchaser list',async({page})=>{await page.route('**/independent-qr/api**',r=>r.fulfill({json:{items:[],next_cursor:null,activation_released:false}}));await mount(page);await expect(page.getByText('QR activation is not available yet.',{exact:false})).toBeVisible();});
+test('closed activation release is explained for a valid empty purchaser list',async({page})=>{await page.route('**/independent-qr/api**',r=>r.fulfill({json:{items:[],next_cursor:null,activation_released:false}}));await mount(page);await expect(page.getByText('QR activation is currently unavailable.',{exact:true})).toBeVisible();});

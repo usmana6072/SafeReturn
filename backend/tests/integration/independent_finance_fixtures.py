@@ -4,6 +4,7 @@ from uuid import uuid4
 from sqlalchemy import text
 from test_print_templates import content
 from app.core.inventory_secrets import new_public_token
+from app.core.profile_crypto import encrypt
 
 
 def actor(c, uid):
@@ -153,7 +154,7 @@ def seed(pg, assets=None, *, origin="https://synthetic.invalid"):
         c.commit()
     return pg, staff, customer, sid, catalog
 
-def make_order(case, kinds=("lost",), copies=3, *, submit_payment=True):
+def make_order(case, kinds=("lost",), copies=3, *, submit_payment=True, shipping_settings=None):
     pg, _staff, customer, _, catalog = case
     oid, address = uuid4(), uuid4()
     with pg.connect() as c:
@@ -175,11 +176,19 @@ def make_order(case, kinds=("lost",), copies=3, *, submit_payment=True):
             ),
             {"id": address, "uid": customer, "cipher": b"synthetic-ciphertext"},
         )
+        snapshot = {field: b"synthetic-ciphertext" for field in ("name", "phone", "street")}
+        if shipping_settings is not None:
+            for field, aad_field, value in (
+                ("name", "shipping_recipient_name", "Synthetic recipient"),
+                ("phone", "shipping_phone", "+923000000000"),
+                ("street", "shipping_address", "Synthetic address"),
+            ):
+                snapshot[field] = encrypt(shipping_settings, oid, aad_field, value)[0]
         c.execute(
             text(
-                "INSERT INTO public.order_shipping_snapshots(order_id,source_address_id,recipient_name_ciphertext,phone_ciphertext,address_ciphertext,city,key_version) VALUES(:id,:address,:cipher,:cipher,:cipher,'Synthetic',1)"
+                "INSERT INTO public.order_shipping_snapshots(order_id,source_address_id,recipient_name_ciphertext,phone_ciphertext,address_ciphertext,city,key_version) VALUES(:id,:address,:name,:phone,:street,'Synthetic',1)"
             ),
-            {"id": oid, "address": address, "cipher": b"synthetic-ciphertext"},
+            {"id": oid, "address": address, **snapshot},
         )
         for index, kind in enumerate(kinds):
             pid, vid = catalog[kind]

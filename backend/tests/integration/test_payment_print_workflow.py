@@ -39,7 +39,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
     assets = root / "backend/print-assets"
     font = next(assets.glob("*.ttf"))
     logo = next(assets.glob("*.svg"))
-    with local_cluster("0054_payment_qr_recovery") as (url, _, _):
+    with local_cluster("0055_print_ready_activation") as (url, _, _):
         database = Database(create_engine(url, hide_parameters=True))
         settings = Settings(
             supabase_url=ORIGIN,
@@ -69,6 +69,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             _, staff, customer, staff_sid, _ = case
             customer_sid = uuid4()
             with database.engine.begin() as c:
+                c.execute(text("UPDATE public.standalone_owner_release SET enabled=true"))
                 c.execute(
                     text(
                         "INSERT INTO auth.sessions(id,user_id,aal,not_after) VALUES(:id,:uid,'aal1',now()+interval '1 hour')"
@@ -76,7 +77,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                     {"id": customer_sid, "uid": customer},
                 )
             oid, _, amount = make_order(
-                case, kinds=("lost", "ice"), copies=3, submit_payment=False
+                case, kinds=("lost", "ice"), copies=3, submit_payment=False, shipping_settings=settings
             )
             stock(case, "lost")
             app = create_app(settings, verifier=verifier)
@@ -226,6 +227,19 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                         "SELECT qr_type,requested_quantity FROM public.qr_batches WHERE batch_code LIKE 'auto-%'"
                     )
                 ).all() == [("ice", 1)]
+                tags = c.execute(text("""SELECT a.logical_item_id, q.tag_type, q.public_token
+                    FROM public.order_item_qr_allocations a JOIN public.qr_codes q ON q.id=a.qr_id
+                    WHERE a.order_id=:id"""), {"id": oid}).mappings().all()
+                address = c.execute(text("SELECT source_address_id FROM public.order_shipping_snapshots WHERE order_id=:id"), {"id": oid}).scalar_one()
+
+            lost = next(tag for tag in tags if tag["tag_type"] == "lost")
+            purchase = {"logical_item_id": str(lost["logical_item_id"])}
+            scan = f"/api/v1/public/qr/{lost['public_token']}"
+            assert client.request("GET", scan).json() == {
+                "tag_type": "lost", "status": "unactivated", "locale_options": ["en", "ur"]
+            }
+            intents = "/me/independent-qr/activation-intents"
+            assert call("POST", intents, purchase).json()["error"]["code"] == "NOT_ELIGIBLE"
 
             objects = {}
             storage = SimpleNamespace(
@@ -236,6 +250,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             )
             job = call("GET", jobs, finance=True).json()["items"][0]
             assert job["status"] == "queued"
+            assert all(not item["can_activate"] for item in call("GET", "/me/independent-qr").json()["items"])
             assert run_one(database, settings, storage), (
                 "Expected the print job to render"
             )
@@ -245,6 +260,22 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             detail = call("GET", f"/admin/print-jobs/{job['id']}", finance=True).json()
             assert detail["status"] == "ready"
             assert len(detail["artifacts"]) == 1
+            assert all(item["can_activate"] for item in call("GET", "/me/independent-qr").json()["items"])
+            assert call("POST", intents, purchase, finance=True).status_code == 404
+            intent = call("POST", intents, purchase)
+            assert intent.status_code == 201, intent.text
+            confirm = call("POST", "/me/independent-qr/activations", {
+                "intent_id": intent.json()["intent_id"], "confirmed": True,
+            })
+            assert confirm.status_code == 201, confirm.text
+            projection = client.request("GET", scan).json()
+            assert projection["status"] == "active" and projection["lost_item"]["label"] is None
+            activated = confirm.json()
+            hidden = call("PATCH", f"/me/independent-qr/{activated['qr_id']}/availability", {
+                "public_status": "owner_disabled", "expected_revision": activated["revision"], "confirmed": True,
+            })
+            assert hidden.status_code == 200, hidden.text
+            assert client.request("GET", scan).json()["status"] == "owner_disabled"
             app.state.print_storage_transport = httpx.MockTransport(
                 lambda request: httpx.Response(
                     200,
@@ -281,6 +312,28 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                 call("GET", jobs, finance=True).json()["items"][0]["status"]
                 == "downloaded"
             )
+            app.state.settings.print_enabled = True
+            item_ids = [str(tag["logical_item_id"]) for tag in tags]
+            qa = call("POST", f"/admin/print-jobs/{job['id']}/qa", {
+                "approved": True,
+                "artifact_sha256": artifact["sha256_hex"],
+                "observed": [{"tag_type": tag["tag_type"], "symbol_mm": "35", "copies": 3} for tag in tags],
+                "scan_passed": True,
+                "logo_quiet_zone_passed": True,
+                "bilingual_passed": True,
+                "cutting_packaging_passed": True,
+                "actual_scale_passed": True,
+                "inspected_item_ids": item_ids,
+                "reason": "Synthetic physical QA passed",
+            }, finance=True)
+            assert qa.status_code == 200, qa.text
+            assert qa.json()["status"] == "qa_passed"
+            shipment = call("POST", "/admin/shipments", {
+                "order_id": str(oid), "shipping_address_id": str(address),
+                "logical_item_ids": item_ids, "carrier": "Synthetic carrier",
+                "reason": "Synthetic shipment after activation",
+            }, finance=True)
+            assert shipment.status_code in (200, 201), shipment.text
         finally:
             verifier.close()
             database.close()

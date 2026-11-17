@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import Link from "next/link";
 import { ownerApi } from "../../../lib/qr-server";
 import { getLanguage } from "../../../lib/i18n";
+import { customerOperationAvailable } from "../../../lib/customer-capabilities";
 import { changeScanLanguage } from "./scan-language";
 import { ScanForm } from "../../../components/qr-forms";
 import {
@@ -59,6 +60,7 @@ const statusCopy = {
     iceEmpty: "The owner has not published emergency details yet.",
     noPhone: "Contact numbers are not shown on the initial scan.",
     activate: "Activate QR",
+    activatePurchase: "Open My QR codes to activate",
     language: "اردو",
     home: "Back to website",
   },
@@ -74,6 +76,7 @@ const statusCopy = {
     iceEmpty: "مالک نے ابھی ہنگامی معلومات شائع نہیں کیں۔",
     noPhone: "ابتدائی اسکین میں رابطہ نمبر ظاہر نہیں کیے جاتے۔",
     activate: "کیو آر فعال کریں",
+    activatePurchase: "فعال کرنے کے لیے میرے QR کوڈز کھولیں",
     language: "English",
     home: "ویب سائٹ پر واپس",
   },
@@ -130,7 +133,14 @@ export default async function Page({
               : "No owner or order information is shown on this page."}
           </p>
           {profile.status === "unactivated" && (
-            <ScanForm token={token} ur={ur} />
+            <>
+              {customerOperationAvailable("GET", `/public/qr/${token}/activation-context`) && (
+                <ScanForm token={token} ur={ur} />
+              )}
+              <Link className="button" href="/independent-qr" prefetch={false}>
+                {t.activatePurchase}
+              </Link>
+            </>
           )}
         </>
       ) : profile.tag_type === "lost" ? (

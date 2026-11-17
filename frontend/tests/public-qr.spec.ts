@@ -63,7 +63,9 @@ for(const [state,title]of Object.entries({unactivated:'This tag is not active ye
     await page.goto(`/q/${token(state)}`);
     await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
     await expect(page.getByText('Public bag',{exact:true})).toHaveCount(0);
-    await expect(page.getByRole('button',{name:'Activate QR',exact:true})).toHaveCount(state==='unactivated'?1:0);
+    const activation = page.getByRole('link', { name: 'Open My QR codes to activate' });
+    await expect(activation).toHaveCount(state === 'unactivated' ? 1 : 0);
+    if (state === 'unactivated') await expect(activation).toHaveAttribute('href', '/independent-qr');
     for(const value of forbidden)expect(await page.content()).not.toContain(value);
   });
 }

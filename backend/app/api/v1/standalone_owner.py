@@ -1,4 +1,4 @@
-"""Delivered purchaser entitlement, separate from legacy pair activation."""
+"""Verified purchaser entitlement, separate from legacy pair activation."""
 
 import hashlib
 from typing import Literal
