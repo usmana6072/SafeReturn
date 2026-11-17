@@ -29,6 +29,7 @@ from app.core.print_render import (
     canonical,
     digest,
     load_bundle,
+    use_public_qr_origin,
 )
 from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt, encrypt
 from app.integrations.print_storage import store
@@ -245,14 +246,19 @@ def enqueue(session, s, oid, expected_revision, reason):
         manifest = frozen(session, s, previous)
         if not binding_matches(rows, manifest):
             fail(409, "PRINT_BINDING_CHANGED")
+    else:
+        manifest = registry_manifest(registry,rows) if registry is not None else build_manifest(load_bundle(s), rows)
+    manifest = use_public_qr_origin(manifest, s.print_template_public_origin)
+    if previous:
         session.execute(
             text("UPDATE public.print_jobs SET status='superseded' WHERE id=:id"),
             {"id": previous["id"]},
         )
-    else:
-        manifest = registry_manifest(registry,rows) if registry is not None else build_manifest(load_bundle(s), rows)
+    return enqueue_manifest(session, s, oid, expected_revision + 1, manifest)
+
+
+def enqueue_manifest(session, s, oid, revision, manifest):
     jid = uuid4()
-    revision = expected_revision + 1
     cipher, version = encrypt(s, oid, "print-render", canonical(manifest))
     session.execute(
         text(

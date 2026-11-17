@@ -15,7 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api.auth import AccessError
 from app.api.v1.printing import binding_matches, enqueue, occurrences
 from app.core.config import Settings
-from app.core.print_render import PrintUnavailable, digest, render_pdf
+from app.core.print_render import PrintUnavailable, digest, has_loopback_qr, render_pdf
 from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt
 from app.db.runtime import worker_transaction
 from app.db.session import Database
@@ -156,6 +156,8 @@ def run_one(database, s, storage=None, job_id=None):
             ).scalar_one()
             if job != digest(manifest):
                 raise PrintUnavailable("manifest_integrity_failure")
+            if has_loopback_qr(manifest):
+                raise PrintUnavailable("local_qr_destination_reprint_required")
             db.execute(
                 text(
                     "UPDATE public.print_jobs SET status='rendering',attempt_count=attempt_count+1,failure_code=NULL WHERE id=:id"

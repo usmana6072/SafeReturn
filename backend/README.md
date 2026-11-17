@@ -109,6 +109,11 @@ print worker started`. Verify an already paid and allocated order reaches
 startup. For an older order held for a stock shortage, use the admin **Retry
 allocation** action before checking **Print Jobs**.
 
+Set `SAFERETURN_PRINT_TEMPLATE_PUBLIC_ORIGIN` to the public web origin without
+an `/admin` or `/q` path. The print worker uses it for orders whose stored
+template contains a development loopback address. Previously rendered PDFs
+need a new revision to update the printed QR destination.
+
 `ops/release-preflight.ps1` performs only HTTPS liveness and authorized
 readiness checks. It does not run migrations, write application data, call
 providers, or deploy. Run it against staging before any authorized promotion:

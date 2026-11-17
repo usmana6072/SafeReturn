@@ -226,6 +226,64 @@ def build_manifest(bundle, rows):
     return result
 
 
+LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def has_loopback_qr(manifest):
+    return any(
+        urlsplit(item["url"]).hostname in LOOPBACK_HOSTS
+        for item in manifest["occurrences"]
+    )
+
+
+def use_public_qr_origin(manifest, public_origin):
+    """Replace development QR URLs while preserving the order's frozen print spec."""
+    if not has_loopback_qr(manifest):
+        return manifest
+    origin = (public_origin or "").rstrip("/")
+    try:
+        parsed = urlsplit(origin)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or "." not in parsed.hostname
+            or parsed.hostname in LOOPBACK_HOSTS | {"example.com", "your-safereturn-domain.com"}
+            or parsed.username
+            or parsed.password
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or not re.fullmatch(r"https://[A-Za-z0-9.-]+(?::[0-9]+)?", origin)
+            or parsed.port == 0
+        ):
+            raise ValueError()
+    except ValueError:
+        raise PrintUnavailable("public_qr_origin_required") from None
+    occurrences = []
+    for item in manifest["occurrences"]:
+        url = urlsplit(item["url"])
+        if url.hostname in LOOPBACK_HOSTS:
+            if not re.fullmatch(r"/q/[A-Za-z0-9_-]{16,80}", url.path) or url.query or url.fragment:
+                raise PrintUnavailable("invalid_qr_destination")
+            item = {**item, "url": origin + url.path}
+        occurrences.append(item)
+    return {**manifest, "occurrences": occurrences}
+
+
+def qr_symbol(url):
+    code = segno.make(url, error="q", micro=False, boost_error=False)
+    if code.version <= 6:
+        return code
+    origin, separator, token = url.partition("/q/")
+    if separator and re.fullmatch(r"https://[A-Za-z0-9.-]+(?::[0-9]+)?", origin):
+        # The scheme and hostname are case-insensitive. QR alphanumeric mode
+        # saves space there while byte mode preserves the path and token case.
+        return segno.make(
+            [origin.upper(), separator + token], error="q", micro=False, boost_error=False
+        )
+    return code
+
+
 def checked_logo(data):
     root = etree.fromstring(
         data, etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False)
@@ -283,7 +341,7 @@ def render_pdf(manifest, *, asset_root=None):
             width = t["width_mm"]
             height = t["height_mm"]
             url = occurrence["url"]
-            code = segno.make(url, error="q", micro=False, boost_error=False)
+            code = qr_symbol(url)
             matrix = list(code.matrix)
             n = len(matrix)
             pitch = t["symbol_mm"] / (n + 8)

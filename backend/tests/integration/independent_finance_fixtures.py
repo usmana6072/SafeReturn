@@ -10,7 +10,7 @@ def actor(c, uid):
     c.execute(text("SELECT set_config('safereturn.actor_id',:id,true),set_config('safereturn.mfa_verified','true',true)"), {"id":str(uid)})
 
 
-def seed(pg, assets=None):
+def seed(pg, assets=None, *, origin="https://synthetic.invalid"):
     staff, customer, sid, category, asset, policy = (uuid4() for _ in range(6))
     catalog = {}
     with pg.connect() as c:
@@ -57,7 +57,7 @@ def seed(pg, assets=None):
                 "id": policy,
                 "hash": "b" * 64,
                 "body": json.dumps(
-                    {"canonical_origin": "https://synthetic.invalid"}
+                    {"canonical_origin": origin}
                 ),
                 "staff": staff,
             },

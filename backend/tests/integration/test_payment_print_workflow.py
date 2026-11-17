@@ -6,14 +6,18 @@ import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import httpx
+import pymupdf
 import pytest
+import zxingcpp
 from cryptography.hazmat.primitives.asymmetric import ec
 from independent_finance_fixtures import claims as allocated_claims
 from independent_finance_fixtures import make_order, seed, stock
 from independent_finance_local import local_cluster
+from PIL import Image
 from sqlalchemy import create_engine, text
 from test_auth import ORIGIN, claims, keyset, signed
 from test_health import ASGIClient
@@ -44,6 +48,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             profile_data_keys=json.dumps({"1": base64.b64encode(b"x" * 32).decode()}),
             print_enabled=True,
             print_template_asset_root=str(assets),
+            print_template_public_origin="https://safe-return-frontend.vercel.app",
         )
         signing_key = ec.generate_private_key(ec.SECP256R1())
         jwks = httpx.MockTransport(
@@ -59,6 +64,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                     "logo_path": f"/app/print-assets/{logo.name}",
                     "logo_sha": hashlib.sha256(logo.read_bytes()).hexdigest(),
                 },
+                origin="http://127.0.0.1:3100",
             )
             _, staff, customer, staff_sid, _ = case
             customer_sid = uuid4()
@@ -255,6 +261,19 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             response = call("POST", download, finance=True)
             assert response.status_code == 200, response.text
             assert response.content.startswith(b"%PDF-")
+            decoded = set()
+            with pymupdf.open(stream=response.content, filetype="pdf") as pdf:
+                for page in pdf:
+                    pixels = page.get_pixmap(matrix=pymupdf.Matrix(3, 3), alpha=False)
+                    image = Image.frombytes("RGB", (pixels.width, pixels.height), pixels.samples)
+                    decoded.update(barcode.text for barcode in zxingcpp.read_barcodes(image))
+            assert len(decoded) == 2
+            assert {urlsplit(url).scheme for url in decoded} == {"https"}
+            assert {urlsplit(url).hostname for url in decoded} == {"safe-return-frontend.vercel.app"}
+            with database.engine.connect() as c:
+                tokens = set(c.execute(text("""SELECT q.public_token FROM public.order_item_qr_allocations a
+                    JOIN public.qr_codes q ON q.id=a.qr_id WHERE a.order_id=:id"""), {"id": oid}).scalars())
+            assert {urlsplit(url).path for url in decoded} == {f"/q/{token}" for token in tokens}
             assert (
                 hashlib.sha256(response.content).hexdigest() == artifact["sha256_hex"]
             )
