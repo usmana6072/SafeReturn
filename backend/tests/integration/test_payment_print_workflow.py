@@ -39,7 +39,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
     assets = root / "backend/print-assets"
     font = next(assets.glob("*.ttf"))
     logo = next(assets.glob("*.svg"))
-    with local_cluster("0055_print_ready_activation") as (url, _, _):
+    with local_cluster("0056_typed_shipment_lifecycle") as (url, _, _):
         database = Database(create_engine(url, hide_parameters=True))
         settings = Settings(
             supabase_url=ORIGIN,
@@ -230,7 +230,6 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                 tags = c.execute(text("""SELECT a.logical_item_id, q.tag_type, q.public_token
                     FROM public.order_item_qr_allocations a JOIN public.qr_codes q ON q.id=a.qr_id
                     WHERE a.order_id=:id"""), {"id": oid}).mappings().all()
-                address = c.execute(text("SELECT source_address_id FROM public.order_shipping_snapshots WHERE order_id=:id"), {"id": oid}).scalar_one()
 
             lost = next(tag for tag in tags if tag["tag_type"] == "lost")
             purchase = {"logical_item_id": str(lost["logical_item_id"])}
@@ -314,7 +313,36 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             )
             app.state.settings.print_enabled = True
             item_ids = [str(tag["logical_item_id"]) for tag in tags]
-            qa = call("POST", f"/admin/print-jobs/{job['id']}/qa", {
+            shipment_path = f"/admin/orders/{oid}/shipment"
+            qa_path = f"/admin/print-jobs/{job['id']}/physical-qa"
+            shipping = {"carrier": "Independent courier", "tracking_reference": "SR-2026-42"}
+            assert call("GET", shipment_path, finance=True).json()["eligible"] is False
+            assert call("POST", shipment_path, shipping, finance=True).status_code == 409
+            assert call("POST", shipment_path, shipping).status_code == 403
+            assert call("POST", shipment_path, {"carrier": shipping["carrier"]}, finance=True).status_code == 422
+            assert call("GET", "/me/shipments").json()["items"] == []
+            assert call("GET", qa_path).status_code == 403
+            inspection = call("GET", qa_path, finance=True)
+            assert inspection.status_code == 200, inspection.text
+            assert set(inspection.json()) == {"job_id", "order_id", "status", "artifact_sha256", "inspection_items", "expected"}
+            assert {item["id"] for item in inspection.json()["inspection_items"]} == set(item_ids)
+            order_summary = call("GET", f"/admin/orders/{oid}/summary", finance=True).json()
+            assert order_summary["id"] == str(oid)
+            assert len(order_summary["order_items"]) == 2
+            if os.environ.get("SAFERETURN_FULFILLMENT_BROWSER") == "1":
+                from fulfillment_browser import run
+
+                tokens = {
+                    email: (uid, signed(signing_key, claims(sub=str(uid), session_id=str(sid), aal=level)))
+                    for email, uid, sid, level in (
+                        ("operations@fixture.test", staff, staff_sid, "aal2"),
+                        ("buyer@fixture.test", customer, customer_sid, "aal1"),
+                    )
+                }
+                run(app, tokens, oid, job["id"])
+                assert call("GET", "/me/shipments").json()["items"][0]["status"] == "delivered"
+                return
+            qa = call("POST", qa_path, {
                 "approved": True,
                 "artifact_sha256": artifact["sha256_hex"],
                 "observed": [{"tag_type": tag["tag_type"], "symbol_mm": "35", "copies": 3} for tag in tags],
@@ -328,12 +356,41 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             }, finance=True)
             assert qa.status_code == 200, qa.text
             assert qa.json()["status"] == "qa_passed"
-            shipment = call("POST", "/admin/shipments", {
-                "order_id": str(oid), "shipping_address_id": str(address),
-                "logical_item_ids": item_ids, "carrier": "Synthetic carrier",
-                "reason": "Synthetic shipment after activation",
-            }, finance=True)
-            assert shipment.status_code in (200, 201), shipment.text
+            assert call("GET", shipment_path, finance=True).json()["eligible"] is True
+            shipment_key = str(uuid4())
+            shipment = call("POST", shipment_path, shipping, key=shipment_key, finance=True)
+            assert shipment.status_code == 201, shipment.text
+            shipment_id = shipment.json()["shipment_id"]
+            assert call("POST", shipment_path, shipping, key=shipment_key, finance=True).json() == shipment.json()
+            assert call("POST", shipment_path, shipping, finance=True).json()["error"]["code"] == "SHIPMENT_EXISTS"
+            assert call("GET", "/me/shipments", finance=True).json()["items"] == []
+            assert client.request("GET", "/api/v1/me/shipments").status_code == 401
+
+            def check_buyer(expected):
+                buyer = call("GET", "/me/shipments").json()["items"]
+                assert len(buyer) == 1 and buyer[0]["id"] == shipment_id
+                assert buyer[0]["status"] == expected
+                assert buyer[0]["order_id"] == str(oid)
+                assert buyer[0]["order_items"] == order_summary["order_items"]
+                assert {key: buyer[0][key] for key in shipping} == shipping
+
+            check_buyer("preparing")
+            assert call("PATCH", shipment_path, {
+                "status": "delivered", "expected_status": "preparing", "reason": "Invalid synthetic jump",
+            }, finance=True).status_code == 409
+            check_buyer("preparing")
+            for previous, status in (("preparing", "packed"), ("packed", "dispatched"), ("dispatched", "delivered")):
+                updated = call("PATCH", shipment_path, {
+                    "status": status, "expected_status": previous, "packing_confirmed": status == "packed",
+                    "reason": "Recorded synthetic carrier progression",
+                }, finance=True)
+                assert updated.status_code == 200, updated.text
+                check_buyer(status)
+            assert call("GET", shipment_path, finance=True).json()["next_statuses"] == []
+            with database.engine.connect() as c:
+                assert c.execute(text("""SELECT h.status,h.tracking_reference,h.carrier,o.fulfillment_status
+                    FROM public.shipments h JOIN public.orders o ON o.id=h.order_id WHERE h.id=:id"""),
+                    {"id": shipment_id}).one() == ("delivered", shipping["tracking_reference"], shipping["carrier"], "delivered")
         finally:
             verifier.close()
             database.close()

@@ -14,7 +14,13 @@ from pydantic import Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from app.api.auth import AccessError, Authenticated, require_order_owner, require_staff
+from app.api.auth import (
+    AccessError,
+    Authenticated,
+    require_order_owner,
+    require_staff,
+    require_verified_account,
+)
 from app.api.v1.catalog import CatalogRoute, fail
 from app.api.v1.checkout import Closed
 from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt, encrypt
@@ -73,6 +79,17 @@ def paged(items, limit):
 def bounds(limit):
     if not 1 <= limit <= 100:
         fail(422, "INVALID_LIMIT")
+
+
+def order_products(session, order_ids):
+    if not order_ids:
+        return {}
+    products = {order_id: [] for order_id in order_ids}
+    for item in rows(session, """SELECT order_id,product_name_snapshot,quantity FROM public.order_logical_items WHERE order_id=ANY(:ids)
+        UNION ALL SELECT order_id,product_name_snapshot,quantity FROM public.order_items WHERE order_id=ANY(:ids)
+        ORDER BY product_name_snapshot,quantity""", ids=order_ids):
+        products[item.pop("order_id")].append(item)
+    return products
 
 
 @router.get("/me/orders", operation_id="API-061")
@@ -203,6 +220,27 @@ def list_shipments(order_id: UUID, context: Authenticated):
     }
 
 
+@router.get("/me/shipments", operation_id="customer-shipment-list")
+def customer_shipments(context: Authenticated, limit: int = 20, cursor: str | None = None):
+    require_verified_account(context)
+    bounds(limit)
+    stamp, ident = page_cursor(cursor)
+    page = paged(rows(
+        context.session,
+        """SELECT h.id,h.status,h.carrier,h.tracking_reference,h.created_at,h.packed_at,
+           h.dispatched_at,h.delivered_at,o.id AS order_id,o.order_number,o.currency_code,o.total_pkr
+        FROM public.shipments h JOIN public.orders o ON o.id=h.order_id
+        WHERE o.customer_user_id=:uid
+          AND (CAST(:stamp AS timestamptz) IS NULL OR (h.created_at,h.id)<(:stamp,:ident))
+        ORDER BY h.created_at DESC,h.id DESC LIMIT :limit""",
+        uid=context.principal.user_id, stamp=stamp, ident=ident, limit=limit + 1,
+    ), limit)
+    products = order_products(context.session, list({item["order_id"] for item in page["items"]}))
+    for item in page["items"]:
+        item["order_items"] = products[item["order_id"]]
+    return page
+
+
 # The newest revision and QA observation must match the retained current artifact.
 ELIGIBLE = "public.sr_fulfillment_eligible(o.id)"
 
@@ -274,6 +312,11 @@ class ShipmentRequest(Closed):
         if bool(self.pair_ids) == bool(self.logical_item_ids):
             raise ValueError("Supply exactly one membership model")
         return self
+
+
+class ShipmentForOrder(Closed):
+    carrier: str = Field(min_length=1, max_length=80)
+    tracking_reference: str = Field(min_length=1, max_length=150)
 
 
 @router.get("/admin/shipments/{shipment_id}/items", operation_id="typed-shipment-items")
@@ -412,48 +455,55 @@ def eligible(s, oid, *, template_clear=True):
 
 @router.post("/admin/shipments", operation_id="API-095", status_code=201)
 def create_shipment(body: ShipmentRequest, context: Authenticated, request: Request):
+    return create_order_shipment(body.order_id, body.carrier, None, body.reason, context, request, body)
+
+
+@router.post("/admin/orders/{order_id}/shipment", operation_id="create-order-shipment", status_code=201)
+def create_shipment_from_order(order_id: UUID, body: ShipmentForOrder, context: Authenticated, request: Request):
+    result = create_order_shipment(order_id, body.carrier, body.tracking_reference, "Operations created a tracked shipment", context, request)
+    return {key: result[key] for key in ("shipment_id", "order_id", "status")}
+
+
+def create_order_shipment(order_id, carrier, tracking, reason, context, request, selection=None):
     def work(s, settings):
-        order = lock_order(s, body.order_id)
+        order = lock_order(s, order_id)
+        if rows(s, "SELECT id FROM public.shipments WHERE order_id=:id", id=order_id):
+            fail(409, "SHIPMENT_EXISTS")
         if order["fulfillment_status"] != "allocated":
             fail(409, "SHIPMENT_CONFLICT")
-        eligible(s, body.order_id)
-        snap = shipping(s, settings, body.order_id)
-        if str(snap["shipping_address_id"]) != str(body.shipping_address_id):
+        eligible(s, order_id)
+        snap = shipping(s, settings, order_id)
+        address = snap["shipping_address_id"]
+        if selection and str(address) != str(selection.shipping_address_id):
             fail(409, "SHIPPING_SNAPSHOT_MISMATCH")
-        typed = s.execute(text("SELECT commerce_model='single_qr' FROM public.orders WHERE id=:id"), {"id": body.order_id}).scalar_one() is True
+        typed = s.execute(text("SELECT commerce_model='single_qr' FROM public.orders WHERE id=:id"), {"id": order_id}).scalar_one()
         item_ids = []
         if typed:
-            item_ids = [r["id"] for r in rows(s, "SELECT id FROM public.order_logical_items WHERE order_id=:id", id=body.order_id)]
-            if body.pair_ids or not item_ids or len(body.logical_item_ids) != len(set(body.logical_item_ids)) or set(item_ids) != set(body.logical_item_ids):
+            item_ids = [r["id"] for r in rows(s, "SELECT id FROM public.order_logical_items WHERE order_id=:id", id=order_id)]
+            if not item_ids or selection and (selection.pair_ids or sorted(item_ids) != sorted(selection.logical_item_ids)):
                 fail(409, "SHIPMENT_ITEM_MISMATCH")
-        elif body.logical_item_ids or not body.pair_ids:
-            fail(409, "SHIPMENT_PAIR_MISMATCH")
         pairs = [
             r["pair_id"]
             for r in rows(
                 s,
-                "SELECT pair_id FROM public.order_pair_units WHERE order_id=:id AND status='allocated'",
-                id=body.order_id,
+                "SELECT pair_id FROM public.order_pair_units WHERE order_id=:id AND status='allocated' ORDER BY pair_id",
+                id=order_id,
             )
         ]
-        if len(body.pair_ids) != len(set(body.pair_ids)) or set(pairs) != set(
-            body.pair_ids
-        ):
+        if (not typed and not pairs) or (selection and pairs != sorted(selection.pair_ids)):
             fail(409, "SHIPMENT_PAIR_MISMATCH")
-        if rows(
-            s, "SELECT id FROM public.shipments WHERE order_id=:id", id=body.order_id
-        ):
-            fail(409, "SHIPMENT_EXISTS")
         sid = uuid4()
         s.execute(
             text(
-                "INSERT INTO public.shipments(id,order_id,shipping_address_id,status,carrier) VALUES(:id,:oid,:address,'preparing',:carrier)"
+                """INSERT INTO public.shipments(id,order_id,shipping_address_id,status,carrier,tracking_reference)
+                VALUES(:id,:oid,:address,'preparing',:carrier,:tracking)"""
             ),
             {
                 "id": sid,
-                "oid": body.order_id,
-                "address": body.shipping_address_id,
-                "carrier": body.carrier,
+                "oid": order_id,
+                "address": address,
+                "carrier": carrier,
+                "tracking": tracking,
             },
         )
         for pid in pairs:
@@ -466,15 +516,18 @@ def create_shipment(body: ShipmentRequest, context: Authenticated, request: Requ
         for item_id in item_ids:
             s.execute(text("""INSERT INTO public.shipment_items(shipment_id,logical_item_id,print_job_id)
                 SELECT :sid,:iid,id FROM public.print_jobs WHERE order_id=:oid ORDER BY job_revision DESC LIMIT 1"""),
-                {"sid": sid, "iid": item_id, "oid": body.order_id})
+                {"sid": sid, "iid": item_id, "oid": order_id})
         return {
             "shipment_id": sid,
-            "order_id": body.order_id,
+            "order_id": order_id,
             "status": "preparing",
             "shipping_snapshot": snap,
         }, sid
 
-    return command(context, request, "shipment.create", body.model_dump(), work)
+    payload = selection.model_dump() if selection else {
+        "order_id": order_id, "carrier": carrier, "tracking_reference": tracking, "reason": reason,
+    }
+    return command(context, request, "shipment.create", payload, work)
 
 
 TRANSITIONS = {
@@ -485,6 +538,33 @@ TRANSITIONS = {
     "delivered": set(),
     "returned": set(),
 }
+
+
+@router.get("/admin/orders/{order_id}/shipment", operation_id="view-order-shipment")
+def order_shipment(order_id: UUID, context: Authenticated):
+    require_staff(context, "operations")
+    orders = rows(context.session, """SELECT o.id,o.order_number,o.payment_status,o.fulfillment_status,
+       (o.fulfillment_status='allocated' AND public.sr_fulfillment_eligible(o.id)) AS eligible,
+       p.id AS print_job_id,p.status AS print_status
+    FROM public.orders o LEFT JOIN LATERAL (
+        SELECT id,status FROM public.print_jobs WHERE order_id=o.id ORDER BY job_revision DESC LIMIT 1
+    ) p ON true WHERE o.id=:id""", id=order_id)
+    if not orders:
+        raise AccessError(404)
+    shipments = rows(context.session, """SELECT id,carrier,tracking_reference,status,
+       packed_at,dispatched_at,delivered_at FROM public.shipments WHERE order_id=:id
+       ORDER BY created_at DESC,id DESC LIMIT 1""", id=order_id)
+    shipment = shipments[0] if shipments else None
+    return {**orders[0], "shipment": shipment, "next_statuses": sorted(TRANSITIONS[shipment["status"]]) if shipment else []}
+
+
+@router.patch("/admin/orders/{order_id}/shipment", operation_id="update-order-shipment")
+def update_order_shipment(order_id: UUID, body: ShipmentUpdate, context: Authenticated, request: Request):
+    require_staff(context, "operations")
+    shipments = rows(context.session, "SELECT id FROM public.shipments WHERE order_id=:id ORDER BY created_at DESC,id DESC LIMIT 1", id=order_id)
+    if not shipments:
+        raise AccessError(404)
+    return update_shipment(shipments[0]["id"], body, context, request)
 
 
 @router.patch("/admin/shipments/{shipment_id}", operation_id="API-096")
@@ -582,3 +662,14 @@ def operations_order_detail(order_id: UUID, context: Authenticated, request: Req
     if not operations:
         result["print_status"] = "restricted"
     return result
+
+
+@router.get("/admin/orders/{order_id}/summary", operation_id="staff-order-summary")
+def staff_order_summary(order_id: UUID, context: Authenticated):
+    require_staff(context, "operations", "finance")
+    orders = rows(context.session, """SELECT id,order_number,order_status,payment_status,fulfillment_status,
+       currency_code,subtotal_pkr,shipping_pkr,tax_pkr,discount_pkr,total_pkr,created_at,placed_at
+       FROM public.orders WHERE id=:id""", id=order_id)
+    if not orders:
+        raise AccessError(404)
+    return {**orders[0], "order_items": order_products(context.session, [order_id])[order_id]}

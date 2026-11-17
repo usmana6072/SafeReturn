@@ -534,6 +534,55 @@ def audit(context, action, target):
 def record_job_qa(
     job_id: UUID, body: JobQARequest, context: Authenticated, request: Request
 ):
+    return record_physical_qa(job_id, body, context, request)
+
+
+def expected_measurements(manifest):
+    expected = {}
+    for occurrence in manifest["occurrences"]:
+        spec = occurrence["template"]
+        key = (spec["tag_type"], Decimal(str(spec["symbol_mm"])))
+        expected[key] = expected.get(key, 0) + occurrence["copies"]
+    return expected
+
+
+def require_current_print(session, job):
+    latest = session.execute(text("""SELECT id FROM public.print_jobs WHERE order_id=:oid
+        ORDER BY job_revision DESC LIMIT 1"""), {"oid": job["order_id"]}).scalar_one()
+    if job["id"] != latest:
+        fail(409, "PRINT_REVISION_CHANGED")
+
+
+@router.get("/admin/print-jobs/{job_id}/physical-qa", operation_id="view-physical-print-qa")
+def physical_qa(job_id: UUID, context: Authenticated, request: Request):
+    job = get_print_job(job_id, context)
+    require_current_print(context.session, job)
+    if job["status"] not in {"ready", "downloaded", "qa_passed"}:
+        fail(409, "PRINT_NOT_READY")
+    pdf = next((a for a in job["artifacts"] if a["format"] == "pdf" and a["deleted_at"] is None), None)
+    if pdf is None:
+        fail(410, "ARTIFACT_UNAVAILABLE")
+    settings = request.app.state.settings
+    expected = expected_measurements(frozen(context.session, settings, job))
+    return {
+        "job_id": job_id,
+        "order_id": job["order_id"],
+        "status": job["status"],
+        "artifact_sha256": pdf["sha256_hex"],
+        "inspection_items": job["inspection_items"],
+        "expected": [
+            {"tag_type": kind, "symbol_mm": str(size), "copies": copies}
+            for (kind, size), copies in sorted(expected.items())
+        ],
+    }
+
+
+@router.post("/admin/print-jobs/{job_id}/physical-qa", operation_id="record-physical-print-qa")
+def submit_physical_qa(job_id: UUID, body: JobQARequest, context: Authenticated, request: Request):
+    return record_physical_qa(job_id, body, context, request, current_only=True)
+
+
+def record_physical_qa(job_id, body, context, request, *, current_only=False):
     require_staff(context, "operations")
 
     def work(s):
@@ -549,6 +598,10 @@ def record_job_qa(
         )
         if job is None:
             raise AccessError(404)
+        if current_only:
+            require_current_print(context.session, job)
+            if job["status"] == "qa_passed":
+                fail(409, "PRINT_QA_ALREADY_PASSED")
         if job["status"] not in {"ready", "downloaded", "qa_passed"}:
             fail(409, "PRINT_NOT_READY")
         a = (
@@ -568,10 +621,7 @@ def record_job_qa(
             if len(body.inspected_item_ids) != len(set(body.inspected_item_ids)) or set(ids) != set(body.inspected_item_ids):
                 fail(422, "ITEM_QA_MISMATCH")
         manifest = frozen(context.session, s, job)
-        expected = {}
-        for o in manifest["occurrences"]:
-            key = (o["template"]["tag_type"], Decimal(str(o["template"]["symbol_mm"])))
-            expected[key] = expected.get(key, 0) + o["copies"]
+        expected = expected_measurements(manifest)
         actual = {}
         for o in body.observed:
             key = (o.tag_type, Decimal(o.symbol_mm))

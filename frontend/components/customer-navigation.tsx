@@ -8,6 +8,7 @@ const destinations = [
   ["/shop", "store", "Available products", "دستیاب مصنوعات"],
   ["/cart", "cart", "Shopping cart", "کارٹ"],
   ["/orders", "orders", "Orders & payment", "آرڈرز اور ادائیگی"],
+  ["/shipments", "orders", "Shipments", "ترسیلات"],
   ["/inbox", "inbox", "Finder inbox", "فائنڈر اِن باکس"],
   ["/account/shipping-addresses", "addresses", "Delivery addresses", "ترسیل کے پتے"],
   ["/account", "account", "Account & privacy", "اکاؤنٹ اور رازداری"],

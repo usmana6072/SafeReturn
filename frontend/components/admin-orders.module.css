@@ -38,5 +38,17 @@
 .muted { color: #64748b; line-height: 1.6; }
 .timeline { padding-inline-start: 18px; margin: 0; display: grid; gap: 14px; }
 .timeline time { display: block; color: #64748b; margin-block: 4px; }
+.screen .actionButton { width: 36px; padding: 0; font-size: 22px; line-height: 1; }
+.actionMenu { position: fixed; inset: auto; margin: 0; padding: 4px; width: 200px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow: auto; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; box-shadow: 0 6px 20px #0f172a26; }
+.screen .actionMenu :is(a,span) { display: flex; align-items: center; min-height: 36px; padding: 4px 10px; border-radius: 4px; }
+.actionMenu a:hover, .actionMenu a:focus-visible { background: #f0f9ff; }
+.actionMenu span { color: #64748b; }
+.workflowForm { max-width: 36rem; }
+.workflowForm fieldset { min-width: 0; border: 0; margin: 0; padding: 0; display: grid; gap: 12px; }
+.workflowForm :is(label,.qaGroup) { display: grid; gap: 5px; }
+.workflowForm label:has(input[type="checkbox"]) { display: flex; align-items: start; gap: 8px; }
+.workflowForm :is(input:not([type="checkbox"]), select, textarea) { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; font: inherit; }
+.workflowForm button { justify-self: start; }
+.qaGroup { border-block-start: 1px solid #e2e8f0; padding-block-start: 8px; }
 @media(max-width: 767px) { .details { grid-template-columns: minmax(0, 1fr); } .screen h1 { font-size: 20px; } }
 @media(max-width: 479px) { .toolbar { flex-direction: column; align-items: stretch; } .toolbar label:first-child { min-width: 0; } .facts { grid-template-columns: minmax(0, 1fr); } }
