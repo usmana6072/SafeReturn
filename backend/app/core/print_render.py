@@ -22,6 +22,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 from svglib.svglib import svg2rlg
 
+from app.core.public_site import PREVIOUS_WEB_HOSTS, PUBLIC_WEB_ORIGIN, canonical_web_origin
+
 
 class OutlinePen(BasePen):
     def __init__(self, glyphset, path):
@@ -227,20 +229,21 @@ def build_manifest(bundle, rows):
 
 
 LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+RETIRED_QR_HOSTS = LOOPBACK_HOSTS | PREVIOUS_WEB_HOSTS
 
 
-def has_loopback_qr(manifest):
+def has_retired_qr_origin(manifest):
     return any(
-        urlsplit(item["url"]).hostname in LOOPBACK_HOSTS
+        urlsplit(item["url"]).hostname in RETIRED_QR_HOSTS
         for item in manifest["occurrences"]
     )
 
 
 def use_public_qr_origin(manifest, public_origin):
-    """Replace development QR URLs while preserving the order's frozen print spec."""
-    if not has_loopback_qr(manifest):
+    """Replace retired QR destinations while preserving the frozen print spec."""
+    if not has_retired_qr_origin(manifest):
         return manifest
-    origin = (public_origin or "").rstrip("/")
+    origin = canonical_web_origin((public_origin or PUBLIC_WEB_ORIGIN).rstrip("/"))
     try:
         parsed = urlsplit(origin)
         if (
@@ -262,7 +265,7 @@ def use_public_qr_origin(manifest, public_origin):
     occurrences = []
     for item in manifest["occurrences"]:
         url = urlsplit(item["url"])
-        if url.hostname in LOOPBACK_HOSTS:
+        if url.hostname in RETIRED_QR_HOSTS:
             if not re.fullmatch(r"/q/[A-Za-z0-9_-]{16,80}", url.path) or url.query or url.fragment:
                 raise PrintUnavailable("invalid_qr_destination")
             item = {**item, "url": origin + url.path}

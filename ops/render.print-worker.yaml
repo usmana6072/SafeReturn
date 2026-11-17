@@ -12,7 +12,7 @@ services:
       - key: SAFERETURN_PRINT_ENABLED
         value: "true"
       - key: SAFERETURN_PRINT_TEMPLATE_PUBLIC_ORIGIN
-        value: https://safe-return-frontend.vercel.app
+        value: https://www.safereturnqr.me
       - key: SAFERETURN_WORKER_DATABASE_URL
         sync: false
       - key: SAFERETURN_PROFILE_DATA_KEYS

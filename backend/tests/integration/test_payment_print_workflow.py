@@ -48,7 +48,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             profile_data_keys=json.dumps({"1": base64.b64encode(b"x" * 32).decode()}),
             print_enabled=True,
             print_template_asset_root=str(assets),
-            print_template_public_origin="https://safe-return-frontend.vercel.app",
+            print_template_public_origin="https://www.safereturnqr.me",
         )
         signing_key = ec.generate_private_key(ec.SECP256R1())
         jwks = httpx.MockTransport(
@@ -269,7 +269,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                     decoded.update(barcode.text for barcode in zxingcpp.read_barcodes(image))
             assert len(decoded) == 2
             assert {urlsplit(url).scheme for url in decoded} == {"https"}
-            assert {urlsplit(url).hostname for url in decoded} == {"safe-return-frontend.vercel.app"}
+            assert {urlsplit(url).hostname for url in decoded} == {"www.safereturnqr.me"}
             with database.engine.connect() as c:
                 tokens = set(c.execute(text("""SELECT q.public_token FROM public.order_item_qr_allocations a
                     JOIN public.qr_codes q ON q.id=a.qr_id WHERE a.order_id=:id"""), {"id": oid}).scalars())

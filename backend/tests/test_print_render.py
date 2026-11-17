@@ -16,6 +16,7 @@ from app.core.print_render import (
     build_manifest,
     load_bundle,
     render_pdf,
+    use_public_qr_origin,
 )
 
 
@@ -74,6 +75,26 @@ def test_invalid_or_changed_assets_fail_closed(tmp_path):
     m["font"]["sha256"] = "0" * 64
     with pytest.raises(PrintUnavailable):
         render_pdf(m)
+
+
+@pytest.mark.parametrize("previous_origin", [
+    "http://127.0.0.1:3100",
+    "https://safe-return-frontend.vercel.app",
+    "https://safereturnqr.me",
+])
+def test_rebase_retired_qr_origin_preserves_print_spec(previous_origin):
+    path = "/q/" + "aB_7-" * 8
+    previous = {"url": previous_origin + path, "copies": 3}
+    custom = {"url": "https://print.example.test" + path, "copies": 2}
+    print_spec = {"approval_ref": "test-approval", "occurrences": [previous, custom]}
+
+    updated = use_public_qr_origin(print_spec, "https://safe-return-frontend.vercel.app")
+
+    assert updated == {
+        "approval_ref": "test-approval",
+        "occurrences": [{**previous, "url": "https://www.safereturnqr.me" + path}, custom],
+    }
+    assert print_spec["occurrences"][0]["url"] == previous_origin + path
 
 
 def test_template_overflow_is_blocked(tmp_path):

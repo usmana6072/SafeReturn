@@ -96,6 +96,13 @@ proper secrets management and the production callback allowlist.
 
 ## Deployment (Task 6.3)
 
+The production web origin is `https://www.safereturnqr.me`. In Supabase
+**Authentication → URL Configuration**, set **Site URL** to that origin and
+add `https://www.safereturnqr.me/auth/callback` to **Redirect URLs** for email
+confirmation and password recovery. Use the same origin for
+`SAFERETURN_WEB_ORIGIN` in Vercel. Browser sessions are scoped to their host,
+so users moving from the Vercel hostname must sign in again.
+
 `vercel.json` pins the Next.js framework, `npm ci` install, and production
 build command. Only approved public configuration may use `NEXT_PUBLIC_`
 variables; API origins, signing keys, database URLs, provider keys, and storage

@@ -6,6 +6,8 @@ from uuid import UUID
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.public_site import PREVIOUS_WEB_HOSTS, PUBLIC_WEB_HOST, canonical_web_origin
+
 
 class Settings(BaseSettings):
     # v1.1 development-only owner exception. No credential/trust is auto-provisioned.
@@ -42,6 +44,19 @@ class Settings(BaseSettings):
     shipping_address_web_origin: str | None = None
     # Separate opt-in transport origin; existing Auth/localhost configuration is unchanged.
     privacy_export_web_origin: str | None = None
+
+    @field_validator(
+        "qr_lifecycle_web_origin",
+        "account_lifecycle_web_origin",
+        "manufacturing_export_web_origin",
+        "financial_review_web_origin",
+        "cancellation_web_origin",
+        "shipping_address_web_origin",
+        "privacy_export_web_origin",
+    )
+    @classmethod
+    def use_canonical_web_origin(cls, value: str | None) -> str | None:
+        return canonical_web_origin(value)
 
     @field_validator("account_lifecycle_web_origin", "qr_lifecycle_web_origin")
     @classmethod
@@ -116,6 +131,12 @@ class Settings(BaseSettings):
     turnstile_expected_hostname: str | None = Field(
         default=None, max_length=253, pattern=r"^[A-Za-z0-9.-]+$"
     )
+
+    @field_validator("turnstile_expected_hostname")
+    @classmethod
+    def use_canonical_turnstile_hostname(cls, value: str | None) -> str | None:
+        return PUBLIC_WEB_HOST if value in PREVIOUS_WEB_HOSTS else value
+
     turnstile_timeout_seconds: float = Field(default=3, ge=0.1, le=10)
     resend_api_key: SecretStr | None = None
     notification_from_email: str | None = None

@@ -109,10 +109,14 @@ print worker started`. Verify an already paid and allocated order reaches
 startup. For an older order held for a stock shortage, use the admin **Retry
 allocation** action before checking **Print Jobs**.
 
-Set `SAFERETURN_PRINT_TEMPLATE_PUBLIC_ORIGIN` to the public web origin without
-an `/admin` or `/q` path. The print worker uses it for orders whose stored
-template contains a development loopback address. Previously rendered PDFs
-need a new revision to update the printed QR destination.
+The production QR origin is `https://www.safereturnqr.me`. Set
+`SAFERETURN_PRINT_TEMPLATE_PUBLIC_ORIGIN` to that origin without an `/admin`
+or `/q` path. New print jobs update stored QR destinations from loopback, the
+former Vercel host, or the apex domain. Previously rendered PDFs need a new
+revision to update their encoded destination.
+
+If Turnstile protects public QR actions, allow `www.safereturnqr.me` on the
+Cloudflare widget and use it for `SAFERETURN_TURNSTILE_EXPECTED_HOSTNAME`.
 
 `ops/release-preflight.ps1` performs only HTTPS liveness and authorized
 readiness checks. It does not run migrations, write application data, call

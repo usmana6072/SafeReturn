@@ -22,6 +22,7 @@ from app.api.v1.catalog import fail
 from app.api.v1.privacy_exports import Confirmed
 from app.core.print_render import PrintUnavailable
 from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt, encrypt, key
+from app.core.public_site import canonical_web_origin
 from app.core.template_auth import recent_template_auth
 from app.core.template_content import Closed, Content, plain
 from app.core.template_preview import isolated_preview
@@ -310,9 +311,9 @@ def guard(context, request, *, write=False, draft=False):
     if write:
         recent_template_auth(context)
         origins = request.headers.getlist("origin")
+        web_origin = canonical_web_origin(request.app.state.settings.print_template_web_origin)
         if origins and (
-            len(origins) != 1
-            or origins[0] != request.app.state.settings.print_template_web_origin
+            len(origins) != 1 or origins[0] != web_origin
         ):
             fail(403, "TEMPLATE_ORIGIN_MISMATCH")
     if not request.app.state.settings.print_template_management_enabled:
@@ -888,7 +889,8 @@ def qa_status(template_id: UUID, revision_id: UUID, request: Request, context: A
 @router.post("/admin/print-templates/{template_id}/revisions/{revision_id}/qa-decision", operation_id="API-312", response_model=QADecisionReceipt)
 def qa_decision(template_id: UUID, revision_id: UUID, body: QADecision, request: Request, context: Authenticated):
     guard(context, request, write=True)
-    if request.headers.getlist("origin") != [request.app.state.settings.print_template_web_origin]:
+    web_origin = canonical_web_origin(request.app.state.settings.print_template_web_origin)
+    if request.headers.getlist("origin") != [web_origin]:
         fail(403, "TEMPLATE_ORIGIN_MISMATCH")
     review_available(context)
     result = command(context, request, "manual_review_decide", body, template_id=str(template_id), revision_id=str(revision_id))

@@ -1,12 +1,13 @@
 "use server";
 import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
+import { webOrigin } from "../../../lib/auth/config";
 import { ownerApi } from "../../../lib/qr-server";
 import { ApiError } from "../../../lib/api/transport";
 import { uuid } from "../../../lib/qr-contract";
 
 async function input(token: string, form: FormData) {
-  if ((await headers()).get("origin") !== process.env.SAFERETURN_WEB_ORIGIN || !/^[A-Za-z0-9_-]{20,80}$/.test(token)) throw new Error("Invalid request");
+  if ((await headers()).get("origin") !== webOrigin() || !/^[A-Za-z0-9_-]{20,80}$/.test(token)) throw new Error("Invalid request");
   const proof = form.get("cf-turnstile-response");
   if (typeof proof !== "string" || !proof || proof.length > 2048) throw new Error("Verification required");
   return proof;
