@@ -123,8 +123,9 @@ def migration(tmp_path, name, parent):
 
 def test_real_static_chain():
     chain = runner.current_chain(runner.ROOT)
-    assert len(chain) == 36
-    assert chain[-1] == "0035_public_abuse_intake"
+    assert chain[35] == "0035_public_abuse_intake"
+    assert "0056_typed_shipment_lifecycle" in chain
+    assert "0044_support_dev_exception" not in chain
     assert "0021_support_case_console" in chain
 
 
@@ -132,6 +133,16 @@ def test_graph_linear(tmp_path):
     migration(tmp_path, "one", None)
     migration(tmp_path, "two", "one")
     assert runner.migration_chain(tmp_path) == ["one", "two"]
+
+
+def test_graph_allows_only_the_declared_independent_leaf(tmp_path):
+    migration(tmp_path, "one", None)
+    migration(tmp_path, "two", "one")
+    migration(tmp_path, "exception", "one")
+    assert runner.migration_chain(tmp_path, independent_leaf=("exception", "one")) == ["one", "two"]
+    migration(tmp_path, "unexpected", "exception")
+    with pytest.raises(ValueError, match="Unexpected independent migration branch"):
+        runner.migration_chain(tmp_path, independent_leaf=("exception", "one"))
 
 
 @pytest.mark.parametrize(

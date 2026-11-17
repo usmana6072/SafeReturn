@@ -62,7 +62,7 @@ def child_environment(parent, root, scratch):
     return env
 
 
-def migration_chain(directory):
+def migration_chain(directory, *, independent_leaf=None):
     revisions = {}
     for path in sorted(directory.glob("*.py")):
         values = {}
@@ -99,6 +99,11 @@ def migration_chain(directory):
         parent is not None and parent not in revisions for parent in revisions.values()
     ):
         raise ValueError("Missing parent")
+    if independent_leaf is not None:
+        leaf, parent = independent_leaf
+        if leaf not in revisions or revisions[leaf] != parent or leaf in revisions.values():
+            raise ValueError("Unexpected independent migration branch")
+        del revisions[leaf]
     heads = set(revisions) - set(revisions.values())
     if len(heads) != 1:
         raise ValueError("Expected one head")
@@ -115,10 +120,13 @@ def migration_chain(directory):
 
 
 def current_chain(root):
-    chain = migration_chain(root / "backend/alembic/versions")
-    if len(chain) != 36 or chain[-1] != "0035_public_abuse_intake":
+    chain = migration_chain(
+        root / "backend/alembic/versions",
+        independent_leaf=("0044_support_dev_exception", "0043_standalone_activation"),
+    )
+    if len(chain) < 36 or chain[35] != "0035_public_abuse_intake":
         raise ValueError("Unreviewed chain")
-    tail = chain[chain.index("0021_support_case_console") :]
+    tail = chain[chain.index("0021_support_case_console") : 36]
     if [int(item[:4]) for item in tail] != list(range(21, 36)):
         raise ValueError("Unreviewed pending chain")
     return chain
