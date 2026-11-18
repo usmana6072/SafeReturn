@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { AdminCard, AdminPageContainer, AdminPageHeader } from './admin-ui';
-import { PhysicalPrintQA } from './physical-print-qa';
 import { orderStatus } from '../lib/order-status';
 import { workflowRequest, type OrderShipment, type OrderSummary } from '../lib/fulfillment-workflow';
 import styles from './admin-orders.module.css';
@@ -96,8 +95,6 @@ export function OrderShipmentForm({ orderId, ur }: { orderId: string; ur: boolea
   }
 
   const shipment = order?.shipment;
-  const needsPrintQA = !shipment && order?.payment_status === 'verified' &&
-    order.print_job_id && ['ready', 'downloaded'].includes(order.print_status ?? '');
   return <div className={styles.screen}><AdminPageContainer>
     <AdminPageHeader title={shipment ? 'Manage shipment' : 'Create shipment'}
       description={order?.order_number} actions={<Link href={`/admin/orders/${orderId}`}>View order details</Link>} />
@@ -114,9 +111,9 @@ export function OrderShipmentForm({ orderId, ur }: { orderId: string; ur: boolea
       </dl> : <>
         <p>{orderStatus(order.payment_status, ur)} · {orderStatus(order.print_status ?? 'not_requested', ur)}</p>
         {order.print_job_id && <Link href={`/admin/print-jobs/${order.print_job_id}`}>View current print job</Link>}
-        {!order.eligible && <p className={styles.notice}>{needsPrintQA
-          ? 'Approve the physical print below to continue. Check the printed labels, record their sizes and quantities, and confirm the inspection.'
-          : 'Shipment creation requires verified payment, allocation, and physical QA approval for the current PDF.'}</p>}
+        {!order.eligible && <p className={styles.notice}>{order.print_status === 'ready'
+          ? 'Download the current PDF and check your print before creating the shipment.'
+          : 'Shipment creation requires verified payment, allocated QR codes, an approved template, and a downloaded current PDF.'}</p>}
       </>}
       {(!shipment && order.eligible || shipment && order.next_statuses.length > 0) &&
         <form key={shipment?.status ?? 'create'} className={styles.workflowForm} onSubmit={submit}>
@@ -134,6 +131,5 @@ export function OrderShipmentForm({ orderId, ur }: { orderId: string; ur: boolea
           </fieldset>
         </form>}
     </section></AdminCard>}
-    {needsPrintQA && order?.print_job_id && <PhysicalPrintQA key={order.print_job_id} jobId={order.print_job_id} onRecorded={() => void load()} />}
   </AdminPageContainer></div>;
 }

@@ -54,7 +54,7 @@ export const workflowErrors: Record<string, string> = {
   AUTH_REQUIRED: 'Sign in again to continue.',
   FORBIDDEN: 'Your current role or MFA session does not permit this action.',
   NOT_FOUND: 'The selected order, print job, or shipment could not be found.',
-  ORDER_NOT_READY_TO_SHIP: 'The order needs verified payment, allocation, and physical approval of its current print job.',
+  ORDER_NOT_READY_TO_SHIP: 'The order needs verified payment, allocated QR codes, an approved template, and a downloaded current PDF.',
   SHIPMENT_EXISTS: 'A shipment already exists for this order. Refresh to manage it.',
   SHIPMENT_CONFLICT: 'The shipment could not be saved. Refresh the order and check its current status.',
   SHIPPING_SNAPSHOT_MISSING: 'The order is missing the delivery address saved at checkout.',

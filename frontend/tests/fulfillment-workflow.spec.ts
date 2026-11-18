@@ -41,20 +41,16 @@ test('staff fulfills a real stored order and the same buyer session observes all
     await page.getByRole('link', { name: 'View Print Job', exact: true }).click();
     await expect(page).toHaveURL(`/admin/print-jobs?orderId=${order}`);
     await page.goto(`/admin/print-jobs/${job}`);
-    await expect(page.getByRole('heading', { name: 'Physical print QA' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Physical print QA' })).toHaveCount(0);
+    const downloaded = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download PDF', exact: true }).click();
+    expect((await downloaded).suggestedFilename()).toBe('SR-print.pdf');
+    await expect(page.getByRole('link', { name: 'Create shipment', exact: true })).toBeVisible();
     await page.goto('/admin/orders');
     await menu.click();
     await page.getByRole('link', { name: 'Create Shipment', exact: true }).click();
     await expect(page).toHaveURL(`/admin/orders/${order}/shipment`);
-    await expect(page.getByRole('button', { name: 'Create shipment', exact: true })).toHaveCount(0);
-    await expect(page.getByText('Approve the physical print below to continue.', { exact: false })).toBeVisible();
-    const qa = page.getByRole('region', { name: 'Physical print QA' });
-    await expect(qa.getByText(/Expected 35(\.0+)? mm/).first()).toBeVisible();
-    for (const field of await qa.getByLabel('Measured QR size (mm)').all()) await field.fill('35');
-    for (const field of await qa.getByLabel('Printed copies counted').all()) await field.fill('3');
-    for (const field of await qa.getByRole('checkbox').all()) await field.check();
-    await qa.getByLabel('Inspection notes').fill('Isolated physical print workflow verification');
-    await qa.getByRole('button', { name: 'Approve physical print' }).click();
+    await expect(page.getByRole('region', { name: 'Physical print QA' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Create shipment', exact: true })).toBeVisible({ timeout: 10000 });
     await expect(page).toHaveURL(`/admin/orders/${order}/shipment`);
 

@@ -14,8 +14,8 @@ import pymupdf
 import pytest
 import zxingcpp
 from cryptography.hazmat.primitives.asymmetric import ec
+from independent_finance_fixtures import actor, make_order, seed, stock
 from independent_finance_fixtures import claims as allocated_claims
-from independent_finance_fixtures import make_order, seed, stock
 from independent_finance_local import local_cluster
 from PIL import Image
 from sqlalchemy import create_engine, text
@@ -39,7 +39,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
     assets = root / "backend/print-assets"
     font = next(assets.glob("*.ttf"))
     logo = next(assets.glob("*.svg"))
-    with local_cluster("0056_typed_shipment_lifecycle") as (url, _, _):
+    with local_cluster("0057_downloaded_print_shipping") as (url, _, _):
         database = Database(create_engine(url, hide_parameters=True))
         settings = Settings(
             supabase_url=ORIGIN,
@@ -259,6 +259,10 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             detail = call("GET", f"/admin/print-jobs/{job['id']}", finance=True).json()
             assert detail["status"] == "ready"
             assert len(detail["artifacts"]) == 1
+            shipment_path = f"/admin/orders/{oid}/shipment"
+            shipping = {"carrier": "Independent courier", "tracking_reference": "SR-2026-42"}
+            assert call("GET", shipment_path, finance=True).json()["eligible"] is False
+            assert call("POST", shipment_path, shipping, finance=True).status_code == 409
             assert all(item["can_activate"] for item in call("GET", "/me/independent-qr").json()["items"])
             assert call("POST", intents, purchase, finance=True).status_code == 404
             intent = call("POST", intents, purchase)
@@ -312,20 +316,18 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                 == "downloaded"
             )
             app.state.settings.print_enabled = True
-            item_ids = [str(tag["logical_item_id"]) for tag in tags]
-            shipment_path = f"/admin/orders/{oid}/shipment"
-            qa_path = f"/admin/print-jobs/{job['id']}/physical-qa"
-            shipping = {"carrier": "Independent courier", "tracking_reference": "SR-2026-42"}
-            assert call("GET", shipment_path, finance=True).json()["eligible"] is False
-            assert call("POST", shipment_path, shipping, finance=True).status_code == 409
+            assert call("GET", shipment_path, finance=True).json()["eligible"] is True
+            with database.engine.connect() as c:
+                actor(c, staff)
+                template_hold = c.begin_nested()
+                c.execute(text("""INSERT INTO public.template_order_holds(order_id,source_kind,source_reference)
+                    VALUES(:id,'synthetic-template-hold','shipment-regression')"""), {"id": oid})
+                assert c.execute(text("SELECT public.sr_typed_fulfillment_eligible(:id)"), {"id": oid}).scalar_one() is False
+                template_hold.rollback()
+                assert c.execute(text("SELECT public.sr_typed_fulfillment_eligible(:id)"), {"id": oid}).scalar_one() is True
             assert call("POST", shipment_path, shipping).status_code == 403
             assert call("POST", shipment_path, {"carrier": shipping["carrier"]}, finance=True).status_code == 422
             assert call("GET", "/me/shipments").json()["items"] == []
-            assert call("GET", qa_path).status_code == 403
-            inspection = call("GET", qa_path, finance=True)
-            assert inspection.status_code == 200, inspection.text
-            assert set(inspection.json()) == {"job_id", "order_id", "status", "artifact_sha256", "inspection_items", "expected"}
-            assert {item["id"] for item in inspection.json()["inspection_items"]} == set(item_ids)
             order_summary = call("GET", f"/admin/orders/{oid}/summary", finance=True).json()
             assert order_summary["id"] == str(oid)
             assert len(order_summary["order_items"]) == 2
@@ -342,21 +344,8 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                 run(app, tokens, oid, job["id"])
                 assert call("GET", "/me/shipments").json()["items"][0]["status"] == "delivered"
                 return
-            qa = call("POST", qa_path, {
-                "approved": True,
-                "artifact_sha256": artifact["sha256_hex"],
-                "observed": [{"tag_type": tag["tag_type"], "symbol_mm": "35", "copies": 3} for tag in tags],
-                "scan_passed": True,
-                "logo_quiet_zone_passed": True,
-                "bilingual_passed": True,
-                "cutting_packaging_passed": True,
-                "actual_scale_passed": True,
-                "inspected_item_ids": item_ids,
-                "reason": "Synthetic physical QA passed",
-            }, finance=True)
-            assert qa.status_code == 200, qa.text
-            assert qa.json()["status"] == "qa_passed"
-            assert call("GET", shipment_path, finance=True).json()["eligible"] is True
+            with database.engine.connect() as c:
+                assert c.execute(text("SELECT count(*) FROM public.print_job_qa WHERE print_job_id=:id"), {"id": job["id"]}).scalar_one() == 0
             shipment_key = str(uuid4())
             shipment = call("POST", shipment_path, shipping, key=shipment_key, finance=True)
             assert shipment.status_code == 201, shipment.text
