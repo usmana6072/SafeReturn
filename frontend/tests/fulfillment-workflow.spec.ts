@@ -41,6 +41,13 @@ test('staff fulfills a real stored order and the same buyer session observes all
     await page.getByRole('link', { name: 'View Print Job', exact: true }).click();
     await expect(page).toHaveURL(`/admin/print-jobs?orderId=${order}`);
     await page.goto(`/admin/print-jobs/${job}`);
+    await expect(page.getByRole('heading', { name: 'Physical print QA' })).toBeVisible();
+    await page.goto('/admin/orders');
+    await menu.click();
+    await page.getByRole('link', { name: 'Create Shipment', exact: true }).click();
+    await expect(page).toHaveURL(`/admin/orders/${order}/shipment`);
+    await expect(page.getByRole('button', { name: 'Create shipment', exact: true })).toHaveCount(0);
+    await expect(page.getByText('Approve the physical print below to continue.', { exact: false })).toBeVisible();
     const qa = page.getByRole('region', { name: 'Physical print QA' });
     await expect(qa.getByText(/Expected 35(\.0+)? mm/).first()).toBeVisible();
     for (const field of await qa.getByLabel('Measured QR size (mm)').all()) await field.fill('35');
@@ -48,8 +55,8 @@ test('staff fulfills a real stored order and the same buyer session observes all
     for (const field of await qa.getByRole('checkbox').all()) await field.check();
     await qa.getByLabel('Inspection notes').fill('Isolated physical print workflow verification');
     await qa.getByRole('button', { name: 'Approve physical print' }).click();
-    await expect(qa.getByText('Physical print QA passed.')).toBeVisible({ timeout: 10000 });
-    await qa.getByRole('link', { name: 'Create shipment' }).click();
+    await expect(page.getByRole('button', { name: 'Create shipment', exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(`/admin/orders/${order}/shipment`);
 
     await page.getByLabel('Shipping Service / Courier Name').fill('Independent courier');
     await page.getByLabel('Tracking Number', { exact: true }).fill('SR-2026-42');
