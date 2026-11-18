@@ -29,11 +29,10 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   }
   return <><Link className="text-link" href={tag.pair_id?`/kits/${tag.pair_id}`:"/independent-qr"}>{tag.pair_id?(ur ? "کٹ پر واپس" : "Back to kit"):(ur?"میرے الگ QR":"My independent QRs")}</Link>
     <h1>{tag.tag_type === "lost" ? (ur ? "Lost پروفائل میں ترمیم" : "Edit Lost profile") : (ur ? "ICE پروفائل میں ترمیم" : "Edit ICE profile")}</h1>
-    <p className="form-help">QR: <bdi>{qrId}</bdi> · {ur ? "تمام پرنٹ کاپیاں یہی پروفائل استعمال کرتی ہیں۔" : "All printed copies share this profile."}</p>
+    <p className="form-help">{ur ? "ایک QR شناخت۔ اس کی تمام پرنٹ کاپیاں یہی پروفائل استعمال کرتی ہیں۔" : "One QR identity. Every printed copy uses the details you save here."}</p>
     {(await searchParams).saved === "1" && <p role="status">{ur ? "تبدیلیاں محفوظ ہو گئیں۔" : "Changes saved."}</p>}
     {profile ? <ProfileEditor key={`profile-${profile.version}`} qrId={qrId} kind={tag.tag_type} profile={profile} ur={ur} /> : <><Unavailable ur={ur} />
       {tag.tag_type === "ice" && <PrivacyDisable qrId={qrId} scope="ice" version={tag.profile_version} ur={ur} />}</>}
-    {!!tag.physical_products?.length && <section><h2>{ur ? "منسلک مصنوعات کی کاپیاں" : "Linked product copies"}</h2>{tag.physical_products.map((p, index) => <p key={index}>{p.product_name_snapshot} · {p.variant_name_snapshot} · {p.copies}</p>)}</section>}
     {tag.tag_type === "ice" ? <section><h2>{ur ? "ہنگامی رابطے" : "Emergency contacts"}</h2>
       {contacts ? <>{contacts.contacts.map(c => <ContactEditor key={`${c.contact_id}-${contacts!.version}`} qrId={qrId} version={contacts!.version} contact={c} ur={ur} />)}
         {contacts.contacts.length < 3 && <ContactEditor key={`new-${contacts.version}`} qrId={qrId} version={contacts.version} ur={ur} />}</> : <Unavailable ur={ur} />}</section>

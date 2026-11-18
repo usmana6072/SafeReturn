@@ -45,11 +45,11 @@ test('expired server intent cannot confirm; native dialog restores navigation',a
   await expect(page.getByRole('alert')).toContainText('expired');
   await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);expect(confirmations).toBe(0);
 });
-test('profile quarantine remains visible; filtering never changes identity allocation',async({page})=>{
+test('active QR opens its profile and filtering preserves identity allocation',async({page})=>{
   await page.route('**/independent-qr/api**',r=>r.fulfill({json:{items:[{...identity,ownership_status:'active',public_status:'active'},{...identity,logical_item_id:id(4),qr_id:id(5),tag_type:'ice'}],next_cursor:null,activation_released:false}}));
-  await mount(page);await expect(page.getByText('Profile editing is currently unavailable.')).toBeVisible();
-  await expect(page.getByRole('link',{name:'Edit this profile'})).toHaveCount(0);
-  await page.getByLabel('Filter this page').selectOption('ice');await expect(page.locator('.identity-card')).toHaveCount(1);await expect(page.locator('.identity-card')).toContainText(id(5));
+  await mount(page);
+  await expect(page.getByRole('link',{name:'Edit this profile'})).toHaveAttribute('href','/my-qr/'+identity.qr_id);
+  await page.getByLabel('Filter this page').selectOption('ice');await expect(page.locator('.identity-card')).toHaveCount(1);await expect(page.getByRole('heading',{name:'Emergency QR',exact:true})).toBeVisible();
 });
 test('saved address create, edit, conflict and delete use server revisions',async({page})=>{
   let version=0,items:any[]=[],conflict=false;const writes:any[]=[];

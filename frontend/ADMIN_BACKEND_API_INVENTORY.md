@@ -1,5 +1,35 @@
 # SafeReturn admin backend API inventory — corrected default-deny audit
 
+## Owner profile release — 18 November 2026
+
+The user authorized details editing for activated purchased QRs. The following
+owner-authenticated operations supersede their historical exclusions below.
+The existing backend enforces QR ownership, verified-account writes, version
+checks, and publication consent. QR counts use distinct identities across all
+printed copies.
+
+| Method | Path | Current status |
+|---|---|---|
+| GET | `/api/v1/me/qr/{qr_id}` | OWNER PROFILE |
+| GET | `/api/v1/me/qr/{qr_id}/lost-profile` | OWNER PROFILE |
+| PUT | `/api/v1/me/qr/{qr_id}/lost-profile` | OWNER PROFILE |
+| GET | `/api/v1/me/qr/{qr_id}/ice-profile` | OWNER PROFILE |
+| PUT | `/api/v1/me/qr/{qr_id}/ice-profile` | OWNER PROFILE |
+| GET | `/api/v1/me/qr/{qr_id}/ice-contacts` | OWNER PROFILE |
+| POST | `/api/v1/me/qr/{qr_id}/ice-contacts` | OWNER PROFILE |
+| PATCH | `/api/v1/me/qr/{qr_id}/ice-contacts/{contact_id}` | OWNER PROFILE |
+| DELETE | `/api/v1/me/qr/{qr_id}/ice-contacts/{contact_id}` | OWNER PROFILE |
+| GET | `/api/v1/me/qr/{qr_id}/contact-preferences` | OWNER PROFILE |
+| PUT | `/api/v1/me/qr/{qr_id}/contact-preferences` | OWNER PROFILE |
+
+The existing payment workflow also enables these previously released operations.
+
+| Method | Path | Current status |
+|---|---|---|
+| POST | `/api/v1/admin/payment-attempts/{attempt_id}/reviews` | PRIOR RELEASE |
+| GET | `/api/v1/admin/orders/{order_id}/qr-allocation` | PRIOR RELEASE |
+| POST | `/api/v1/admin/orders/{order_id}/qr-allocation/retry` | PRIOR RELEASE |
+
 ## Current Phase 13 Dashboard, Audit, My Security and Monitoring — 24 October 2026
 
 Option A continues implementation; genuine live acceptance remains consolidated in Phase14, which has not started. This addendum supersedes older demo/live-console labels for these screens. Historical counts, corrected70 exclusions/quarantines and Products14-operation budget remain unchanged. Phase9–12 gates, quarantines/blockers, Phase4 Orders, provisioning and unapplied0044 are preserved.

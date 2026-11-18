@@ -18,7 +18,7 @@ test('one print-ready identity activates with explicit confirmation; uncertain r
  await mount(page);await page.getByRole('button',{name:'Begin activation',exact:true}).first().click();
  await expect(page.getByRole('button',{name:'Confirm activation',exact:true})).toBeDisabled();await page.getByLabel('I am the purchaser and want to activate this QR.',{exact:true}).check();
  await page.getByRole('button',{name:'Confirm activation',exact:true}).click();await expect(page.getByRole('status')).toContainText('uncertain');await page.getByRole('button',{name:'Confirm activation',exact:true}).click();
- await expect(page.getByText('Profile editing is currently unavailable.')).toHaveCount(1);await expect(page.getByRole('button',{name:'Begin activation',exact:true})).toHaveCount(1);
+ await expect(page.getByRole('link',{name:'Edit this profile'})).toHaveAttribute('href','/my-qr/'+first.qr_id);await expect(page.getByRole('button',{name:'Begin activation',exact:true})).toHaveCount(1);
  expect(writes[1].key).toBe(writes[2].key);expect(writes[1].body).toEqual({intent_id:id(6),confirmed:true});expect(JSON.stringify(writes)).not.toContain('public_token');expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);expect(await page.locator('body').innerText()).not.toContain('PRIVATE_CANARY');
 });
 test('public availability changes only the selected identity; denied refresh clears rows',async({page})=>{

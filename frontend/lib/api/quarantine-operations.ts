@@ -70,46 +70,6 @@ export const quarantineOperations = [
   ],
   [
     "GET",
-    "/api/v1/me/qr/{qr_id}/lost-profile"
-  ],
-  [
-    "PUT",
-    "/api/v1/me/qr/{qr_id}/lost-profile"
-  ],
-  [
-    "GET",
-    "/api/v1/me/qr/{qr_id}/ice-profile"
-  ],
-  [
-    "PUT",
-    "/api/v1/me/qr/{qr_id}/ice-profile"
-  ],
-  [
-    "GET",
-    "/api/v1/me/qr/{qr_id}/ice-contacts"
-  ],
-  [
-    "POST",
-    "/api/v1/me/qr/{qr_id}/ice-contacts"
-  ],
-  [
-    "PATCH",
-    "/api/v1/me/qr/{qr_id}/ice-contacts/{contact_id}"
-  ],
-  [
-    "DELETE",
-    "/api/v1/me/qr/{qr_id}/ice-contacts/{contact_id}"
-  ],
-  [
-    "GET",
-    "/api/v1/me/qr/{qr_id}/contact-preferences"
-  ],
-  [
-    "PUT",
-    "/api/v1/me/qr/{qr_id}/contact-preferences"
-  ],
-  [
-    "GET",
     "/api/v1/me/tag-pairs"
   ],
   [
@@ -119,10 +79,6 @@ export const quarantineOperations = [
   [
     "GET",
     "/api/v1/me/qr"
-  ],
-  [
-    "GET",
-    "/api/v1/me/qr/{qr_id}"
   ],
   [
     "GET",

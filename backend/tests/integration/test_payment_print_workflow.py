@@ -77,14 +77,14 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                     {"id": customer_sid, "uid": customer},
                 )
             oid, _, amount = make_order(
-                case, kinds=("lost", "ice"), copies=3, submit_payment=False, shipping_settings=settings
+                case, kinds=("lost", "ice"), copies=6, submit_payment=False, shipping_settings=settings
             )
             stock(case, "lost")
             app = create_app(settings, verifier=verifier)
             app.state.database, app.state.jwt_verifier = database, verifier
             client = ASGIClient(app)
 
-            def call(method, path, body=None, *, finance=False, key=None):
+            def call(method, path, body=None, *, finance=False, key=None, version=None):
                 token = signed(
                     signing_key,
                     claims(
@@ -100,6 +100,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                     headers={
                         "Authorization": "Bearer " + token,
                         "Idempotency-Key": key or str(uuid4()),
+                        **({"If-Match": f'"{version}"'} if version is not None else {}),
                     },
                 )
 
@@ -279,6 +280,32 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             })
             assert hidden.status_code == 200, hidden.text
             assert client.request("GET", scan).json()["status"] == "owner_disabled"
+            resumed = call("PATCH", f"/me/independent-qr/{activated['qr_id']}/availability", {
+                "public_status": "active", "expected_revision": hidden.json()["revision"], "confirmed": True,
+            })
+            assert resumed.status_code == 200, resumed.text
+            identities = call("GET", "/me/independent-qr").json()["items"]
+            assert len(identities) == 2
+            assert len([qr for qr in identities if qr["ownership_status"] == "active"]) == 1
+            assert len([qr for qr in identities if qr["tag_type"] == "lost"]) == 1
+            profile_path = f"/me/qr/{activated['qr_id']}/lost-profile"
+            profile = call("GET", profile_path)
+            assert profile.status_code == 200, profile.text
+            assert call("GET", f"/me/qr/{activated['qr_id']}").json()["tag_type"] == "lost"
+            draft = {"item_label": "Fixture bag", "description": "Fixture owner details", "published": False}
+            saved = call("PUT", profile_path, draft, version=profile.json()["version"])
+            assert saved.status_code == 200, saved.text
+            assert call("GET", profile_path, finance=True).status_code == 404
+            assert call("PUT", profile_path, draft, version=saved.json()["version"], finance=True).status_code == 404
+            assert client.request("GET", scan).json()["lost_item"]["label"] is None
+            published = call("PUT", profile_path, {"published": True}, version=saved.json()["version"])
+            assert published.status_code == 200, published.text
+            assert client.request("GET", scan).json()["lost_item"]["label"] == "Fixture bag"
+            assert call("PUT", profile_path, draft, version=saved.json()["version"]).status_code == 412
+            with database.engine.connect() as c:
+                assert c.execute(text("""SELECT sum(z.copies) FROM public.order_item_sizes z
+                    JOIN public.order_item_qr_allocations a ON a.logical_item_id=z.logical_item_id
+                    WHERE a.qr_id=:qr"""), {"qr": activated["qr_id"]}).scalar_one() == 6
             app.state.print_storage_transport = httpx.MockTransport(
                 lambda request: httpx.Response(
                     200,
@@ -343,6 +370,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                 }
                 run(app, tokens, oid, job["id"])
                 assert call("GET", "/me/shipments").json()["items"][0]["status"] == "delivered"
+                assert client.request("GET", scan).json()["lost_item"]["label"] == "Browser bag"
                 return
             with database.engine.connect() as c:
                 assert c.execute(text("SELECT count(*) FROM public.print_job_qa WHERE print_job_id=:id"), {"id": job["id"]}).scalar_one() == 0
