@@ -6,7 +6,11 @@ from uuid import UUID
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.core.public_site import PREVIOUS_WEB_HOSTS, PUBLIC_WEB_HOST, canonical_web_origin
+from app.core.public_site import (
+    PREVIOUS_WEB_HOSTS,
+    PUBLIC_WEB_HOST,
+    canonical_web_origin,
+)
 
 
 class Settings(BaseSettings):
@@ -140,6 +144,7 @@ class Settings(BaseSettings):
     turnstile_timeout_seconds: float = Field(default=3, ge=0.1, le=10)
     resend_api_key: SecretStr | None = None
     notification_from_email: str | None = None
+    notification_worker_enabled: bool = True
     notification_worker_id: str = Field(
         default="safereturn-notification-worker",
         min_length=1,

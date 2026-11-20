@@ -6,6 +6,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
+from pathlib import Path
 from threading import Barrier
 from types import SimpleNamespace
 from uuid import uuid4
@@ -66,6 +67,7 @@ def notification_database():
             )
             c.rollback()
             pg.upgrade(c, TARGET)
+            c.execute(text((Path(__file__).parents[2] / "alembic/versions/0058_finder_email_details.sql").read_text()))
             owner = uuid4()
             c.execute(
                 text(
@@ -109,13 +111,14 @@ def sample(notification_database):
             if kind == "finder_message.created":
                 c.execute(
                     text(
-                        "INSERT INTO public.finder_messages(id,qr_id,recipient_owner_user_id,finder_email_ciphertext,finder_contact_key_version,message_text_ciphertext,message_key_version,consent_version,consent_at) VALUES(:mid,:qr,:owner,:cipher,:version,:cipher,:version,'finder-public-v1',now())"
+                        "INSERT INTO public.finder_messages(id,qr_id,recipient_owner_user_id,finder_email_ciphertext,finder_contact_key_version,message_text_ciphertext,message_key_version,consent_version,consent_at) VALUES(:mid,:qr,:owner,:email,:version,:cipher,:version,'finder-public-v1',now())"
                     ),
                     {
                         "mid": mid,
                         "qr": qr,
                         "owner": owner,
                         "cipher": ciphertext,
+                        "email": encrypt(settings, qr, "finder_email", "finder@example.test")[0],
                         "version": version,
                     },
                 )
@@ -245,8 +248,8 @@ def test_claim_and_encrypted_snapshot_are_committed_before_provider(sample):
             )
             == message["to"]
         )
-        assert "PRIVATE-FINDER" not in message["html"]
-        assert str(row["aggregate_id"]) not in message["html"]
+        assert "PRIVATE-FINDER-MESSAGE" in message["html"]
+        assert f"/inbox/{row['aggregate_id']}" in message["html"]
 
     provider = Provider(callback=inspect_claim)
     assert process(sample, provider)

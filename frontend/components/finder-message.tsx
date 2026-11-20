@@ -4,7 +4,7 @@ import { useActionState, useId, useRef, useState } from "react";
 import { submitFinderMessage } from "../app/q/[token]/finder-message";
 import { ContactChallenge } from "./contact-challenge";
 
-type FinderState = { status: "idle" | "accepted" | "unavailable" };
+type FinderState = { status: "idle" | "accepted" | "unavailable" | "invalid_contact" };
 
 function parse(value: string): FinderState {
   try {
@@ -94,8 +94,8 @@ export function FinderMessageForm({
     return (
       <p role="status" className="form-notice">
         {ur
-          ? "آپ کا پیغام محفوظ ہو گیا ہے۔ ای میل اطلاع کی ضمانت نہیں ہے۔"
-          : "Your message is saved. Email notification is not guaranteed."}
+          ? "آپ کا پیغام مالک کے اِن باکس میں محفوظ ہو گیا ہے اور ای میل اطلاع قطار میں شامل ہے۔ شکریہ!"
+          : "Your message is saved in the owner's inbox and an email notification is queued. Thank you!"}
       </p>
     );
   }
@@ -143,9 +143,12 @@ export function FinderMessageForm({
           inputMode="tel"
           dir="ltr"
           maxLength={16}
-          placeholder={ur ? "فون نمبر" : "Phone number"}
+          placeholder={ur ? "+923001234567" : "+923001234567"}
+          pattern="\+[1-9][0-9]{7,14}"
+          title={ur ? "ملکی کوڈ کے ساتھ فون نمبر درج کریں، مثلاً +923001234567" : "Include the country code, for example +923001234567"}
         />
       </label>
+      <p className="form-help">{ur ? "ای میل یا ملکی کوڈ کے ساتھ فون نمبر ضرور درج کریں تاکہ مالک آپ سے رابطہ کر سکے۔" : "Enter an email or a phone number with country code so the owner can contact you."}</p>
       <label>
         {ur ? "رابطے کی ترجیح" : "Preferred contact"}
         <select name="preferred_contact" value={fields.preferred_contact} onChange={(event) => updateField("preferred_contact", event.target.value)} disabled={pending}>
@@ -210,6 +213,7 @@ export function FinderMessageForm({
             : "The message could not be submitted right now."}
         </p>
       )}
+      {state.status === "invalid_contact" && <p role="alert" className="form-notice">{ur ? "درست ای میل یا ملکی کوڈ کے ساتھ فون نمبر درج کریں، پیغام اور رضامندی بھی چیک کریں۔" : "Enter a valid email or phone number with country code, and check your message and consent."}</p>}
       <button
         className="button secondary"
         disabled={pending || locationPending || !proof}

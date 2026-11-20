@@ -1,12 +1,14 @@
 """Durable at-least-once finder notifications with fenced, short transactions."""
 
 import argparse
+import math
 import re
 import secrets
 import sys
 import time
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from html import escape
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -16,15 +18,99 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
 from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt, encrypt
+from app.core.public_site import PUBLIC_WEB_ORIGIN
 from app.db.runtime import worker_transaction
 from app.db.session import Database
 
 SUBJECT = "SafeReturn: someone sent you a finder message"
 HTML = (
-    "<p>You have a new finder message.</p>"
-    "<p>Sign in to SafeReturn to view it securely.</p>"
-    "<p>This notification does not confirm that an item has been returned.</p>"
+    "<h1>Someone found your item</h1>"
+    "<p>A finder sent the following information through your SafeReturn QR code.</p>"
 )
+
+
+def finder_email_html(settings, claimed, row):
+    """Escape every finder value; use immutable message fields for safe retries."""
+
+    def decode(field, ciphertext, version):
+        return (
+            decrypt(settings, row["qr_id"], field, ciphertext, version)
+            if ciphertext
+            else None
+        )
+
+    email = decode(
+        "finder_email",
+        row["finder_email_ciphertext"],
+        row["finder_contact_key_version"],
+    )
+    phone = decode(
+        "finder_phone",
+        row["finder_phone_ciphertext"],
+        row["finder_contact_key_version"],
+    )
+    message = decode(
+        "finder_message", row["message_text_ciphertext"], row["message_key_version"]
+    )
+    values = [
+        ("QR reference", str(row["qr_id"])),
+        (
+            "Received (UTC)",
+            row["submitted_at"].astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        ),
+        ("Finder name", row["finder_name"] or "Not provided"),
+        ("Email", email or "Not provided"),
+        ("Phone", phone or "Not provided"),
+        ("Preferred contact", row["preferred_contact"] or "No preference"),
+    ]
+    rows = "".join(
+        f'<tr><th align="left" style="padding:8px">{escape(label)}</th><td style="padding:8px">{escape(value)}</td></tr>'
+        for label, value in values
+    )
+    location = ""
+    if row["latitude_ciphertext"] and row["longitude_ciphertext"]:
+        try:
+            lat = float(
+                decode(
+                    "finder_latitude",
+                    row["latitude_ciphertext"],
+                    row["location_key_version"],
+                )
+            )
+            lon = float(
+                decode(
+                    "finder_longitude",
+                    row["longitude_ciphertext"],
+                    row["location_key_version"],
+                )
+            )
+        except (ValueError, TypeError):
+            raise NotificationProviderError(
+                "invalid_finder_location", transient=False
+            ) from None
+        if not (
+            math.isfinite(lat)
+            and math.isfinite(lon)
+            and -90 <= lat <= 90
+            and -180 <= lon <= 180
+        ):
+            raise NotificationProviderError("invalid_finder_location", transient=False)
+        accuracy = (
+            f" (accuracy: {escape(str(row['accuracy_m']))} m)"
+            if row["accuracy_m"] is not None
+            else ""
+        )
+        location = f'<h2>Shared location</h2><p>{lat}, {lon}{accuracy}</p><p><a href="https://www.google.com/maps?q={lat},{lon}">View location on Google Maps</a></p>'
+    link = f"{PUBLIC_WEB_ORIGIN}/inbox/{claimed.aggregate_id}"
+    return (
+        '<!doctype html><html><body style="font-family:Arial,sans-serif;color:#173c3a;max-width:640px;margin:auto;padding:24px">'
+        + HTML
+        + f'<table style="border-collapse:collapse;width:100%">{rows}</table>'
+        + f'<h2>Finder message</h2><p style="white-space:pre-wrap;overflow-wrap:anywhere" dir="auto">{escape(message or "")}</p>'
+        + location
+        + f'<p><a href="{link}">View message in your SafeReturn inbox</a></p>'
+        + "<p>Contact the finder using the details above to arrange a return. This message does not confirm that the item has been returned.</p></body></html>"
+    )
 
 
 class NotificationProvider(Protocol):
@@ -305,6 +391,7 @@ def process_one(
         raise NotificationProviderError("lease_timeout_configuration", transient=False)
     worker = worker_id or settings.notification_worker_id
     error = None
+    html = None
     # The lease, attempt and encrypted recipient are durable before any provider call.
     with worker_transaction(database, worker) as session:
         claimed = _claim_one(session, worker, settings.notification_lease_seconds)
@@ -320,6 +407,21 @@ def process_one(
                     "idempotency_window_expired", transient=False
                 )
             claimed = _prepare_recipient(session, claimed, settings)
+            row = (
+                session.execute(
+                    text(
+                        "SELECT * FROM public.sr_notification_finder_details(:id,:attempt)"
+                    ),
+                    {"id": claimed.id, "attempt": claimed.attempt},
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if row is None:
+                raise NotificationProviderError(
+                    "finder_message_unavailable", transient=False
+                )
+            html = finder_email_html(settings, claimed, row)
         except ProfileCryptoUnavailable:
             error = NotificationProviderError(
                 "recipient_decryption_failed", transient=False
@@ -346,7 +448,7 @@ def process_one(
             provider_id = provider.send(
                 to=recipient,
                 subject=SUBJECT,
-                html=HTML,
+                html=html,
                 idempotency_key=claimed.idempotency_key,
             )
             if not isinstance(provider_id, str) or not re.fullmatch(

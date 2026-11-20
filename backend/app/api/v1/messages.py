@@ -56,7 +56,7 @@ def _message_or_404(context, message_id: UUID):
                 """
             SELECT m.id,m.qr_id,m.finder_name,m.finder_email_ciphertext,
                    m.finder_phone_ciphertext,m.finder_contact_key_version,
-                   m.message_text_ciphertext,m.message_key_version,m.status,
+                   m.message_text_ciphertext,m.message_key_version,m.preferred_contact,m.status,
                    m.submitted_at,q.tag_type
             FROM public.finder_messages m
             JOIN public.qr_codes q ON q.id=m.qr_id
@@ -260,6 +260,7 @@ def get_finder_message(message_id: UUID, context: Authenticated):
         "finder_name": row["finder_name"],
         "finder_email": email,
         "finder_phone": phone,
+        "preferred_contact": row["preferred_contact"],
         "message": message,
         "status": row["status"],
         "submitted_at": row["submitted_at"],

@@ -11,6 +11,7 @@ type Message = {
   finder_name: string | null;
   finder_email: string | null;
   finder_phone: string | null;
+  preferred_contact: "email" | "phone" | null;
   message: string;
   status: string;
   submitted_at: string;
@@ -34,9 +35,11 @@ export default async function FinderMessagePage({ params, searchParams }: { para
     <article className="qr-card">
       <p className="eyebrow"><bdi>{message.tag_type}</bdi></p>
       <h2>{message.finder_name || (ur ? "نامعلوم فائنڈر" : "Anonymous finder")}</h2>
-      <p>{message.message}</p>
+      <p style={{ whiteSpace: "pre-wrap" }}>{message.message}</p>
       {message.finder_email && <p>{ur ? "ای میل" : "Email"}: <bdi>{message.finder_email}</bdi></p>}
       {message.finder_phone && <p>{ur ? "فون" : "Phone"}: <bdi>{message.finder_phone}</bdi></p>}
+      {message.preferred_contact && <p>{ur ? "رابطے کی ترجیح" : "Preferred contact"}: {message.preferred_contact === "email" ? (ur ? "ای میل" : "Email") : (ur ? "فون" : "Phone")}</p>}
+      <p><bdi>{new Date(message.submitted_at).toLocaleString(ur ? "ur-PK" : "en-PK")}</bdi></p>
       {message.location && <p><a className="text-link" href={message.location.maps_url} rel="noreferrer">
         {ur ? "نقشے میں مقام دیکھیں" : "View consented location on map"}
       </a></p>}
