@@ -31,7 +31,7 @@ async def notification_service(settings):
         and settings.notification_from_email.strip()
     ):
         logger.warning(
-            "Finder email processing is inactive: worker database and Resend configuration are required."
+            "Customer email processing is inactive: worker database and Resend configuration are required."
         )
         yield
         return
@@ -48,7 +48,7 @@ async def notification_service(settings):
         if database is not None:
             database.close()
         logger.error(
-            "Finder email processing could not start: check Resend sender configuration."
+            "Customer email processing could not start: check Resend sender configuration."
         )
         yield
         return
@@ -62,7 +62,7 @@ async def notification_service(settings):
                 )
             except (SQLAlchemyError, NotificationProviderError):
                 logger.error(
-                    "Finder email processing failed; check worker permissions, schema and configuration."
+                    "Customer email processing failed; check worker permissions, schema and configuration."
                 )
                 processed = False
             if not processed:
@@ -71,7 +71,7 @@ async def notification_service(settings):
                 except TimeoutError:
                     pass
 
-    task = asyncio.create_task(run(), name="finder-email-delivery")
+    task = asyncio.create_task(run(), name="customer-email-delivery")
     try:
         yield
     finally:

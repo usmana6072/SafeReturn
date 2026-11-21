@@ -316,7 +316,7 @@ class ShipmentRequest(Closed):
 
 class ShipmentForOrder(Closed):
     carrier: str = Field(min_length=1, max_length=80)
-    tracking_reference: str = Field(min_length=1, max_length=150)
+    tracking_reference: str | None = Field(default=None, min_length=1, max_length=150)
 
 
 @router.get("/admin/shipments/{shipment_id}/items", operation_id="typed-shipment-items")
@@ -330,13 +330,14 @@ def shipment_items(shipment_id: UUID, context: Authenticated):
 
 
 class ShipmentUpdate(Closed):
-    status: Literal["packed", "dispatched", "delivered", "exception", "returned"]
+    status: Literal["dispatched", "delivered"]
     expected_status: Literal[
         "preparing", "packed", "dispatched", "exception", "delivered"
     ]
     tracking_reference: str | None = Field(default=None, min_length=1, max_length=150)
     packing_confirmed: bool = Field(default=False, strict=True)
-    reason: str = Field(min_length=4, max_length=500)
+    reason: str = Field(default="Courier confirmed delivery", min_length=4, max_length=500)
+    received_by: str | None = Field(default=None, max_length=120)
 
 
 def command(context, request, operation, payload, work):
@@ -517,10 +518,11 @@ def create_order_shipment(order_id, carrier, tracking, reason, context, request,
             s.execute(text("""INSERT INTO public.shipment_items(shipment_id,logical_item_id,print_job_id)
                 SELECT :sid,:iid,id FROM public.print_jobs WHERE order_id=:oid ORDER BY job_revision DESC LIMIT 1"""),
                 {"sid": sid, "iid": item_id, "oid": order_id})
+        dispatch_shipment(s, sid, order_id, context.principal.user_id, "preparing")
         return {
             "shipment_id": sid,
             "order_id": order_id,
-            "status": "preparing",
+            "status": "dispatched",
             "shipping_snapshot": snap,
         }, sid
 
@@ -530,11 +532,23 @@ def create_order_shipment(order_id, carrier, tracking, reason, context, request,
     return command(context, request, "shipment.create", payload, work)
 
 
+def dispatch_shipment(session, shipment_id, order_id, actor, status):
+    # Keep the database's packing/allocation checks atomic with the dispatch command.
+    if status == "preparing":
+        for table in ("shipment_pairs", "shipment_items"):
+            session.execute(text(f"UPDATE public.{table} SET packed_qa_confirmed=true,packed_by=:actor,packed_at=clock_timestamp() WHERE shipment_id=:id AND NOT packed_qa_confirmed"), {"actor": actor, "id": shipment_id})
+        session.execute(text("UPDATE public.shipments SET status='packed',packed_at=clock_timestamp() WHERE id=:id"), {"id": shipment_id})
+        session.execute(text("UPDATE public.orders SET fulfillment_status='packed' WHERE id=:id"), {"id": order_id})
+    if status in {"preparing", "packed"}:
+        session.execute(text("UPDATE public.shipments SET status='dispatched',dispatched_at=clock_timestamp() WHERE id=:id"), {"id": shipment_id})
+        session.execute(text("UPDATE public.orders SET fulfillment_status='dispatched' WHERE id=:id"), {"id": order_id})
+
+
 TRANSITIONS = {
-    "preparing": {"packed", "exception"},
-    "packed": {"dispatched", "exception"},
-    "dispatched": {"delivered", "exception", "returned"},
-    "exception": {"returned"},
+    "preparing": {"delivered"},
+    "packed": {"delivered"},
+    "dispatched": {"delivered"},
+    "exception": set(),
     "delivered": set(),
     "returned": set(),
 }
@@ -584,40 +598,33 @@ def update_shipment(
         )[0]
         if row["status"] != body.expected_status:
             fail(412, "VERSION_MISMATCH")
+        if row["status"] == body.status == "dispatched":
+            if body.received_by:
+                fail(422, "INVALID_SHIPMENT_TRANSITION")
+            tracking = body.tracking_reference or row["tracking_reference"]
+            s.execute(text("UPDATE public.shipments SET tracking_reference=:tracking WHERE id=:id"), {"tracking": tracking, "id": shipment_id})
+            return {"shipment_id": shipment_id, "order_id": oid, "status": "dispatched", "tracking_reference": tracking}, shipment_id
         if body.status not in TRANSITIONS[row["status"]]:
             fail(409, "INVALID_SHIPMENT_TRANSITION")
-        if body.status in {"packed", "dispatched", "delivered"}:
-            eligible(s, oid, template_clear=body.status != "delivered")
-        if body.status == "packed":
-            if not body.packing_confirmed:
-                fail(422, "PACKING_CONFIRMATION_REQUIRED")
-            s.execute(
-                text(
-                    "UPDATE public.shipment_pairs SET packed_qa_confirmed=true,packed_by=:uid,packed_at=clock_timestamp() WHERE shipment_id=:id"
-                ),
-                {"uid": context.principal.user_id, "id": shipment_id},
-            )
-            typed = s.execute(text("SELECT commerce_model='single_qr' FROM public.orders WHERE id=:id"), {"id": oid}).scalar_one() is True
-            if typed:
-                s.execute(text("UPDATE public.shipment_items SET packed_qa_confirmed=true,packed_by=:uid,packed_at=clock_timestamp() WHERE shipment_id=:id"),
-                          {"uid": context.principal.user_id, "id": shipment_id})
+        if row["status"] in {"preparing", "packed"}:
+            eligible(s, oid)
+            dispatch_shipment(s, shipment_id, oid, context.principal.user_id, row["status"])
+        eligible(s, oid, template_clear=False)
         tracking = body.tracking_reference or row["tracking_reference"]
-        if body.status == "dispatched" and not tracking:
-            fail(422, "TRACKING_REQUIRED")
-        s.execute(
-            text("""UPDATE public.shipments SET status=CAST(:status AS text),tracking_reference=:tracking,
-          packed_at=CASE WHEN CAST(:status AS text)='packed' THEN clock_timestamp() ELSE packed_at END,
-          dispatched_at=CASE WHEN CAST(:status AS text)='dispatched' THEN clock_timestamp() ELSE dispatched_at END,
-          delivered_at=CASE WHEN CAST(:status AS text)='delivered' THEN clock_timestamp() ELSE delivered_at END WHERE id=:id"""),
-            {"status": body.status, "tracking": tracking, "id": shipment_id},
-        )
-        s.execute(
-            text("UPDATE public.orders SET fulfillment_status=:status WHERE id=:id"),
-            {
-                "id": oid,
-                "status": "exception" if body.status == "returned" else body.status,
-            },
-        )
+        s.execute(text("UPDATE public.shipments SET status='delivered',tracking_reference=:tracking,delivered_at=clock_timestamp() WHERE id=:id"), {"tracking": tracking, "id": shipment_id})
+        s.execute(text("UPDATE public.orders SET fulfillment_status='delivered' WHERE id=:id"), {"id": oid})
+        delivery = rows(s, "SELECT o.customer_user_id,o.order_number,h.carrier,h.tracking_reference,h.delivered_at FROM public.shipments h JOIN public.orders o ON o.id=h.order_id WHERE h.id=:id", id=shipment_id)[0]
+        payload = {"order_id": str(oid), "order_number": delivery["order_number"],
+                   "carrier": delivery["carrier"], "tracking_reference": tracking,
+                   "delivered_at": delivery["delivered_at"].isoformat(),
+                   "received_by": (body.received_by or "").strip() or None,
+                   "items": order_products(s, [oid])[oid]}
+        ciphertext, version = encrypt(settings, shipment_id, "shipment_delivery", json.dumps(payload))
+        s.execute(text("""INSERT INTO public.notification_outbox(event_type,aggregate_type,aggregate_id,recipient_user_id,
+            payload_ciphertext,payload_key_version,payload_version,idempotency_key)
+            VALUES('shipment.delivered','shipment',:id,:recipient,:payload,:version,1,:key)"""),
+            {"id": shipment_id, "recipient": delivery["customer_user_id"], "payload": ciphertext,
+             "version": version, "key": "shipment-delivered:" + str(shipment_id)})
         return {
             "shipment_id": shipment_id,
             "order_id": oid,

@@ -39,7 +39,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
     assets = root / "backend/print-assets"
     font = next(assets.glob("*.ttf"))
     logo = next(assets.glob("*.svg"))
-    with local_cluster("0057_downloaded_print_shipping") as (url, _, _):
+    with local_cluster("0059_shipment_delivery_email") as (url, _, _):
         database = Database(create_engine(url, hide_parameters=True))
         settings = Settings(
             supabase_url=ORIGIN,
@@ -261,7 +261,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
             assert detail["status"] == "ready"
             assert len(detail["artifacts"]) == 1
             shipment_path = f"/admin/orders/{oid}/shipment"
-            shipping = {"carrier": "Independent courier", "tracking_reference": "SR-2026-42"}
+            shipping = {"carrier": "Independent courier"}
             assert call("GET", shipment_path, finance=True).json()["eligible"] is False
             assert call("POST", shipment_path, shipping, finance=True).status_code == 409
             assert all(item["can_activate"] for item in call("GET", "/me/independent-qr").json()["items"])
@@ -353,7 +353,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                 template_hold.rollback()
                 assert c.execute(text("SELECT public.sr_typed_fulfillment_eligible(:id)"), {"id": oid}).scalar_one() is True
             assert call("POST", shipment_path, shipping).status_code == 403
-            assert call("POST", shipment_path, {"carrier": shipping["carrier"]}, finance=True).status_code == 422
+            assert call("POST", shipment_path, {"carrier": ""}, finance=True).status_code == 422
             assert call("GET", "/me/shipments").json()["items"] == []
             order_summary = call("GET", f"/admin/orders/{oid}/summary", finance=True).json()
             assert order_summary["id"] == str(oid)
@@ -391,18 +391,48 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                 assert buyer[0]["order_items"] == order_summary["order_items"]
                 assert {key: buyer[0][key] for key in shipping} == shipping
 
-            check_buyer("preparing")
-            assert call("PATCH", shipment_path, {
-                "status": "delivered", "expected_status": "preparing", "reason": "Invalid synthetic jump",
-            }, finance=True).status_code == 409
-            check_buyer("preparing")
-            for previous, status in (("preparing", "packed"), ("packed", "dispatched"), ("dispatched", "delivered")):
-                updated = call("PATCH", shipment_path, {
-                    "status": status, "expected_status": previous, "packing_confirmed": status == "packed",
-                    "reason": "Recorded synthetic carrier progression",
-                }, finance=True)
-                assert updated.status_code == 200, updated.text
-                check_buyer(status)
+            check_buyer("dispatched")
+            assert shipment.json()["status"] == "dispatched"
+            assert call("GET", shipment_path, finance=True).json()["next_statuses"] == ["delivered"]
+            assert call("PATCH", shipment_path, {"status": "delivered", "expected_status": "preparing"}, finance=True).status_code == 412
+            shipping["tracking_reference"] = "SR-2026-42"
+            tracked = call("PATCH", shipment_path, {"status": "dispatched", "expected_status": "dispatched", "tracking_reference": shipping["tracking_reference"]}, finance=True)
+            assert tracked.status_code == 200, tracked.text
+            check_buyer("dispatched")
+            with database.engine.begin() as c:
+                c.execute(text("UPDATE auth.users SET email='buyer@example.test' WHERE id=:id"), {"id": customer})
+                assert c.execute(text("SELECT count(*) FROM notification_outbox WHERE event_type='shipment.delivered'")).scalar_one() == 0
+            saved_keys = settings.profile_data_keys
+            settings.profile_data_keys = None
+            try:
+                failed = call("PATCH", shipment_path, {"status": "delivered", "expected_status": "dispatched"}, finance=True)
+                assert failed.status_code == 503, failed.text
+            finally:
+                settings.profile_data_keys = saved_keys
+            check_buyer("dispatched")
+            with database.engine.connect() as c:
+                assert c.execute(text("SELECT count(*) FROM notification_outbox WHERE event_type='shipment.delivered'")).scalar_one() == 0
+            delivered_key = str(uuid4())
+            delivery_body = {"status": "delivered", "expected_status": "dispatched", "received_by": "Ahmed <Receiver>"}
+            updated = call("PATCH", shipment_path, delivery_body, key=delivered_key, finance=True)
+            assert updated.status_code == 200, updated.text
+            assert call("PATCH", shipment_path, delivery_body, key=delivered_key, finance=True).json() == updated.json()
+            assert call("PATCH", shipment_path, delivery_body, finance=True).status_code == 412
+            check_buyer("delivered")
+            from unittest.mock import MagicMock
+            from app.workers.notifications import process_one
+            provider = MagicMock()
+            provider.send.return_value = "delivery-test-id"
+            assert process_one(database, settings, provider)
+            mail = provider.send.call_args.kwargs
+            assert mail["from_email"] == "SafeReturn <services@safereturnqr.me>"
+            assert mail["to"] == "buyer@example.test"
+            assert "Ahmed &lt;Receiver&gt;" in mail["html"]
+            assert shipping["tracking_reference"] in mail["html"]
+            assert not process_one(database, settings, provider)
+            with database.engine.connect() as c:
+                assert c.execute(text("SELECT count(*) FROM notification_outbox WHERE event_type='shipment.delivered'")).scalar_one() == 1
+                assert c.execute(text("SELECT status FROM notification_outbox WHERE event_type='shipment.delivered'")).scalar_one() == "sent"
             assert call("GET", shipment_path, finance=True).json()["next_statuses"] == []
             with database.engine.connect() as c:
                 assert c.execute(text("""SELECT h.status,h.tracking_reference,h.carrier,o.fulfillment_status

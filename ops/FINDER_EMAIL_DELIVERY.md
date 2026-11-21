@@ -56,3 +56,42 @@ cd ../frontend
 node scripts/test-finder-message.cjs
 npm run typecheck
 ```
+
+## Shipment delivery confirmations
+
+Shipment creation now completes packing and dispatch in one transaction, preserving
+the existing payment, allocation and print checks. The saved shipment starts as
+`dispatched`; tracking is optional and can be saved later without changing the
+status. The only next status exposed by the order shipment form is `delivered`.
+Existing preparing/packed shipments can also be completed through that form;
+their internal packing/dispatch checks run before delivery is recorded.
+
+The form labels the former required Reason field **Delivery note (optional)**.
+It is an internal audit note; a useful example is “Courier confirmed delivery”.
+Blank notes use that default. **Received by (optional)** is a separate field and
+is included in the customer email only when provided.
+
+Marking delivered atomically saves the status and an encrypted, durable
+`shipment.delivered` email event. The existing notification worker sends it from
+`SafeReturn <services@safereturnqr.me>` to the customer's verified account email.
+It includes the order, courier, tracking when available, delivered timestamp,
+ordered items, optional receiver name and an order link. Finder emails retain
+their configured sender. The existing retry and lease fencing also cover delivery
+emails; repeated delivery submissions cannot enqueue another event.
+
+Apply migration `0059_shipment_delivery_email` before deploying these changes.
+This migration was rehearsed with rollback, then applied and independently
+verified on the configured Supabase project on 2026-11-21. Existing shipment
+statuses and records were left unchanged.
+From the repository root with `PYTHONPATH=backend`, run
+`python backend/scripts/release_shipment_delivery.py` for a rollback rehearsal,
+then add `--apply` to commit after checks. This preserves the independent support
+branch, unrelated functions, outbox guard permissions and existing message rows.
+It sends no email and changes no existing shipment status.
+
+Validation includes unit checks, a full disposable PostgreSQL order → printing →
+shipment → customer email flow with a controlled provider, and the browser flow
+in `frontend/tests/fulfillment-workflow.spec.ts`. The database flow checks missing
+tracking, later tracking edits, optional notes, encrypted receiver details,
+delivery receipt replay, duplicate suppression and rollback when queue encryption
+fails. Actual Resend delivery is verified after deployment.

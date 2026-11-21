@@ -93,26 +93,29 @@ test('staff fulfills a real stored order and the same buyer session observes all
     await expect(page).toHaveURL(`/admin/orders/${order}/shipment`);
 
     await page.getByLabel('Shipping Service / Courier Name').fill('Independent courier');
-    await page.getByLabel('Tracking Number', { exact: true }).fill('SR-2026-42');
     await page.getByRole('button', { name: 'Create shipment', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Manage shipment' })).toBeVisible();
+    await expect(page.getByLabel('Next status').locator('option')).toHaveCount(1);
+    await expect(page.getByLabel('Next status')).toHaveValue('delivered');
+    await buyer.bringToFront();
+    await expect(buyer.getByText('Independent courier', { exact: true })).toBeVisible();
+    await expect(buyer.getByText('Dispatched', { exact: true })).toBeVisible();
+    await page.bringToFront();
+    await page.getByLabel('Tracking Number (optional)', { exact: true }).fill('SR-2026-42');
+    await page.getByRole('button', { name: 'Save tracking number', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Tracking number saved.' })).toBeVisible();
     await buyer.bringToFront();
     await expect(buyer.getByText('SR-2026-42', { exact: true })).toBeVisible({ timeout: 15000 });
-    await expect(buyer.getByText('Independent courier', { exact: true })).toBeVisible();
-    await expect(buyer.getByText('Preparing', { exact: true })).toBeVisible();
-
-    for (const [status, label] of [['packed', 'Packed'], ['dispatched', 'Dispatched'], ['delivered', 'Delivered']]) {
-      await page.bringToFront();
-      await page.getByLabel('Next status').selectOption(status);
-      if (status === 'packed') await page.getByRole('checkbox', { name: /packed the order/ }).check();
-      await page.getByLabel('Reason').fill(`Isolated workflow status ${status}`);
-      await page.getByRole('button', { name: 'Update shipment' }).click();
-      await expect(page.getByRole('status').filter({ hasText: 'Shipment status updated.' })).toBeVisible();
-      await buyer.bringToFront();
-      await expect(buyer.getByText(label, { exact: true })).toBeVisible({ timeout: 15000 });
-    }
+    await expect(buyer.getByText('Dispatched', { exact: true })).toBeVisible();
+    await page.bringToFront();
+    await page.getByLabel('Received by (optional)', { exact: true }).fill('Ahmed');
+    await expect(page.getByLabel('Delivery note (optional)', { exact: true })).not.toHaveAttribute('required');
+    await page.getByRole('button', { name: 'Set delivered', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Shipment marked delivered.' })).toBeVisible();
+    await buyer.bringToFront();
+    await expect(buyer.getByText('Delivered', { exact: true })).toBeVisible({ timeout: 15000 });
     await expect(buyer).toHaveURL('/shipments');
-    await expect(page.getByRole('button', { name: 'Update shipment' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Set delivered' })).toHaveCount(0);
   } finally {
     await buyerContext.close();
   }

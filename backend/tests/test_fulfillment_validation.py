@@ -40,8 +40,8 @@ def test_shipment_update_rejects_unsafe_types_states_and_extra_fields(extra):
     with pytest.raises(ValidationError):
         ShipmentUpdate.model_validate(
             {
-                "status": "packed",
-                "expected_status": "preparing",
+                "status": "delivered",
+                "expected_status": "dispatched",
                 "reason": "Fixture reason",
                 **extra,
             }

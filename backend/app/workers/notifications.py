@@ -1,6 +1,7 @@
 """Durable at-least-once finder notifications with fenced, short transactions."""
 
 import argparse
+import json
 import math
 import re
 import secrets
@@ -27,6 +28,34 @@ HTML = (
     "<h1>Someone found your item</h1>"
     "<p>A finder sent the following information through your SafeReturn QR code.</p>"
 )
+DELIVERY_FROM_EMAIL = "SafeReturn <services@safereturnqr.me>"
+DELIVERY_SUBJECT = "SafeReturn: your order has been delivered"
+
+
+def delivery_email_html(data):
+    values = [
+        ("Order", data["order_number"]),
+        ("Courier", data.get("carrier") or "Not provided"),
+        ("Tracking number", data.get("tracking_reference") or "Not provided"),
+        ("Delivered at", data["delivered_at"]),
+    ]
+    if data.get("received_by"):
+        values.append(("Received by", data["received_by"]))
+    rows = "".join(
+        f'<tr><th align="left" style="padding:8px">{escape(label)}</th><td style="padding:8px">{escape(str(value))}</td></tr>'
+        for label, value in values
+    )
+    items = "".join(
+        f"<li>{escape(item['product_name_snapshot'])} × {item['quantity']}</li>"
+        for item in data["items"]
+    )
+    return (
+        '<!doctype html><html><body style="font-family:Arial,sans-serif;max-width:640px;margin:auto;padding:24px;color:#173c3a">'
+        "<h1>Your SafeReturn order has been delivered</h1><p>Thank you for choosing SafeReturn. Your order has been marked as delivered.</p>"
+        f"<table>{rows}</table><h2>Your items</h2><ul>{items}</ul>"
+        f'<p><a href="{PUBLIC_WEB_ORIGIN}/orders/{data["order_id"]}">View your order</a></p>'
+        "<p>Need help with your delivery? Contact services@safereturnqr.me.</p></body></html>"
+    )
 
 
 def finder_email_html(settings, claimed, row):
@@ -114,7 +143,15 @@ def finder_email_html(settings, claimed, row):
 
 
 class NotificationProvider(Protocol):
-    def send(self, *, to: str, subject: str, html: str, idempotency_key: str) -> str:
+    def send(
+        self,
+        *,
+        to: str,
+        subject: str,
+        html: str,
+        idempotency_key: str,
+        from_email: str | None = None,
+    ) -> str:
         """Return provider acceptance ID, without claiming inbox delivery."""
 
 
@@ -157,7 +194,15 @@ class ResendProvider:
         self.from_email = settings.notification_from_email
         self.timeout = settings.notification_http_timeout_seconds
 
-    def send(self, *, to: str, subject: str, html: str, idempotency_key: str) -> str:
+    def send(
+        self,
+        *,
+        to: str,
+        subject: str,
+        html: str,
+        idempotency_key: str,
+        from_email: str | None = None,
+    ) -> str:
         if not _valid_recipient(to):
             raise NotificationProviderError("invalid_recipient", transient=False)
         try:
@@ -168,7 +213,7 @@ class ResendProvider:
                     "Idempotency-Key": idempotency_key,
                 },
                 json={
-                    "from": self.from_email,
+                    "from": from_email or self.from_email,
                     "to": [to],
                     "subject": subject,
                     "html": html,
@@ -223,6 +268,9 @@ class ClaimedNotification:
     attempt: int
     first_attempt_at: datetime
     lease_until: datetime
+    event_type: str = "finder_message.created"
+    payload_ciphertext: bytes | None = None
+    payload_key_version: int | None = None
 
 
 def _claim_one(session, worker_id: str, lease_seconds: int):
@@ -231,8 +279,8 @@ def _claim_one(session, worker_id: str, lease_seconds: int):
             text("""
             WITH candidate AS (
                 SELECT id FROM public.notification_outbox
-                WHERE event_type='finder_message.created'
-                  AND aggregate_type='finder_message' AND payload_version=1
+                WHERE ((event_type='finder_message.created' AND aggregate_type='finder_message')
+                    OR (event_type='shipment.delivered' AND aggregate_type='shipment')) AND payload_version=1
                   AND ((status IN ('pending','retry') AND next_attempt_at<=clock_timestamp())
                     OR (status='leased' AND lease_until<=clock_timestamp()))
                 ORDER BY next_attempt_at,created_at,id
@@ -243,7 +291,7 @@ def _claim_one(session, worker_id: str, lease_seconds: int):
                 lease_until=clock_timestamp()+(:lease_seconds * interval '1 second'),
                 attempt_count=o.attempt_count+1
             FROM candidate WHERE o.id=candidate.id
-            RETURNING o.id,o.aggregate_id,o.recipient_email_snapshot_ciphertext,
+            RETURNING o.id,o.aggregate_id,o.event_type,o.payload_ciphertext,o.payload_key_version,o.recipient_email_snapshot_ciphertext,
                 o.recipient_email_key_version,o.idempotency_key,o.attempt_count,o.lease_until,
                 COALESCE((SELECT min(a.attempted_at) FROM public.notification_attempts a
                           WHERE a.outbox_id=o.id),clock_timestamp()) AS first_attempt_at
@@ -270,6 +318,9 @@ def _claim_one(session, worker_id: str, lease_seconds: int):
         attempt=row["attempt_count"],
         first_attempt_at=row["first_attempt_at"],
         lease_until=row["lease_until"],
+        event_type=row["event_type"],
+        payload_ciphertext=row["payload_ciphertext"],
+        payload_key_version=row["payload_key_version"],
     )
 
 
@@ -280,8 +331,13 @@ def _prepare_recipient(session, claimed, settings):
         "snapshot": None,
         "version": None,
     }
+    function = (
+        "sr_shipment_notification_recipient"
+        if claimed.event_type == "shipment.delivered"
+        else "sr_notification_recipient"
+    )
     query = text(
-        "SELECT public.sr_notification_recipient(:id,:attempt,:snapshot,CAST(:version AS smallint))"
+        f"SELECT public.{function}(:id,:attempt,:snapshot,CAST(:version AS smallint))"
     )
     recipient = session.execute(query, args).scalar_one()
     if recipient is None:
@@ -407,29 +463,31 @@ def process_one(
                     "idempotency_window_expired", transient=False
                 )
             claimed = _prepare_recipient(session, claimed, settings)
-            row = (
-                session.execute(
-                    text(
-                        "SELECT * FROM public.sr_notification_finder_details(:id,:attempt)"
-                    ),
-                    {"id": claimed.id, "attempt": claimed.attempt},
+            if claimed.event_type == "shipment.delivered":
+                html = delivery_email_html(
+                    json.loads(
+                        decrypt(
+                            settings,
+                            claimed.aggregate_id,
+                            "shipment_delivery",
+                            claimed.payload_ciphertext,
+                            claimed.payload_key_version,
+                        )
+                    )
                 )
-                .mappings()
-                .one_or_none()
-            )
-            if row is None:
-                raise NotificationProviderError(
-                    "finder_message_unavailable", transient=False
-                )
-            html = finder_email_html(settings, claimed, row)
+            else:
+                html = _finder_html(session, settings, claimed)
         except ProfileCryptoUnavailable:
             error = NotificationProviderError(
                 "recipient_decryption_failed", transient=False
             )
+        except (ValueError, KeyError, TypeError):
+            error = NotificationProviderError(
+                "notification_payload_invalid", transient=False
+            )
         except NotificationProviderError as preparation_error:
             error = preparation_error
         except LeaseLost:
-            # Commit the claim; an expired lease is recoverable by another attempt.
             return True
     provider_id = None
     if error is None:
@@ -445,11 +503,17 @@ def process_one(
             )
             if not _valid_recipient(recipient):
                 raise NotificationProviderError("invalid_recipient", transient=False)
+            options = (
+                {"from_email": DELIVERY_FROM_EMAIL}
+                if claimed.event_type == "shipment.delivered"
+                else {}
+            )
             provider_id = provider.send(
                 to=recipient,
-                subject=SUBJECT,
+                subject=DELIVERY_SUBJECT if options else SUBJECT,
                 html=html,
                 idempotency_key=claimed.idempotency_key,
+                **options,
             )
             if not isinstance(provider_id, str) or not re.fullmatch(
                 r"[A-Za-z0-9_-]{1,150}", provider_id
@@ -481,6 +545,20 @@ def process_one(
     else:
         _finish(database, worker, claimed, status="dead", error=error)
     return True
+
+
+def _finder_html(session, settings, claimed):
+    row = (
+        session.execute(
+            text("SELECT * FROM public.sr_notification_finder_details(:id,:attempt)"),
+            {"id": claimed.id, "attempt": claimed.attempt},
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        raise NotificationProviderError("finder_message_unavailable", transient=False)
+    return finder_email_html(settings, claimed, row)
 
 
 def main():

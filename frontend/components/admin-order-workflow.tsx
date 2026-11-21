@@ -70,11 +70,13 @@ export function OrderShipmentForm({ orderId, ur }: { orderId: string; ur: boolea
     const form = new FormData(event.currentTarget);
     const field = (name: string) => String(form.get(name) ?? '').trim();
     const shipment = order.shipment;
+    const trackingOnly = (event.nativeEvent as SubmitEvent).submitter?.getAttribute('value') === 'tracking';
     const body = JSON.stringify(shipment ? {
-      status: nextStatus, expected_status: shipment.status,
+      status: trackingOnly ? 'dispatched' : nextStatus, expected_status: shipment.status,
       packing_confirmed: form.get('packing_confirmed') === 'on',
-      tracking_reference: field('tracking_reference') || null, reason: field('reason'),
-    } : { carrier: field('carrier'), tracking_reference: field('tracking_reference') });
+      tracking_reference: field('tracking_reference') || null, reason: field('reason') || (trackingOnly ? 'Courier tracking number recorded' : 'Courier confirmed delivery'),
+      received_by: trackingOnly ? null : field('received_by') || null,
+    } : { carrier: field('carrier'), tracking_reference: field('tracking_reference') || null });
     if (command.current?.body !== body) command.current = { body, key: crypto.randomUUID() };
     setBusy(true);
     setError('');
@@ -85,7 +87,7 @@ export function OrderShipmentForm({ orderId, ur }: { orderId: string; ur: boolea
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': command.current.key },
       });
       command.current = null;
-      setMessage(shipment ? 'Shipment status updated.' : 'Shipment created. The buyer can now see it in Shipments.');
+      setMessage(shipment ? trackingOnly ? 'Tracking number saved.' : 'Shipment marked delivered. The customer delivery email is queued.' : 'Shipment dispatched. The buyer can now see it in Shipments.');
       await load();
     } catch (error) {
       setError((error as Error).message);
@@ -119,15 +121,20 @@ export function OrderShipmentForm({ orderId, ur }: { orderId: string; ur: boolea
         <form key={shipment?.status ?? 'create'} className={styles.workflowForm} onSubmit={submit}>
           <fieldset disabled={busy}>
             {!shipment && <label>Shipping Service / Courier Name<input name="carrier" required maxLength={80} /></label>}
-            {(!shipment || nextStatus === 'dispatched') && <label>Tracking Number<input name="tracking_reference" required maxLength={150} defaultValue={shipment?.tracking_reference ?? ''} dir="ltr" /></label>}
+            <label>Tracking Number (optional)<input name="tracking_reference" maxLength={150} defaultValue={shipment?.tracking_reference ?? ''} dir="ltr" /></label>
+            <p>You can add the courier tracking number after dispatch.</p>
+            {!shipment && <p>Creating this shipment confirms the parcel is packed and dispatched to the courier.</p>}
             {shipment && <>
               <label>Next status<select value={nextStatus} onChange={event => setNextStatus(event.target.value)}>
                 {order.next_statuses.map(status => <option key={status} value={status}>{orderStatus(status, ur)}</option>)}
               </select></label>
-              {nextStatus === 'packed' && <label className="check-field"><input type="checkbox" name="packing_confirmed" required /> I checked the printed items and packed the order.</label>}
-              <label>Reason<input name="reason" required minLength={4} maxLength={500} /></label>
+              <label>Received by (optional)<input name="received_by" maxLength={120} autoComplete="off" /></label>
+              <p>The received-by name will be included in the customer email, sent from services@safereturnqr.me.</p>
+              <label>Delivery note (optional)<input name="reason" minLength={4} maxLength={500} placeholder="Courier confirmed delivery" /></label>
+              <p>This note is kept in your internal records. For example: Courier confirmed delivery.</p>
+              {shipment.status === 'dispatched' && <button type="submit" name="action" value="tracking">Save tracking number</button>}
             </>}
-            <button type="submit">{shipment ? 'Update shipment' : 'Create shipment'}</button>
+            <button type="submit">{shipment ? 'Set delivered' : 'Create shipment'}</button>
           </fieldset>
         </form>}
     </section></AdminCard>}
