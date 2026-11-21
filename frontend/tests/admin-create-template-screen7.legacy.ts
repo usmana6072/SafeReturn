@@ -8,7 +8,7 @@ import {
   resetAdminMockData,
   loadAdminMockData,
   type MockAdminDatabase,
-} from "../lib/admin-mock-data";
+} from "../tests/fixtures/legacy-admin/lib/admin-mock-data";
 
 test.describe("Screen 7: Create Print Template Key (API-301 Draft Only)", () => {
   test.beforeEach(() => {

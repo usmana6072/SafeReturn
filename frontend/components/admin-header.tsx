@@ -3,7 +3,6 @@
 import React from "react";
 import Link from "next/link";
 import { AdminIcon } from "./admin-icons";
-import { DEMO_ROLES, type DemoRoleName } from "../lib/admin-navigation";
 import { adminLanguage } from "../app/admin/actions";
 import { logout } from "../app/auth/actions";
 
@@ -11,8 +10,6 @@ export interface AdminHeaderProps {
   pageTitle: string;
   currentPath: string;
   ur: boolean;
-  selectedRole: DemoRoleName | "authenticated";
-  onRoleChange: (role: DemoRoleName | "authenticated") => void;
   authenticatedRoles: string[];
   onOpenMobileMenu: () => void;
   menuButtonRef?: React.Ref<HTMLButtonElement>;
@@ -22,16 +19,11 @@ export function AdminHeader({
   pageTitle,
   currentPath,
   ur,
-  selectedRole,
-  onRoleChange,
   authenticatedRoles,
   onOpenMobileMenu,
   menuButtonRef,
 }: AdminHeaderProps) {
-  const displayRole =
-    selectedRole === "authenticated"
-      ? authenticatedRoles[0] || "Staff"
-      : selectedRole;
+  const displayRole = authenticatedRoles.includes("owner") ? "Owner" : authenticatedRoles.join(", ") || "Staff";
 
   const initial = displayRole.charAt(0).toUpperCase();
 
@@ -67,46 +59,10 @@ export function AdminHeader({
           </h1>
         </div>
 
-        {/* Development / Mock Storage Status Indicator */}
-        <span className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 font-mono hidden lg:inline-block">
-          {selectedRole === "authenticated"
-            ? ur
-              ? "تصدیق شدہ سیشن"
-              : "Live Auth Active"
-            : ur
-            ? "ڈیمو پیش نظارہ"
-            : "Demo Preview"}
-        </span>
       </div>
 
-      {/* 2. Controls: Role Previewer, User Avatar, Language, Logout */}
+      {/* 2. Controls: User Identity, Language, Logout */}
       <div className="flex items-center space-x-2 md:space-x-3 shrink-0">
-        {/* Demo Role Switcher */}
-        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 md:p-1 border border-slate-200 text-xs">
-          <span className="text-slate-500 font-medium px-2 hidden xl:inline">
-            {ur ? "کردار پیش نظارہ:" : "Demo Role Preview:"}
-          </span>
-          <select
-            value={selectedRole}
-            onChange={(e) =>
-              onRoleChange(e.target.value as DemoRoleName | "authenticated")
-            }
-            aria-label={ur ? "کردار کا انتخاب" : "Demo Role Preview"}
-            className="bg-white text-slate-800 text-xs font-semibold rounded px-2 py-1 border border-slate-200 focus:outline-hidden focus:ring-1 focus:ring-sky-500 cursor-pointer max-w-[165px] sm:max-w-none"
-          >
-            <option value="authenticated">
-              {ur ? "میرا اصل کردار" : "My Authenticated Role"}
-            </option>
-            {DEMO_ROLES.map((role) => (
-              <option key={role} value={role}>
-                {role} (Demo)
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="h-5 w-px bg-slate-200 hidden sm:block" />
-
         {/* Language Form Switcher */}
         <form action={adminLanguage}>
           <input type="hidden" name="language" value={ur ? "en" : "ur"} />

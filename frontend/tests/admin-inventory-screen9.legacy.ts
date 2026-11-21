@@ -6,7 +6,7 @@ import {
   getOverallInventoryHealth,
   INITIAL_INVENTORY_METRICS,
   type MockProduct,
-} from "../lib/admin-mock-data";
+} from "../tests/fixtures/legacy-admin/lib/admin-mock-data";
 
 test.describe("Screen 9: Inventory Management and QR Pair Stock Overview", () => {
   test.beforeEach(() => {

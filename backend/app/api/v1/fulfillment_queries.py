@@ -169,7 +169,7 @@ def orders(
     operations = (
         context.session.execute(
             text(
-                "SELECT 1 FROM public.staff_roles WHERE user_id=:uid AND role='operations' AND revoked_at IS NULL"
+                "SELECT 1 FROM public.staff_roles WHERE user_id=:uid AND role IN ('operations','owner') AND revoked_at IS NULL"
             ),
             {"uid": context.principal.user_id},
         ).scalar_one_or_none()

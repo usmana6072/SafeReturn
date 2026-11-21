@@ -165,7 +165,7 @@ class Trends(Closed):
 
 
 def roles(context: AuthContext) -> set[str]:
-    return set(
+    assigned = set(
         context.session.execute(
             text(
                 "SELECT role FROM public.staff_roles WHERE user_id=:uid AND revoked_at IS NULL ORDER BY role"
@@ -173,6 +173,7 @@ def roles(context: AuthContext) -> set[str]:
             {"uid": context.principal.user_id},
         ).scalars()
     )
+    return {"owner", "operations", "finance", "support", "security_admin", "superadmin"} if "owner" in assigned else assigned
 
 
 def guard(context: AuthContext, request: Request, allowed: set[str]) -> set[str]:

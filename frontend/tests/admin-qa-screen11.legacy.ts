@@ -10,8 +10,8 @@ import {
   getQASummary,
   type MockQAPair,
   createDemoQRBatch,
-} from "../lib/admin-mock-data";
-import { DEMO_PERMISSIONS } from "../lib/admin-navigation";
+} from "../tests/fixtures/legacy-admin/lib/admin-mock-data";
+import { DEMO_PERMISSIONS } from "../tests/fixtures/legacy-admin/lib/admin-navigation";
 
 test.describe("Screen 11: QR Quality Assurance", () => {
   test.beforeEach(() => {

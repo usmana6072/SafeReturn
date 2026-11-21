@@ -1,5 +1,5 @@
 import { AdminStatusBadge } from "./admin-ui";
-import { userDisplayText } from "../lib/admin-user-list";
+function userDisplayText(value: unknown, fallback = "Not available") { return typeof value === "string" && value.trim() ? value.trim() : fallback; }
 
 export function UserStatusBadge({ value }: { value: unknown }) {
   const status = userDisplayText(value, "Unknown");

@@ -31,7 +31,7 @@ export interface AdminNavigationItem {
 }
 
 export const ALL_ADMIN_MODULES: AdminNavigationItem[] = [
-  { id: "template_qa", path: "/admin/template-qa", labelEn: "Template QA", labelUr: "سانچے کا معیار", section: "catalog", icon: "printer", capability: "printing.manage", descriptionEn: "Inspect submitted revisions and synthetic previews.", descriptionUr: "سانچوں کا جائزہ۔" },
+  { id: "template_qa", path: "/admin/template-qa", labelEn: "Template QA", labelUr: "سانچے کا معیار", section: "catalog", icon: "printer", capability: "printing.manage", descriptionEn: "Inspect submitted revisions and rendered previews.", descriptionUr: "سانچوں کا جائزہ۔" },
   {
     id: "overview",
     path: "/admin",
@@ -193,7 +193,7 @@ export const ALL_ADMIN_MODULES: AdminNavigationItem[] = [
     section: "governance",
     icon: "shield-check",
     capability: "users.manage",
-    descriptionEn: "Read-only demo navigation matrix and synthetic staff inspection.",
+    descriptionEn: "View your database-assigned staff permissions.",
     descriptionUr: "عملے کے فرضی کرداروں اور رسائی کا جائزہ۔",
   },
   {
@@ -214,7 +214,7 @@ export const ALL_ADMIN_MODULES: AdminNavigationItem[] = [
     section: "governance",
     icon: "file-lock-2",
     capability: "privacy.exports",
-    descriptionEn: "Synthetic privacy-request oversight and internal review notes.",
+    descriptionEn: "Privacy-request oversight and internal review notes.",
     descriptionUr: "رازداری کی درخواستوں اور داخلی جائزے کا پیش نظارہ۔",
   },
   {
@@ -225,7 +225,7 @@ export const ALL_ADMIN_MODULES: AdminNavigationItem[] = [
     section: "governance",
     icon: "refresh-cw",
     capability: "finance.mirror",
-    descriptionEn: "Synthetic finance synchronization records and integration availability.",
+    descriptionEn: "Finance synchronization records and integration availability.",
     descriptionUr: "گوگل شیٹس پر مالیاتی مطابقت کی جانچ۔",
   },
   {
@@ -247,7 +247,7 @@ export const ALL_ADMIN_MODULES: AdminNavigationItem[] = [
     section: "governance",
     icon: "file-spreadsheet",
     capability: "audit.search",
-    descriptionEn: "Read-only synthetic administrative event metadata; production integrity is not implied.",
+    descriptionEn: "Search authorized administrative event metadata.",
     descriptionUr: "انتظامی کارروائیوں اور سکیورٹی لاگ کی تلاش۔",
   },
   {
@@ -258,77 +258,7 @@ export const ALL_ADMIN_MODULES: AdminNavigationItem[] = [
     section: "governance",
     icon: "activity",
     capability: "notifications.manage",
-    descriptionEn: "Read-only demo monitoring availability and stored operational metadata.",
+    descriptionEn: "Read operational metadata and available monitoring observations.",
     descriptionUr: "ورکرز، نظام کی صحت اور سروس کی رفتار۔",
   },
 ];
-
-export type DemoRoleName = "Superadmin" | "Operations" | "Finance" | "Support" | "Security Admin";
-
-export const DEMO_ROLES: DemoRoleName[] = [
-  "Superadmin",
-  "Operations",
-  "Finance",
-  "Support",
-  "Security Admin",
-];
-
-export const DEMO_PERMISSIONS: Record<DemoRoleName, { pages: string[] }> = {
-  Superadmin: {
-    pages: [
-      "overview",
-      "products",
-      "templates",
-      "inventory",
-      "qr_batches",
-      "qa",
-      "orders",
-      "payments",
-      "print_jobs",
-      "shipments",
-      "ready_to_ship",
-      "users",
-      "support",
-      "notifications",
-      "staff_permissions",
-      "privacy_requests",
-      "finance_sync",
-      "storage",
-      "audit",
-      "monitoring",
-    ],
-  },
-  Operations: {
-    pages: [
-      "overview",
-      "products",
-      "templates",
-      "inventory",
-      "qr_batches",
-      "qa",
-      "orders",
-      "print_jobs",
-      "shipments",
-      "ready_to_ship",
-      "notifications",
-      "monitoring",
-    ],
-  },
-  Finance: {
-    pages: ["overview", "orders", "payments", "finance_sync", "audit"],
-  },
-  Support: {
-    pages: ["overview", "users", "orders", "support", "notifications"],
-  },
-  "Security Admin": {
-    pages: [
-      "overview",
-      "users",
-      "staff_permissions",
-      "privacy_requests",
-      "storage",
-      "audit",
-      "monitoring",
-    ],
-  },
-};

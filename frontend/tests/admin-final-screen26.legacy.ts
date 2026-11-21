@@ -1,8 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 import fs from 'node:fs'; import path from 'node:path';
-import { ALL_ADMIN_MODULES, DEMO_ROLES, DEMO_PERMISSIONS } from '../lib/admin-navigation';
+import { ALL_ADMIN_MODULES, DEMO_ROLES, DEMO_PERMISSIONS } from '../tests/fixtures/legacy-admin/lib/admin-navigation';
 import { capabilities, staffRoles } from '../lib/auth/staff-contract';
-import { INITIAL_SEED_DATA } from '../lib/admin-mock-data';
+import { INITIAL_SEED_DATA } from '../tests/fixtures/legacy-admin/lib/admin-mock-data';
 const bundle = require('./qa-browser-bundle.cjs');
 const screens = [
  ['2','/admin','admin-overview','OverviewDashboard',{}],

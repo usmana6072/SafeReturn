@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import fs from 'node:fs'; import path from 'node:path'; import vm from 'node:vm'; import ts from 'typescript';
-import { INITIAL_SEED_DATA, INITIAL_SUPPORT_CASES, loadAdminMockData, resetAdminMockData, saveAdminMockData, updateDemoSupportCase } from '../lib/admin-mock-data';
-import { demoSupportNextStates } from '../lib/admin-support-policy';
+import { INITIAL_SEED_DATA, INITIAL_SUPPORT_CASES, loadAdminMockData, resetAdminMockData, saveAdminMockData, updateDemoSupportCase } from '../tests/fixtures/legacy-admin/lib/admin-mock-data';
+import { demoSupportNextStates } from '../tests/fixtures/legacy-admin/lib/admin-support-policy';
 const bundle = require('./qa-browser-bundle.cjs');
 const options = { componentPath: '../components/admin-support-cases.tsx', exportName: 'AdminSupportCases', cssClass: 'support-screen' };
 async function open(page: Page, role = 'support', seed?: unknown, preview = 'authenticated', start = '/admin/support', customerDetailsAvailable = true) {

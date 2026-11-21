@@ -5,7 +5,7 @@ import {
   loadAdminMockData,
   saveAdminMockData,
   type MockAdminDatabase,
-} from "../lib/admin-mock-data";
+} from "../tests/fixtures/legacy-admin/lib/admin-mock-data";
 
 test("Screen 3 Products List search and category/status filtering work correctly", () => {
   const products = INITIAL_SEED_DATA.products;

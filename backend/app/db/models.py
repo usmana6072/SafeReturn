@@ -90,7 +90,7 @@ class StaffRole(Identity, Base):
     reason: Mapped[str | None] = mapped_column(Text)
     __table_args__ = (
         CheckConstraint(
-            "role IN ('support','operations','finance','security_admin','superadmin')",
+            "role IN ('owner','support','operations','finance','security_admin','superadmin')",
             name="role",
         ),
         Index(

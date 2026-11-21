@@ -1,5 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';import fs from 'node:fs';import path from 'node:path';
-import {INITIAL_SEED_DATA,loadAdminMockData,resetAdminMockData,recordDemoAccountGovernance} from '../lib/admin-mock-data';
+import {INITIAL_SEED_DATA,loadAdminMockData,resetAdminMockData,recordDemoAccountGovernance} from '../tests/fixtures/legacy-admin/lib/admin-mock-data';
 const bundle=require('./qa-browser-bundle.cjs');const options={componentPath:'../components/admin-users.tsx',exportName:'AdminUsers',cssClass:'governance-screen'};
 async function open(page:Page,role='security_admin',preview='authenticated'){
  const css=fs.readdirSync('.next/static/chunks').filter(f=>f.endsWith('.css')).map(f=>fs.readFileSync(path.join('.next/static/chunks',f),'utf8')).join('\n')+['admin-users','admin-user-details'].map(name=>fs.readFileSync('components/'+name+'.module.css','utf8').replaceAll('.screen','.governance-screen')).join('\n');

@@ -11,7 +11,6 @@ export interface AdminSidebarProps {
   currentPath: string;
   ur: boolean;
   items: AdminNavigationItem[];
-  onResetDemoData: () => void;
   onItemClick?: () => void;
   showCollapseControl?: boolean;
 }
@@ -22,7 +21,6 @@ export function AdminSidebar({
   currentPath,
   ur,
   items,
-  onResetDemoData,
   onItemClick,
   showCollapseControl = true,
 }: AdminSidebarProps) {
@@ -153,25 +151,6 @@ export function AdminSidebar({
         ))}
       </nav>
 
-      {/* 3. Footer Action: Reset Demo Data */}
-      <div className="p-3 border-t border-slate-800 shrink-0">
-        <button
-          type="button"
-          onClick={onResetDemoData}
-          className={`w-full flex items-center ${
-            collapsed ? "justify-center" : "justify-start px-3"
-          } py-2 rounded-lg text-xs font-medium bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/50 transition-colors`}
-          title={ur ? "ڈیمو ڈیٹا ری سیٹ کریں" : "Reset Demo Data"}
-          aria-label={ur ? "ڈیمو ڈیٹا ری سیٹ کریں" : "Reset Demo Data"}
-        >
-          <AdminIcon name="rotate-ccw" className="w-4 h-4 shrink-0 text-red-400" />
-          {!collapsed && (
-            <span className="ml-2.5 truncate">
-              {ur ? "ڈیمو ڈیٹا ری سیٹ" : "Reset Demo Data"}
-            </span>
-          )}
-        </button>
-      </div>
     </aside>
   );
 }

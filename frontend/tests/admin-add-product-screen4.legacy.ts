@@ -6,7 +6,7 @@ import {
   saveAdminMockData,
   getManagedProductsCount,
   type MockAdminDatabase,
-} from "../lib/admin-mock-data";
+} from "../tests/fixtures/legacy-admin/lib/admin-mock-data";
 
 test("Screen 4 createProductDraft validates required fields and sets draft status", () => {
   // Setup clean test fixture in memory

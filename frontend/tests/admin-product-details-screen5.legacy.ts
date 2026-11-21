@@ -7,7 +7,7 @@ import {
   saveAdminMockData,
   hasMultipleDistinctVariantPrices,
   type MockAdminDatabase,
-} from "../lib/admin-mock-data";
+} from "../tests/fixtures/legacy-admin/lib/admin-mock-data";
 
 test("Screen 5 getProductById retrieves correct product record and handles missing ID", () => {
   const db: MockAdminDatabase = JSON.parse(JSON.stringify(INITIAL_SEED_DATA));

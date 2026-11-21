@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 
 from app.api.auth import AccessError
-from app.api.v1.account import staff_security
+from app.api.v1.account import STAFF_CAPABILITIES, staff_security
 
 
 class Query:
@@ -60,6 +60,15 @@ def test_unverified_email_denied_before_role_read():
 def test_bootstrap_exposes_existing_verified_assurance():
     ctx, _ = context(["operations"], mfa=True)
     assert staff_security(ctx).mfa_verified is True
+
+
+@pytest.mark.parametrize("mfa", [False, True])
+def test_owner_uses_database_role_and_receives_all_capabilities_only_with_mfa(mfa):
+    ctx, calls = context(["owner"], mfa=mfa)
+    result = staff_security(ctx)
+    assert result.roles == ["owner"]
+    assert result.capabilities == (sorted(STAFF_CAPABILITIES) if mfa else [])
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize(

@@ -1,7 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';import ts from 'typescript';
-import {INITIAL_PRINT_JOBS,loadAdminMockData,resetAdminMockData,recordDemoPrintInspection,demoPrintCopies,demoPrintReviewAvailable} from '../lib/admin-mock-data';
-import {canInspectDemoPrintJobs} from '../lib/admin-print-policy';import {id} from '../lib/printing-contract';
+import {INITIAL_PRINT_JOBS,loadAdminMockData,resetAdminMockData,recordDemoPrintInspection,demoPrintCopies,demoPrintReviewAvailable} from '../tests/fixtures/legacy-admin/lib/admin-mock-data';
+import {canInspectDemoPrintJobs} from '../tests/fixtures/legacy-admin/lib/admin-print-policy';import {id} from '../lib/printing-contract';
 const bundle=require('./qa-browser-bundle.cjs');
 const options={componentPath:'../components/admin-print-jobs.tsx',exportName:'AdminPrintJobs',cssClass:'print-screen'};
 async function open(page:Page,role='operations',preview='authenticated',printJobs?:unknown[]) {

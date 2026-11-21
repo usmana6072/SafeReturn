@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import ts from 'typescript';
-import { INITIAL_SEED_DATA, loadAdminMockData, resetAdminMockData, recordDemoPaymentFollowUp } from '../lib/admin-mock-data';
-import { canReviewDemoPayments } from '../lib/admin-payment-access';
+import { INITIAL_SEED_DATA, loadAdminMockData, resetAdminMockData, recordDemoPaymentFollowUp } from '../tests/fixtures/legacy-admin/lib/admin-mock-data';
+import { canReviewDemoPayments } from '../tests/fixtures/legacy-admin/lib/admin-payment-access';
 const bundle = require('./qa-browser-bundle.cjs');
 const options={componentPath:'../components/admin-payments.tsx',exportName:'AdminPayments',cssClass:'payments-screen'};
 async function open(page:Page, role='finance', preview='authenticated', orders?:unknown[]) {

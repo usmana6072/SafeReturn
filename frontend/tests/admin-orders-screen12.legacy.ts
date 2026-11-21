@@ -4,8 +4,8 @@ import path from 'node:path';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { id as parseLiveId } from '../lib/orders-contract';
-import { INITIAL_SEED_DATA, type MockOrder } from '../lib/admin-mock-data';
-import { canReadDemoOrders, filterDemoOrders, orderAmount } from '../lib/admin-orders';
+import { INITIAL_SEED_DATA, type MockOrder } from '../tests/fixtures/legacy-admin/lib/admin-mock-data';
+import { canReadDemoOrders, filterDemoOrders, orderAmount } from '../tests/fixtures/legacy-admin/lib/admin-orders';
 const bundle = require('./qa-browser-bundle.cjs');
 const options = {componentPath:'../components/admin-orders.tsx',exportName:'AdminOrders',cssClass:'orders-screen'};
 

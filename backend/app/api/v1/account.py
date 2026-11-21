@@ -69,7 +69,7 @@ def staff_security(context: Authenticated):
     capabilities = sorted(
         capability
         for capability, allowed_roles in STAFF_CAPABILITIES.items()
-        if context.mfa_verified and allowed_roles.intersection(roles)
+        if context.mfa_verified and ("owner" in roles or allowed_roles.intersection(roles))
     )
     return StaffSecurity(
         roles=roles, mfa_verified=context.mfa_verified, capabilities=capabilities

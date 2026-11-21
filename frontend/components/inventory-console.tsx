@@ -87,7 +87,3 @@ export function InventoryConsole({view,id,ur=false}:{view:InventoryView;id?:stri
   <aside><h2>{t('Unavailable operations','غیر دستیاب کارروائیاں')}</h2><p>{t('Suspension, restoration, replacement, manual allocation/release and lifecycle commands are unavailable pending their implemented authority contracts.','معطلی، بحالی، تبدیلی، دستی تخصیص اور اجرا متعلقہ اختیارات کے نفاذ تک دستیاب نہیں۔')}</p><p>{t('Manufacturing export, credential inserts, download, approval/custody discovery and physical release are unavailable here. No export state is inferred from batch timestamps.','تیاری کی برآمد، پوشیدہ کلید، ڈاؤن لوڈ، منظوری اور تحویل کی تلاش اور جسمانی اجرا یہاں دستیاب نہیں۔ بیچ کے وقت سے برآمد کی حالت اخذ نہیں ہوتی۔')}</p></aside>
  </section>;
 }
-
-export { AdminInventoryManagement } from './admin-inventory';
-export { AdminQRBatchesList, AdminQRBatchDetails } from './admin-batches';
-export { AdminQA } from './admin-qa';

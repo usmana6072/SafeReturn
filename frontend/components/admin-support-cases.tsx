@@ -14,7 +14,7 @@ export function AdminSupportCases({caseId, ur = false, admitted = false}: {caseI
   const role = useAdminRole();
   // Prop is a server-supplied display gate, never a permission. The server relay
   // independently rejects all requests until governance admission is recorded.
-  const permitted = admitted && role.authenticatedRoles.includes("support") && role.selectedRole === "authenticated";
+  const permitted = admitted && role.authenticatedRoles.includes("support");
   const [draft,setDraft] = useState(defaults), [filters,setFilters] = useState(defaults);
   const [cursor,setCursor] = useState<string | null>(null), [previous,setPrevious] = useState<(string | null)[]>([]);
   const [reload,setReload] = useState(0), [page,setPage] = useState<CasePage | null>(null), [detail,setDetail] = useState<CaseDetail | null>(null);

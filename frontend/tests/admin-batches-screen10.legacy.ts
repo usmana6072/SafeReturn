@@ -8,8 +8,8 @@ import {
   createDemoQRBatch,
   INITIAL_SEED_DATA,
   type MockQRBatch,
-} from "../lib/admin-mock-data";
-import { DEMO_ROLES, DEMO_PERMISSIONS } from "../lib/admin-navigation";
+} from "../tests/fixtures/legacy-admin/lib/admin-mock-data";
+import { DEMO_ROLES, DEMO_PERMISSIONS } from "../tests/fixtures/legacy-admin/lib/admin-navigation";
 
 test.describe("Screen 10: QR Batch Generation and Batch Details", () => {
   test.beforeEach(() => {

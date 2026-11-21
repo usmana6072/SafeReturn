@@ -1,8 +1,8 @@
 import {test,expect,type Page} from '@playwright/test';
 import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';import ts from 'typescript';
-import {INITIAL_SHIPMENTS,INITIAL_SEED_DATA,loadAdminMockData,saveAdminMockData,resetAdminMockData,recordDemoShipmentTracking} from '../lib/admin-mock-data';
-import {canManageDemoShipments,demoShipmentTransitions} from '../lib/admin-shipment-policy';
-import {demoShipmentReadiness,demoOrderPrintQA} from '../lib/admin-shipment-readiness';
+import {INITIAL_SHIPMENTS,INITIAL_SEED_DATA,loadAdminMockData,saveAdminMockData,resetAdminMockData,recordDemoShipmentTracking} from '../tests/fixtures/legacy-admin/lib/admin-mock-data';
+import {canManageDemoShipments,demoShipmentTransitions} from '../tests/fixtures/legacy-admin/lib/admin-shipment-policy';
+import {demoShipmentReadiness,demoOrderPrintQA} from '../tests/fixtures/legacy-admin/lib/admin-shipment-readiness';
 const bundle=require('./qa-browser-bundle.cjs');const options={componentPath:'../components/admin-shipments.tsx',exportName:'AdminShipments',cssClass:'ship-screen'};
 async function open(page:Page,role='operations',preview='authenticated',seed?:Record<string,unknown>) {
  const css=fs.readdirSync('.next/static/chunks').filter(f=>f.endsWith('.css')).map(f=>fs.readFileSync(path.join('.next/static/chunks',f),'utf8')).join('\n')+fs.readFileSync('components/admin-shipments.module.css','utf8').replaceAll('.screen','.ship-screen');

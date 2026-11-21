@@ -1,7 +1,7 @@
-export const staffRoles = ["support", "operations", "finance", "security_admin", "superadmin"] as const;
+export const staffRoles = ["owner", "support", "operations", "finance", "security_admin", "superadmin"] as const;
 export const capabilities = ["orders.read", "inventory.manage", "users.manage", "catalog.manage", "payments.review", "fulfillment.manage", "printing.manage", "notifications.manage", "support.manage", "privacy.exports", "finance.mirror", "storage.metadata", "storage.holds", "audit.search"] as const;
 export type Capability = typeof capabilities[number];
-export type StaffSecurityState = { roles: string[]; mfa_verified: boolean; capabilities: Capability[] };
+export type StaffSecurityState = { roles: string[]; assignedRoles?: string[]; mfa_verified: boolean; capabilities: Capability[] };
 export function parseStaffSecurity(value: unknown): StaffSecurityState {
   if (!value || typeof value !== "object") throw new Error("unavailable");
   const state = value as StaffSecurityState;
@@ -10,7 +10,10 @@ export function parseStaffSecurity(value: unknown): StaffSecurityState {
     || !Array.isArray(state.capabilities) || !state.capabilities.every(cap => capabilities.includes(cap))
     || new Set(state.capabilities).size !== state.capabilities.length
     || (!state.mfa_verified && state.capabilities.length)) throw new Error("unavailable");
-  return { roles: state.roles, mfa_verified: state.mfa_verified, capabilities: state.capabilities };
+  // Effective roles support existing role-specific server relays. The assigned
+  // database roles are retained separately for display; no role is user-selectable.
+  return { roles: state.roles.includes("owner") ? [...staffRoles] : state.roles,
+    assignedRoles: [...state.roles], mfa_verified: state.mfa_verified, capabilities: state.capabilities };
 }
 export const adminModules: { path: string; capability: Capability; en: string; ur: string; description: string; descriptionUr: string }[] = [
   { path: "/admin/print-jobs", capability: "printing.manage", en: "Print job metadata", ur: "پرنٹ کام کی معلومات", description: "Inspect job versions and artifact metadata.", descriptionUr: "کام کے ورژن اور فائل کی معلومات دیکھیں۔" },

@@ -39,7 +39,7 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
     assets = root / "backend/print-assets"
     font = next(assets.glob("*.ttf"))
     logo = next(assets.glob("*.svg"))
-    with local_cluster("0059_shipment_delivery_email") as (url, _, _):
+    with local_cluster("0060_owner_role") as (url, _, _):
         database = Database(create_engine(url, hide_parameters=True))
         settings = Settings(
             supabase_url=ORIGIN,
@@ -67,6 +67,10 @@ def test_payment_queue_evidence_approval_allocation_and_pdf():
                 origin="http://127.0.0.1:3100",
             )
             _, staff, customer, staff_sid, _ = case
+            if os.environ.get("SAFERETURN_OWNER_WORKFLOW_REHEARSAL") == "1":
+                with database.engine.begin() as c:
+                    c.execute(text("UPDATE public.staff_roles SET revoked_at=now() WHERE user_id=:id"), {"id": staff})
+                    c.execute(text("INSERT INTO public.staff_roles(user_id,role,reason) VALUES(:id,'owner','Disposable owner workflow test')"), {"id": staff})
             customer_sid = uuid4()
             with database.engine.begin() as c:
                 c.execute(text("UPDATE public.standalone_owner_release SET enabled=true"))

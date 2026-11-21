@@ -654,7 +654,7 @@ def operations_order_detail(order_id: UUID, context: Authenticated, request: Req
     }
     operations = rows(
         context.session,
-        "SELECT id FROM public.staff_roles WHERE user_id=:uid AND role='operations' AND revoked_at IS NULL",
+        "SELECT id FROM public.staff_roles WHERE user_id=:uid AND role IN ('operations','owner') AND revoked_at IS NULL",
         uid=context.principal.user_id,
     )
     if operations:

@@ -1,6 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';import ts from 'typescript';
-import {INITIAL_SEED_DATA,type MockUser} from '../lib/admin-mock-data';
-import {canReadDemoUsers,demoUserQRCount,filterDemoUsers} from '../lib/admin-user-list';import {uuid} from '../lib/users-contract';
+import {INITIAL_SEED_DATA,type MockUser} from '../tests/fixtures/legacy-admin/lib/admin-mock-data';
+import {canReadDemoUsers,demoUserQRCount,filterDemoUsers} from '../tests/fixtures/legacy-admin/lib/admin-user-list';import {uuid} from '../lib/users-contract';
 const bundle=require('./qa-browser-bundle.cjs');const options={componentPath:'../components/admin-users.tsx',exportName:'AdminUsers',cssClass:'users-screen'};
 async function open(page:Page,role='security_admin',users?:unknown[],preview='authenticated'){
  const css=fs.readdirSync('.next/static/chunks').filter(f=>f.endsWith('.css')).map(f=>fs.readFileSync(path.join('.next/static/chunks',f),'utf8')).join('\n')+fs.readFileSync('components/admin-users.module.css','utf8').replaceAll('.screen','.users-screen');

@@ -1,6 +1,6 @@
 import type { MockUser } from "./admin-mock-data";
 import { DEMO_ROLES, type DemoRoleName } from "./admin-navigation";
-import { staffRoles } from "./auth/staff-contract";
+import { staffRoles } from "../../../../lib/auth/staff-contract";
 
 export const canInspectDemoStaff = (roles: readonly string[]) => roles.includes("security_admin");
 export function canonicalRoleId(role: DemoRoleName) {

@@ -149,7 +149,7 @@ def require_verified_account(context: AuthContext):
 
 
 STAFF_ROLES = frozenset(
-    {"support", "operations", "finance", "security_admin", "superadmin"}
+    {"owner", "support", "operations", "finance", "security_admin", "superadmin"}
 )
 
 
@@ -178,7 +178,7 @@ def require_staff(context: AuthContext, *allowed_roles: str):
         text(
             "SELECT 1 FROM public.staff_roles WHERE user_id=:uid AND role=ANY(:roles) AND revoked_at IS NULL LIMIT 1"
         ),
-        {"uid": context.principal.user_id, "roles": list(allowed_roles)},
+        {"uid": context.principal.user_id, "roles": list(set(allowed_roles) | {"owner"})},
     ).scalar_one_or_none()
     if role is None:
         raise AccessError(403)

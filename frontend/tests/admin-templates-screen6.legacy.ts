@@ -7,7 +7,7 @@ import {
   saveAdminMockData,
   type MockAdminDatabase,
   type MockPrintTemplate,
-} from "../lib/admin-mock-data";
+} from "../tests/fixtures/legacy-admin/lib/admin-mock-data";
 
 test("Screen 6 Template retrieval and metadata verification", () => {
   const db: MockAdminDatabase = JSON.parse(JSON.stringify(INITIAL_SEED_DATA));

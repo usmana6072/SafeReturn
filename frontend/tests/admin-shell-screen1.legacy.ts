@@ -4,7 +4,7 @@ import {
   ADMIN_SECTIONS,
   DEMO_ROLES,
   DEMO_PERMISSIONS,
-} from "../lib/admin-navigation";
+} from "../tests/fixtures/legacy-admin/lib/admin-navigation";
 
 test("Screen 1 Admin Navigation metadata defines all 19 prototype modules", () => {
   expect(ALL_ADMIN_MODULES.length).toBe(21); // prototype modules, ready-to-ship and separate staff MFA entry

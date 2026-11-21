@@ -10,7 +10,7 @@ import {
   resetAdminMockData,
   loadAdminMockData,
   type MockAdminDatabase,
-} from "../lib/admin-mock-data";
+} from "../tests/fixtures/legacy-admin/lib/admin-mock-data";
 
 test.describe("Screen 8: Template Details, Draft Revisions and Preview Readiness", () => {
   test.beforeEach(() => {
