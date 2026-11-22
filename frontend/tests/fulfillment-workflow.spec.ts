@@ -21,7 +21,7 @@ test('staff fulfills a real stored order and the same buyer session observes all
     buyer.setDefaultTimeout(15000);
     await login(buyer, 'buyer@fixture.test');
     await buyer.goto('/dashboard');
-    await expect(buyer.locator('article.card').filter({ hasText: 'Activated QRs' }).locator('.stat')).toHaveText('1');
+    await expect(buyer.locator('.dash-metric').filter({ hasText: 'Active QR Codes' }).locator('strong')).toHaveText('1');
     await buyer.goto('/my-qr');
     await expect(buyer.locator('.identity-card')).toHaveCount(2);
     await expect(buyer.getByRole('heading', { name: 'Lost QR', exact: true })).toHaveCount(1);
@@ -57,7 +57,7 @@ test('staff fulfills a real stored order and the same buyer session observes all
     await contacts.getByRole('button', { name: 'Save changes', exact: true }).click();
     await expect(contacts.getByRole('heading', { name: 'Edit contact', exact: true })).toBeVisible();
     await buyer.goto('/dashboard');
-    await expect(buyer.locator('article.card').filter({ hasText: 'Activated QRs' }).locator('.stat')).toHaveText('2');
+    await expect(buyer.locator('.dash-metric').filter({ hasText: 'Active QR Codes' }).locator('strong')).toHaveText('2');
     await buyer.goto('/shipments');
     await expect(buyer.getByText('No shipments yet.')).toBeVisible();
 

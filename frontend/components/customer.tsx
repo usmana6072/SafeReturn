@@ -1,20 +1,23 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { Pair, Tag } from "../lib/qr-contract";
-import { logout } from "../app/auth/actions";
-import { customerLanguage } from "../app/customer-actions";
+import { CustomerIcon } from "./customer-icon";
 import { CustomerNavigation } from "./customer-navigation";
 import "./customer-portal.css";
 
-export function CustomerShell({ ur, children }: { ur: boolean; children: ReactNode }) {
+export function CustomerShell({ ur, children, unread }: { ur: boolean; children: ReactNode; unread?: ReactNode }) {
   return <div className="customer-portal" dir={ur ? "rtl" : "ltr"} lang={ur ? "ur" : "en"}>
     <a className="skip-link" href="#main-content">{ur ? "مواد پر جائیں" : "Skip to content"}</a>
-    <header className="portal-header"><Link className="brand" href="/dashboard"><span className="shield" aria-hidden="true">◆</span> SafeReturn</Link>
-      <span className="demo">{ur ? "آپ کا کسٹمر پورٹل" : "CUSTOMER PORTAL"}</span>
-      <form action={customerLanguage}><input type="hidden" name="language" value={ur ? "en" : "ur"}/><button>{ur ? "English" : "اردو"}</button></form>
-      <form action={logout}><button>{ur ? "لاگ آؤٹ" : "Log out"}</button></form>
+    <header className="portal-header">
+      <Link className="brand" href="/dashboard"><img src="/brand/safereturn_logo.svg" width="34" height="34" alt=""/>SafeReturn</Link>
+      <div className="header-controls">
+        <Link href="/inbox?status=new" prefetch={false} className="header-bell"><CustomerIcon name="bell"/>
+          <span className="sr-only">{ur ? "فائنڈر پیغامات کی اطلاعات" : "Finder message notifications"}</span>{unread}</Link>
+        <Link href="/account" prefetch={false} className="header-avatar" aria-label={ur ? "اکاؤنٹ کی ترتیبات" : "Account settings"}><CustomerIcon name="account"/></Link>
+      </div>
     </header>
-    <div className="layout"><CustomerNavigation ur={ur}/><main id="main-content" tabIndex={-1} className="portal-main">{children}</main></div>
+    <div className="layout"><main id="main-content" tabIndex={-1} className="portal-main">{children}</main>
+      <CustomerNavigation ur={ur} unread={unread}/></div>
   </div>;
 }
 export function Unavailable({ ur }: { ur: boolean }) {

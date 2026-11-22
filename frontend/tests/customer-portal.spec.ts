@@ -30,6 +30,26 @@ for(const width of [320,375,390,430,768,1024,1440])for(const ur of [false,true])
     await page.screenshot({path:info.outputPath(`portal-${width}-${ur?'ur':'en'}.png`),fullPage:true});
   });
 }
+test('mobile More exposes the secondary routes and returns keyboard focus', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.route('**/independent-qr/api**', route => route.fulfill({ json: { items: [], next_cursor: null, activation_released: false } }));
+  await mount(page);
+  const nav = page.getByRole('navigation', { name: 'Customer navigation' });
+  await expect(nav.getByRole('link')).toHaveCount(4);
+  const trigger = nav.getByRole('button', { name: 'More' });
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  const sheet = page.getByRole('dialog', { name: 'More' });
+  await expect(sheet.getByRole('link')).toHaveCount(6);
+  await expect(sheet.getByRole('link', { name: 'Shopping Cart' })).toHaveAttribute('href', '/cart');
+  await expect(sheet.getByRole('button', { name: 'Log out' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(trigger).toBeFocused();
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  const avatar = await page.locator('.header-avatar').boundingBox();
+  expect(avatar!.x + avatar!.width).toBeLessThanOrEqual(320);
+});
+
 test('expired server intent cannot confirm; native dialog restores navigation',async({page})=>{
   let confirmations=0;
   await page.route('**/independent-qr/api**',r=>{
