@@ -117,7 +117,8 @@ class Settings(BaseSettings):
         default=None, max_length=253, pattern=r"^[A-Za-z0-9.-]+$"
     )
     turnstile_timeout_seconds: float = Field(default=3, ge=0.1, le=10)
-    resend_api_key: SecretStr | None = None
+    email_provider: Literal["brevo"] = "brevo"
+    brevo_api_key: SecretStr | None = None
     notification_from_email: str | None = None
     notification_worker_id: str = Field(
         default="safereturn-notification-worker",

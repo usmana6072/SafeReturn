@@ -1,12 +1,16 @@
 """Durable at-least-once finder notifications with fenced, short transactions."""
 
 import argparse
+import json
+import math
 import re
 import secrets
 import sys
 import time
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from email.utils import parseaddr
+from html import escape
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -16,19 +20,139 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
 from app.core.profile_crypto import ProfileCryptoUnavailable, decrypt, encrypt
+from app.core.public_site import PUBLIC_WEB_ORIGIN
 from app.db.runtime import worker_transaction
 from app.db.session import Database
 
 SUBJECT = "SafeReturn: someone sent you a finder message"
 HTML = (
-    "<p>You have a new finder message.</p>"
-    "<p>Sign in to SafeReturn to view it securely.</p>"
-    "<p>This notification does not confirm that an item has been returned.</p>"
+    "<h1>Someone found your item</h1>"
+    "<p>A finder sent the following information through your SafeReturn QR code.</p>"
 )
+DELIVERY_FROM_EMAIL = "SafeReturn <services@safereturnqr.me>"
+DELIVERY_SUBJECT = "SafeReturn: your order has been delivered"
+
+
+def delivery_email_html(data):
+    values = [
+        ("Order", data["order_number"]),
+        ("Courier", data.get("carrier") or "Not provided"),
+        ("Tracking number", data.get("tracking_reference") or "Not provided"),
+        ("Delivered at", data["delivered_at"]),
+    ]
+    if data.get("received_by"):
+        values.append(("Received by", data["received_by"]))
+    rows = "".join(
+        f'<tr><th align="left" style="padding:8px">{escape(label)}</th><td style="padding:8px">{escape(str(value))}</td></tr>'
+        for label, value in values
+    )
+    items = "".join(
+        f"<li>{escape(item['product_name_snapshot'])} × {item['quantity']}</li>"
+        for item in data["items"]
+    )
+    return (
+        '<!doctype html><html><body style="font-family:Arial,sans-serif;max-width:640px;margin:auto;padding:24px;color:#173c3a">'
+        "<h1>Your SafeReturn order has been delivered</h1><p>Thank you for choosing SafeReturn. Your order has been marked as delivered.</p>"
+        f"<table>{rows}</table><h2>Your items</h2><ul>{items}</ul>"
+        f'<p><a href="{PUBLIC_WEB_ORIGIN}/orders/{data["order_id"]}">View your order</a></p>'
+        "<p>Need help with your delivery? Contact services@safereturnqr.me.</p></body></html>"
+    )
+
+
+def finder_email_html(settings, claimed, row):
+    """Escape every finder value; use immutable message fields for safe retries."""
+
+    def decode(field, ciphertext, version):
+        return (
+            decrypt(settings, row["qr_id"], field, ciphertext, version)
+            if ciphertext
+            else None
+        )
+
+    email = decode(
+        "finder_email",
+        row["finder_email_ciphertext"],
+        row["finder_contact_key_version"],
+    )
+    phone = decode(
+        "finder_phone",
+        row["finder_phone_ciphertext"],
+        row["finder_contact_key_version"],
+    )
+    message = decode(
+        "finder_message", row["message_text_ciphertext"], row["message_key_version"]
+    )
+    values = [
+        ("QR reference", str(row["qr_id"])),
+        (
+            "Received (UTC)",
+            row["submitted_at"].astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        ),
+        ("Finder name", row["finder_name"] or "Not provided"),
+        ("Email", email or "Not provided"),
+        ("Phone", phone or "Not provided"),
+        ("Preferred contact", row["preferred_contact"] or "No preference"),
+    ]
+    rows = "".join(
+        f'<tr><th align="left" style="padding:8px">{escape(label)}</th><td style="padding:8px">{escape(value)}</td></tr>'
+        for label, value in values
+    )
+    location = ""
+    if row["latitude_ciphertext"] and row["longitude_ciphertext"]:
+        try:
+            lat = float(
+                decode(
+                    "finder_latitude",
+                    row["latitude_ciphertext"],
+                    row["location_key_version"],
+                )
+            )
+            lon = float(
+                decode(
+                    "finder_longitude",
+                    row["longitude_ciphertext"],
+                    row["location_key_version"],
+                )
+            )
+        except (ValueError, TypeError):
+            raise NotificationProviderError(
+                "invalid_finder_location", transient=False
+            ) from None
+        if not (
+            math.isfinite(lat)
+            and math.isfinite(lon)
+            and -90 <= lat <= 90
+            and -180 <= lon <= 180
+        ):
+            raise NotificationProviderError("invalid_finder_location", transient=False)
+        accuracy = (
+            f" (accuracy: {escape(str(row['accuracy_m']))} m)"
+            if row["accuracy_m"] is not None
+            else ""
+        )
+        location = f'<h2>Shared location</h2><p>{lat}, {lon}{accuracy}</p><p><a href="https://www.google.com/maps?q={lat},{lon}">View location on Google Maps</a></p>'
+    link = f"{PUBLIC_WEB_ORIGIN}/inbox/{claimed.aggregate_id}"
+    return (
+        '<!doctype html><html><body style="font-family:Arial,sans-serif;color:#173c3a;max-width:640px;margin:auto;padding:24px">'
+        + HTML
+        + f'<table style="border-collapse:collapse;width:100%">{rows}</table>'
+        + f'<h2>Finder message</h2><p style="white-space:pre-wrap;overflow-wrap:anywhere" dir="auto">{escape(message or "")}</p>'
+        + location
+        + f'<p><a href="{link}">View message in your SafeReturn inbox</a></p>'
+        + "<p>Contact the finder using the details above to arrange a return. This message does not confirm that the item has been returned.</p></body></html>"
+    )
 
 
 class NotificationProvider(Protocol):
-    def send(self, *, to: str, subject: str, html: str, idempotency_key: str) -> str:
+    def send(
+        self,
+        *,
+        to: str,
+        subject: str,
+        html: str,
+        idempotency_key: str,
+        from_email: str | None = None,
+    ) -> str:
         """Return provider acceptance ID, without claiming inbox delivery."""
 
 
@@ -58,32 +182,50 @@ def _valid_recipient(value):
     )
 
 
-class ResendProvider:
+class BrevoProvider:
     def __init__(self, settings: Settings):
         if (
-            not settings.resend_api_key
-            or not settings.resend_api_key.get_secret_value().strip()
+            settings.email_provider != "brevo"
+            or not settings.brevo_api_key
+            or not settings.brevo_api_key.get_secret_value().strip()
             or not settings.notification_from_email
             or any(c in settings.notification_from_email for c in "\r\n")
         ):
             raise NotificationProviderError("provider_not_configured", transient=False)
-        self.api_key = settings.resend_api_key.get_secret_value()
+        self.api_key = settings.brevo_api_key.get_secret_value()
         self.from_email = settings.notification_from_email
+        self.from_name, self.from_address = parseaddr(self.from_email)
+        if not _valid_recipient(self.from_address):
+            raise NotificationProviderError("provider_not_configured", transient=False)
         self.timeout = settings.notification_http_timeout_seconds
 
-    def send(self, *, to: str, subject: str, html: str, idempotency_key: str) -> str:
+    def _sender(self, override: str | None) -> dict[str, str]:
+        name, address = parseaddr(override or self.from_email)
+        if not _valid_recipient(address):
+            raise NotificationProviderError("provider_not_configured", transient=False)
+        return {"email": address, **({"name": name} if name else {})}
+
+    def send(
+        self,
+        *,
+        to: str,
+        subject: str,
+        html: str,
+        idempotency_key: str,
+        from_email: str | None = None,
+    ) -> str:
         if not _valid_recipient(to):
             raise NotificationProviderError("invalid_recipient", transient=False)
         try:
             response = httpx.post(
-                "https://api.resend.com/emails",
+                "https://api.brevo.com/v3/smtp/email",
                 headers={
-                    "Authorization": f"Bearer {self.api_key}",
+                    "api-key": self.api_key,
                     "Idempotency-Key": idempotency_key,
                 },
                 json={
-                    "from": self.from_email,
-                    "to": [to],
+                    "sender": self._sender(from_email),
+                    "to": [{"email": to}],
                     "subject": subject,
                     "html": html,
                 },
@@ -96,9 +238,9 @@ class ResendProvider:
             ) from None
         if 200 <= response.status_code < 300:
             try:
-                provider_id = response.json()["id"]
+                provider_id = response.json()["messageId"]
                 if not isinstance(provider_id, str) or not re.fullmatch(
-                    r"[A-Za-z0-9_-]{1,150}", provider_id
+                    r"[A-Za-z0-9_@.<>-]{1,254}", provider_id
                 ):
                     raise ValueError()
                 return provider_id
@@ -137,6 +279,9 @@ class ClaimedNotification:
     attempt: int
     first_attempt_at: datetime
     lease_until: datetime
+    event_type: str = "finder_message.created"
+    payload_ciphertext: bytes | None = None
+    payload_key_version: int | None = None
 
 
 def _claim_one(session, worker_id: str, lease_seconds: int):
@@ -145,8 +290,8 @@ def _claim_one(session, worker_id: str, lease_seconds: int):
             text("""
             WITH candidate AS (
                 SELECT id FROM public.notification_outbox
-                WHERE event_type='finder_message.created'
-                  AND aggregate_type='finder_message' AND payload_version=1
+                WHERE ((event_type='finder_message.created' AND aggregate_type='finder_message')
+                    OR (event_type='shipment.delivered' AND aggregate_type='shipment')) AND payload_version=1
                   AND ((status IN ('pending','retry') AND next_attempt_at<=clock_timestamp())
                     OR (status='leased' AND lease_until<=clock_timestamp()))
                 ORDER BY next_attempt_at,created_at,id
@@ -157,7 +302,7 @@ def _claim_one(session, worker_id: str, lease_seconds: int):
                 lease_until=clock_timestamp()+(:lease_seconds * interval '1 second'),
                 attempt_count=o.attempt_count+1
             FROM candidate WHERE o.id=candidate.id
-            RETURNING o.id,o.aggregate_id,o.recipient_email_snapshot_ciphertext,
+            RETURNING o.id,o.aggregate_id,o.event_type,o.payload_ciphertext,o.payload_key_version,o.recipient_email_snapshot_ciphertext,
                 o.recipient_email_key_version,o.idempotency_key,o.attempt_count,o.lease_until,
                 COALESCE((SELECT min(a.attempted_at) FROM public.notification_attempts a
                           WHERE a.outbox_id=o.id),clock_timestamp()) AS first_attempt_at
@@ -184,6 +329,9 @@ def _claim_one(session, worker_id: str, lease_seconds: int):
         attempt=row["attempt_count"],
         first_attempt_at=row["first_attempt_at"],
         lease_until=row["lease_until"],
+        event_type=row["event_type"],
+        payload_ciphertext=row["payload_ciphertext"],
+        payload_key_version=row["payload_key_version"],
     )
 
 
@@ -194,8 +342,13 @@ def _prepare_recipient(session, claimed, settings):
         "snapshot": None,
         "version": None,
     }
+    function = (
+        "sr_shipment_notification_recipient"
+        if claimed.event_type == "shipment.delivered"
+        else "sr_notification_recipient"
+    )
     query = text(
-        "SELECT public.sr_notification_recipient(:id,:attempt,:snapshot,CAST(:version AS smallint))"
+        f"SELECT public.{function}(:id,:attempt,:snapshot,CAST(:version AS smallint))"
     )
     recipient = session.execute(query, args).scalar_one()
     if recipient is None:
@@ -305,6 +458,7 @@ def process_one(
         raise NotificationProviderError("lease_timeout_configuration", transient=False)
     worker = worker_id or settings.notification_worker_id
     error = None
+    html = None
     # The lease, attempt and encrypted recipient are durable before any provider call.
     with worker_transaction(database, worker) as session:
         claimed = _claim_one(session, worker, settings.notification_lease_seconds)
@@ -320,14 +474,31 @@ def process_one(
                     "idempotency_window_expired", transient=False
                 )
             claimed = _prepare_recipient(session, claimed, settings)
+            if claimed.event_type == "shipment.delivered":
+                html = delivery_email_html(
+                    json.loads(
+                        decrypt(
+                            settings,
+                            claimed.aggregate_id,
+                            "shipment_delivery",
+                            claimed.payload_ciphertext,
+                            claimed.payload_key_version,
+                        )
+                    )
+                )
+            else:
+                html = _finder_html(session, settings, claimed)
         except ProfileCryptoUnavailable:
             error = NotificationProviderError(
                 "recipient_decryption_failed", transient=False
             )
+        except (ValueError, KeyError, TypeError):
+            error = NotificationProviderError(
+                "notification_payload_invalid", transient=False
+            )
         except NotificationProviderError as preparation_error:
             error = preparation_error
         except LeaseLost:
-            # Commit the claim; an expired lease is recoverable by another attempt.
             return True
     provider_id = None
     if error is None:
@@ -343,11 +514,17 @@ def process_one(
             )
             if not _valid_recipient(recipient):
                 raise NotificationProviderError("invalid_recipient", transient=False)
+            options = (
+                {"from_email": DELIVERY_FROM_EMAIL}
+                if claimed.event_type == "shipment.delivered"
+                else {}
+            )
             provider_id = provider.send(
                 to=recipient,
-                subject=SUBJECT,
-                html=HTML,
+                subject=DELIVERY_SUBJECT if options else SUBJECT,
+                html=html,
                 idempotency_key=claimed.idempotency_key,
+                **options,
             )
             if not isinstance(provider_id, str) or not re.fullmatch(
                 r"[A-Za-z0-9_-]{1,150}", provider_id
@@ -381,6 +558,20 @@ def process_one(
     return True
 
 
+def _finder_html(session, settings, claimed):
+    row = (
+        session.execute(
+            text("SELECT * FROM public.sr_notification_finder_details(:id,:attempt)"),
+            {"id": claimed.id, "attempt": claimed.attempt},
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        raise NotificationProviderError("finder_message_unavailable", transient=False)
+    return finder_email_html(settings, claimed, row)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="SafeReturn finder notification worker"
@@ -405,7 +596,7 @@ def main():
         print("Worker database is not configured.", file=sys.stderr)
         return 1
     try:
-        provider = ResendProvider(settings)
+        provider = BrevoProvider(settings)
         while True:
             try:
                 processed = process_one(database, settings, provider)

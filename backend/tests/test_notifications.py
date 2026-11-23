@@ -6,23 +6,23 @@ from pydantic import SecretStr
 
 from app.core.config import Settings
 from app.workers.notifications import (
+    BrevoProvider,
     NotificationProviderError,
-    ResendProvider,
     process_one,
 )
 
 
 def settings():
     return Settings(
-        resend_api_key=SecretStr("test-key"),
+        brevo_api_key=SecretStr("test-key"),
         notification_from_email="SafeReturn <noreply@example.test>",
     )
 
 
 @patch("app.workers.notifications.httpx.post")
-def test_resend_returns_provider_id(mock_post):
-    mock_post.return_value = httpx.Response(200, json={"id": "email-123"})
-    provider_id = ResendProvider(settings()).send(
+def test_brevo_returns_provider_id(mock_post):
+    mock_post.return_value = httpx.Response(200, json={"messageId": "email-123"})
+    provider_id = BrevoProvider(settings()).send(
         to="owner@example.test",
         subject="subject",
         html="<p>body</p>",
@@ -31,8 +31,8 @@ def test_resend_returns_provider_id(mock_post):
     assert provider_id == "email-123"
     request = mock_post.call_args.kwargs
     assert request["headers"]["Idempotency-Key"] == "finder-message:123"
-    assert request["json"]["to"] == ["owner@example.test"]
-    assert mock_post.call_args.args[0] == "https://api.resend.com/emails"
+    assert request["json"]["to"] == [{"email": "owner@example.test"}]
+    assert mock_post.call_args.args[0] == "https://api.brevo.com/v3/smtp/email"
     assert request["follow_redirects"] is False
 
 
@@ -41,7 +41,7 @@ def test_resend_returns_provider_id(mock_post):
 def test_resend_retries_provider_rate_and_server_errors(mock_post, status):
     mock_post.return_value = httpx.Response(status)
     with pytest.raises(NotificationProviderError) as error:
-        ResendProvider(settings()).send(
+        BrevoProvider(settings()).send(
             to="owner@example.test",
             subject="subject",
             html="<p>body</p>",
@@ -54,7 +54,7 @@ def test_resend_retries_provider_rate_and_server_errors(mock_post, status):
 def test_resend_rejects_invalid_recipient_response(mock_post):
     mock_post.return_value = httpx.Response(400)
     with pytest.raises(NotificationProviderError) as error:
-        ResendProvider(settings()).send(
+        BrevoProvider(settings()).send(
             to="owner@example.test",
             subject="subject",
             html="<p>body</p>",
@@ -66,14 +66,14 @@ def test_resend_rejects_invalid_recipient_response(mock_post):
 
 def test_resend_requires_credentials():
     with pytest.raises(NotificationProviderError) as error:
-        ResendProvider(Settings())
+        BrevoProvider(Settings())
     assert error.value.code == "provider_not_configured"
 
 
 @patch("app.workers.notifications.httpx.post", side_effect=httpx.ConnectTimeout("down"))
 def test_resend_network_failure_is_transient(_mock_post):
     with pytest.raises(NotificationProviderError) as error:
-        ResendProvider(settings()).send(
+        BrevoProvider(settings()).send(
             to="owner@example.test",
             subject="subject",
             html="<p>body</p>",
@@ -99,7 +99,7 @@ def test_resend_network_failure_is_transient(_mock_post):
 def test_resend_rejects_malformed_success_without_echoing_data(mock_post, payload):
     mock_post.return_value = httpx.Response(200, json=payload)
     with pytest.raises(NotificationProviderError) as error:
-        ResendProvider(settings()).send(
+        BrevoProvider(settings()).send(
             to="owner@example.test",
             subject="subject",
             html="<p>body</p>",
@@ -122,7 +122,7 @@ def test_resend_distinguishes_inflight_idempotency_from_payload_conflict(
         409, json={"name": name, "message": "PRIVATE PROVIDER DETAILS"}
     )
     with pytest.raises(NotificationProviderError) as error:
-        ResendProvider(settings()).send(
+        BrevoProvider(settings()).send(
             to="owner@example.test",
             subject="subject",
             html="<p>body</p>",
@@ -137,7 +137,7 @@ def test_resend_distinguishes_inflight_idempotency_from_payload_conflict(
 def test_resend_honors_bounded_retry_after(mock_post):
     mock_post.return_value = httpx.Response(429, headers={"Retry-After": "99999"})
     with pytest.raises(NotificationProviderError) as error:
-        ResendProvider(settings()).send(
+        BrevoProvider(settings()).send(
             to="owner@example.test",
             subject="subject",
             html="<p>body</p>",
@@ -149,7 +149,7 @@ def test_resend_honors_bounded_retry_after(mock_post):
 @patch("app.workers.notifications.httpx.post")
 def test_invalid_recipient_does_not_call_provider(mock_post):
     with pytest.raises(NotificationProviderError):
-        ResendProvider(settings()).send(
+        BrevoProvider(settings()).send(
             to="owner@example.test\nBcc:someone@example.test",
             subject="subject",
             html="<p>body</p>",
