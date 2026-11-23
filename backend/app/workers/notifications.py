@@ -527,7 +527,7 @@ def process_one(
                 **options,
             )
             if not isinstance(provider_id, str) or not re.fullmatch(
-                r"[A-Za-z0-9_-]{1,150}", provider_id
+                r"[A-Za-z0-9_@.<>-]{1,254}", provider_id
             ):
                 raise NotificationProviderError(
                     "provider_invalid_response", transient=True

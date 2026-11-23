@@ -21,14 +21,16 @@ def settings():
 
 @patch("app.workers.notifications.httpx.post")
 def test_brevo_returns_provider_id(mock_post):
-    mock_post.return_value = httpx.Response(200, json={"messageId": "email-123"})
+    mock_post.return_value = httpx.Response(
+        200, json={"messageId": "<20260324.12345.abc@brevo.com>"}
+    )
     provider_id = BrevoProvider(settings()).send(
         to="owner@example.test",
         subject="subject",
         html="<p>body</p>",
         idempotency_key="finder-message:123",
     )
-    assert provider_id == "email-123"
+    assert provider_id == "<20260324.12345.abc@brevo.com>"
     request = mock_post.call_args.kwargs
     assert request["headers"]["Idempotency-Key"] == "finder-message:123"
     assert request["json"]["to"] == [{"email": "owner@example.test"}]
