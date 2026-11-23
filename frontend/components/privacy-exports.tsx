@@ -1,9 +1,10 @@
 "use client";
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { CustomerPrivacyExports } from "./customer-privacy-exports";
 
 type Category = { disposition: string; reason_code: string; source_count: number | null; schema_version: number; source_watermark: string };
-type ExportStatus = { request_id: string; case_id: string; status: string; revision: number; scope_version?: string; categories?: Record<string, Category>; expires_at?: string };
+export type ExportStatus = { request_id: string; case_id: string; status: string; revision: number; scope_version?: string; categories?: Record<string, Category>; expires_at?: string };
 
 export function PrivacyExports({ admin = false, ur = false }: { admin?: boolean; ur?: boolean }) {
   const endpoint = admin ? "/admin/privacy/exports/api" : "/account/privacy/exports/api";
@@ -16,6 +17,7 @@ export function PrivacyExports({ admin = false, ur = false }: { admin?: boolean;
   const [choice, setChoice] = useState("approve");
   const [reason, setReason] = useState("scope_reviewed");
   const pending = useRef<{ signature: string; key: string } | null>(null);
+  const running = useRef(false);
   async function load(next = false, target = id) {
     const response = await fetch(endpoint + (admin ? "?limit=20" + (next && cursor ? "&cursor=" + encodeURIComponent(cursor) : "") : "?id=" + encodeURIComponent(target)), { cache: "no-store" });
     if (!response.ok) throw new Error(String(response.status));
@@ -23,6 +25,8 @@ export function PrivacyExports({ admin = false, ur = false }: { admin?: boolean;
     setItems(admin ? data.items : [data]); setCursor(data.next_cursor ?? null);
   }
   async function perform(action: string, row?: ExportStatus) {
+    if(running.current)return;
+    running.current=true;
     setBusy(true); setNotice("");
     try {
       if (action === "load") { await load(); return; }
@@ -50,8 +54,9 @@ export function PrivacyExports({ admin = false, ur = false }: { admin?: boolean;
       if (["400", "403", "404", "409", "410", "412", "422"].includes(status)) pending.current = null;
       setNotice(status === "403" ? (ur ? "تازہ تصدیق اور مجاز رسائی درکار ہے۔" : "Recent authentication and authorized access are required.") : status === "404" ? (ur ? "درخواست نہیں ملی۔" : "Request not found.") : status === "410" ? (ur ? "اجازت ختم ہو گئی۔ دوبارہ کوشش کریں۔" : "Download authorization expired or was used. Request a new download.") : status === "412" ? (ur ? "درخواست تبدیل ہو گئی۔ دوبارہ لوڈ کریں۔" : "Request changed. Reload before deciding.") : (ur ? "درخواست مکمل نہیں ہوئی۔ دوبارہ کوشش کریں۔" : "Request could not be completed. Please retry."));
       if (status === "412") { try { await load(); } catch {} }
-    } finally { setConfirmed(false); setBusy(false); }
+    } finally { running.current=false;setConfirmed(false); setBusy(false); }
   }
+  if(!admin)return <CustomerPrivacyExports ur={ur} items={items} id={id} setId={setId} confirmed={confirmed} setConfirmed={setConfirmed} busy={busy} notice={notice} perform={perform}/>;
   return <>
     <h1>{ur ? "محدود ڈیٹا برآمد" : "Limited data export"}</h1>
     <p>{ur ? "basic_v1 صرف منظور شدہ ذاتی معلومات شامل کرتا ہے۔ یہ مکمل قانونی اکاؤنٹ ریکارڈ نہیں ہے۔" : "basic_v1 includes reviewed, allowlisted personal records. It is not a complete legal account dump."}</p>

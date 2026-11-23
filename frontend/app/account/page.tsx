@@ -1,41 +1,20 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getLanguage } from "../../lib/i18n";
-import { verifiedSession, accountRequest } from "../../lib/auth/server";
-import { CustomerShell } from "../../components/customer";
-import { AccountForm } from "../auth/form";
-import { logout } from "../auth/actions";
-
-export const dynamic = "force-dynamic";
-export const metadata = { title: "Account | SafeReturn", robots: { index: false, follow: false } };
-export default async function AccountPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
-  const ur = await getLanguage() === "ur";
-  let session;
-  try { session = await verifiedSession(); } catch {
-    return <CustomerShell ur={ur}><h1>{ur ? "اکاؤنٹ دستیاب نہیں" : "Account unavailable"}</h1>
-      <p>{ur ? "تھوڑی دیر بعد دوبارہ کوشش کریں۔" : "Please try again shortly."}</p><Link href="/login">{ur ? "لاگ اِن" : "Log in"}</Link></CustomerShell>;
-  }
-  if (!session) redirect("/login");
-  const params = await searchParams;
-  let account;
-  try { account = await accountRequest(session.token); } catch {
-    return <CustomerShell ur={ur}><h1>{ur ? "اکاؤنٹ دستیاب نہیں" : "Account unavailable"}</h1>
-      <p>{ur ? "معلومات لوڈ نہیں ہو سکیں۔ دوبارہ کوشش کریں۔" : "Your account could not be loaded. Please try again."}</p>
-      <form action={logout}><button className="button">{ur ? "لاگ آؤٹ" : "Log out"}</button></form></CustomerShell>;
-  }
-  const initialName = typeof session.user.user_metadata.display_name === "string"
-    ? session.user.user_metadata.display_name.slice(0, 120) : "";
-  return <CustomerShell ur={ur}><h1>{ur ? "آپ کا اکاؤنٹ" : "Your account"}</h1>
-    <Link className="text-link" href="/dashboard">{ur ? "میرے QR کوڈز" : "My QR dashboard"}</Link>
-    <p>{account.email_verified ? (ur ? "ای میل کی تصدیق ہو چکی ہے۔" : "Email confirmed.")
-      : (ur ? "حساس تبدیلیوں سے پہلے ای میل کی تصدیق کریں۔" : "Confirm your email before sensitive changes.")}</p>
-    {params.saved === "1" && <p role="status">{ur ? "تبدیلیاں محفوظ ہو گئیں۔" : "Changes saved."}</p>}
-    {params.logout === "failed" && <p role="status">{ur ? "لاگ آؤٹ نہیں ہو سکا۔ دوبارہ کوشش کریں۔" : "Logout could not be completed. Please try again."}</p>}
-    <p><Link href="/admin/security/mfa">{ur ? "عملے کی سکیورٹی / MFA" : "Staff security / MFA"}</Link></p>
-    <p><Link href="/account/shipping-addresses">{ur ? "ترسیل کے محفوظ پتے" : "Saved shipping addresses"}</Link></p>
-    <p><Link href="/account/privacy/exports">{ur ? "محدود ڈیٹا برآمد" : "Limited data export"}</Link></p>
-    <p><Link href="/settings">{ur ? "رازداری کی تاریخ اور درخواستیں" : "Privacy history and requests"}</Link></p>
-    <section className="card"><h2>{ur ? "اکاؤنٹ کی تفصیلات" : "Account details"}</h2><p><bdi>{session.user.email}</bdi></p><AccountForm account={account} initialName={initialName} ur={ur} /></section>
-    <form action={logout} className="logout-form"><button className="button secondary">{ur ? "لاگ آؤٹ" : "Log out"}</button></form>
-  </CustomerShell>;
+import {redirect} from "next/navigation";
+import {getLanguage} from "../../lib/i18n";
+import {verifiedSession,accountRequest} from "../../lib/auth/server";
+import {CustomerShell} from "../../components/customer";
+import {AccountSettings,AccountRetry} from "../../components/account-settings";
+import {accountCopy} from "../../lib/account-copy";
+import {logout,saveAccount,saveAccountLanguage} from "../auth/actions";
+export const dynamic="force-dynamic";
+export const metadata={title:"Account Settings | SafeReturn",robots:{index:false,follow:false},referrer:"no-referrer" as const};
+export default async function AccountPage({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}){
+ const ur=await getLanguage()==="ur",c=accountCopy(ur);
+ let session;
+ try{session=await verifiedSession();}catch{return <CustomerShell ur={ur}><section className="settings-screen settings-empty" role="alert"><h1>{c.unavailable}</h1><p>{c.unavailableText}</p><AccountRetry ur={ur}/></section></CustomerShell>;}
+ if(!session)redirect("/login");
+ let account;
+ try{account=await accountRequest(session.token);if(account.user_id!==session.user.id)throw Error("Unavailable");}
+ catch{return <CustomerShell ur={ur}><section className="settings-screen settings-empty" role="alert"><h1>{c.unavailable}</h1><p>{c.unavailableText}</p><AccountRetry ur={ur}/><form action={logout}><button className="settings-logout">{c.logout}</button></form></section></CustomerShell>;}
+ const params=await searchParams,initialName=typeof session.user.user_metadata?.display_name==="string"?session.user.user_metadata.display_name.slice(0,120):"";
+ return <CustomerShell ur={ur}><AccountSettings account={account} email={session.user.email??""} initialName={initialName} ur={ur} saved={params.saved==="1"} logoutFailed={params.logout==="failed"} saveAction={saveAccount} languageAction={saveAccountLanguage} logoutAction={logout}/></CustomerShell>;
 }

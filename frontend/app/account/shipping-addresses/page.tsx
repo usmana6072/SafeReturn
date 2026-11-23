@@ -4,7 +4,7 @@ import { getLanguage } from "../../../lib/i18n";
 import { ShippingAddresses } from "../../../components/shipping-addresses";
 import { Unavailable, CustomerShell } from "../../../components/customer";
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Shipping addresses | SafeReturn", robots: { index: false, follow: false }, referrer: "no-referrer" as const };
+export const metadata = { title: "Delivery Addresses | SafeReturn", robots: { index: false, follow: false }, referrer: "no-referrer" as const };
 export default async function Page() {
   const ur = await getLanguage() === "ur";
   let session;

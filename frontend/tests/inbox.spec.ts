@@ -4,10 +4,11 @@ test("private inbox controls, settings and help",async({page})=>{
  await page.goto('/inbox');await expect(page).toHaveURL(/login/);
  await page.getByLabel('Email address').fill('inbox@example.invalid');await page.locator('input[name="password"]').fill('synthetic-password');
  await page.getByRole('button',{name:'Log in',exact:true}).click();await expect(page).toHaveURL(/account/);
- await page.goto('/settings');await expect(page.getByRole('heading',{name:'Settings',exact:true})).toBeVisible();
- await expect(page.getByRole('heading',{name:'Consent history',exact:true})).toBeVisible();
+ await page.goto('/settings');await expect(page.getByRole('heading',{name:'Privacy Requests',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Recorded Privacy Choices',exact:true})).toBeVisible();
+ await page.locator('.settings-deletion summary').click();
  await page.getByLabel('I confirm that I want an account-deletion review.').check();
- await page.getByRole('button',{name:'Submit deletion request',exact:true}).click();
+ await page.getByRole('button',{name:'Submit Privacy Request',exact:true}).click();
  await expect(page.getByRole('status')).toContainText('saved for review');
  await page.goto('/help');await expect(page.getByRole('heading',{name:'Help',exact:true})).toBeVisible();
  await page.goto('/inbox');await expect(page.getByRole('heading',{name:'Finder Messages',exact:true})).toBeVisible();

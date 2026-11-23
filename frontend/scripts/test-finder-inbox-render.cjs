@@ -10,7 +10,7 @@ const messages=[
  {id:id(23),qr_id:id(11),qr_label:'Everyday Keys',finder_name:'Sara',tag_type:'lost',status:'archived',submitted_at:'2026-11-20T10:00:00Z',notification_status:'sent'}
 ];
 const body='<script>window.finderInjected=true</script>\nI found your bag.\n'+'LongMessageWithoutSpaces'.repeat(30);
-let mode='ok',slow=false,calls=[],mutations=0;
+let mode='ok',slow=false,summarySlow=false,olderHistory=false,calls=[],mutations=0;
 const server=http.createServer(async(req,res)=>{
  const url=new URL(req.url,'http://localhost'),p=url.pathname;
  const reply=(data,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(data))};
@@ -22,9 +22,12 @@ const server=http.createServer(async(req,res)=>{
  if(slow)await delay(900);
  if(p==='/api/v1/me/finder-messages'){
   const limit=+(url.searchParams.get('limit')||25);
+  if(summarySlow&&limit===100)await delay(1800);
   if(mode==='failed'&&limit===100)return reply({},503);
   let items=mode==='empty'?[]:messages.filter(m=>m.status!=='deleted'&&(!url.searchParams.get('status')||m.status===url.searchParams.get('status'))&&(!url.searchParams.get('qr_id')||m.qr_id===url.searchParams.get('qr_id')));
-  return reply({items:items.slice(0,limit),next_cursor:mode==='pages'&&limit===100&&!url.searchParams.has('cursor')?'older-page':null});
+  if(olderHistory&&url.searchParams.get('status')==='viewed')items=[...Array.from({length:105},(_,i)=>({...messages[1],id:id(1000+i),submitted_at:'2026-11-23T10:00:00Z'})),...items];
+  const cursor=url.searchParams.get('cursor'),offset=cursor?.startsWith('offset-')?Number(cursor.slice(7)):0;
+  return reply({items:items.slice(offset,offset+limit),next_cursor:olderHistory&&items.length>offset+limit?'offset-'+(offset+limit):mode==='pages'&&limit===100&&!cursor?'older-page':null});
  }
  if(p.startsWith('/api/v1/me/finder-messages/')){
   const m=messages.find(m=>p.endsWith(m.id)&&m.status!=='deleted');if(!m)return reply({},404);
@@ -87,7 +90,16 @@ const server=http.createServer(async(req,res)=>{
  await page.getByRole('button',{name:'Delete Message',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Delete Message',exact:true}).click();await expect(page).toHaveURL(/status=viewed&result=deleted/);assert.equal(messages[0].status,'deleted');
  await page.goto(base+'/inbox/'+id(22));await expect(page.getByRole('heading',{name:'Anonymous Finder'})).toBeVisible();await expect(page.getByText('The finder did not share contact details.')).toBeVisible();await expect(page.locator('a[href^="mailto:"],a[href^="tel:"]')).toHaveCount(0);
  await page.goto(base+'/inbox/'+id(999));await expect(page.getByRole('heading',{name:'Message Unavailable'})).toBeVisible();await expect(page.locator('.finder-message-body')).toHaveCount(0);
- await page.goto(base+'/inbox/'+id(22)+'?qr_id='+id(999));await expect(page.getByRole('link',{name:'View QR Details'})).toHaveCount(0);mode='failed';await page.goto(base+'/inbox');await expect(page.getByRole('heading',{name:'Couldn’t Load Messages'})).toBeVisible();await snap('error');mode='empty';await page.getByRole('button',{name:'Retry',exact:true}).click();await expect(page.getByRole('heading',{name:'No Finder Messages Yet'})).toBeVisible();await snap('empty');
+ olderHistory=true;calls=[];await page.goto(base+'/inbox/'+id(22)+'?qr_id='+id(999));
+ await expect(page.getByRole('link',{name:'View QR Details'})).toHaveAttribute('href','/my-qr/'+id(12));
+ assert.equal(calls.filter(p=>p.includes('/me/finder-messages?')&&p.includes('limit=100')).length,2,'older direct message needs exactly its two metadata pages');olderHistory=false;
+ summarySlow=true;await page.goto(base+'/inbox/'+id(22)+'?slow=1',{waitUntil:'commit'});
+ await expect(page.locator('.finder-message-body')).toBeVisible();await expect(page.locator('.finder-related[aria-busy=true]')).toBeVisible();
+ await expect(page.getByLabel('Message Status',{exact:true})).toBeEnabled();
+ await expect(page.getByRole('link',{name:'View QR Details'})).toBeVisible();summarySlow=false;
+ mode='failed';await page.goto(base+'/inbox/'+id(22));await expect(page.locator('.finder-message-body')).toBeVisible();await expect(page.getByRole('button',{name:'Retry',exact:true})).toBeVisible();
+ mode='ok';await page.getByRole('button',{name:'Retry',exact:true}).click();await expect(page.getByRole('link',{name:'View QR Details'})).toBeVisible();
+ mode='failed';await page.goto(base+'/inbox');await expect(page.getByRole('heading',{name:'Couldn’t Load Messages'})).toBeVisible();await snap('error');mode='empty';await page.getByRole('button',{name:'Retry',exact:true}).click();await expect(page.getByRole('heading',{name:'No Finder Messages Yet'})).toBeVisible();await snap('empty');
  mode='pages';await page.reload();await expect(page.locator('.finder-row')).toHaveCount(2);await expect(page.getByRole('searchbox')).toHaveCount(0);await page.getByRole('link',{name:'Older Messages'}).click();await expect(page).toHaveURL(/cursor=older-page/);
  mode='ok';await page.goto(base+'/inbox');await page.getByRole('searchbox').fill('sara');await expect(page.locator('.finder-row')).toHaveCount(1);
  slow=true;await page.goto(base+'/inbox?cold=1',{waitUntil:'commit'});await expect(page.locator('.finder-loading')).toBeVisible();await snap('loading');await expect(page.locator('.finder-row')).toHaveCount(2);slow=false;

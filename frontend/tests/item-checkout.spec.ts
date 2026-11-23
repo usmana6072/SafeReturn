@@ -5,14 +5,33 @@ const key="safereturn-item-cart-v2";
 const product={product_id:pid,name:"Lost sticker",commerce_model:"single_qr",checkout_available:true,qr_type:"lost",price_per_copy:"12.30",max_order_copies:10,variants:[{variant_id:v1,name:"35 mm"},{variant_id:v2,name:"45 mm"}]};
 const cart=[{product_id:pid,identity_group:null,sizes:[{variant_id:v1,copies:2},{variant_id:v2,copies:3}]}];
 const instructions={version:"synthetic-v1",bank_name:"Synthetic Bank",account_title:"Synthetic payee",account_number:"SYNTHETIC-ACCOUNT",raast_id:"SYNTHETIC-RAAST",instructions_en:"Synthetic official instructions",instructions_ur:"منظور شدہ آزمائشی ہدایات",currency_code:"PKR"};
-async function mount(page:any,exportName:string,props:any,storage:any=cart){
+async function mount(page:any,exportName:string,props:any,storage:any=cart,addresses:any={items:[],book_version:0}){
  await page.route("https://item-checkout.test/**",(r:any)=>r.request().resourceType()!=="document"?r.fallback():r.fulfill({contentType:"text/html",body:'<!doctype html><html><head><style>*{box-sizing:border-box}body{margin:0;padding:16px;font:16px sans-serif}label{display:block;margin:8px 0}input{max-width:100%}fieldset{min-width:0;margin:12px 0}dd{margin:0;overflow-wrap:anywhere}</style></head><body><div id="root"></div></body></html>'}));
- await page.route("**/account/shipping-addresses/api",(r:any)=>r.fulfill({json:{items:[],version:1}}));
+ await page.route("**/account/shipping-addresses/api",(r:any)=>r.fulfill({json:addresses}));
  await page.goto("https://item-checkout.test/");
  await page.evaluate(({props,key,storage}:any)=>{(window as any).qaProps=props;localStorage.setItem(key,JSON.stringify(storage));localStorage.setItem("safereturn-cart-v1","legacy-cart-canary");},{props,key,storage});
  await page.addScriptTag({content:bundle({componentPath:exportName==="KitConfigurator"?"../components/checkout.tsx":exportName==="PaymentForm"?"../components/payments.tsx":"../components/item-checkout.tsx",exportName})});
 }
 async function fillAddress(page:any){for(const [label,value] of [["Recipient name","Synthetic"],["Phone","+923001234567"],["Street address","Synthetic street"],["City","Lahore"]])await page.getByLabel(label,{exact:true}).fill(value);await page.getByLabel("I confirm the shipping phone and address.",{exact:true}).check();}
+
+test('saved address quotes use its ID and version; deleted selections require a new confirmed address',async({page})=>{
+ const saved={id:aid,version:4,is_default:true,recipient_name:"Saved customer",phone:"+923001234567",address:"Private saved street",city:"Lahore",province:null,postal_code:"00123"};
+ const commands:any[]=[];
+ await page.route('**/checkout/api',r=>{commands.push(r.request().postDataJSON());return r.fulfill({status:503,json:{error:{code:'PROVIDER_UNAVAILABLE'}}});});
+ await mount(page,'ItemCheckoutCart',{products:[product],language:'en',checkout:true},cart,{book_version:8,items:[saved]});
+ await expect(page.getByLabel('Choose shipping address')).toHaveValue(aid);
+ await expect(page.getByLabel('Recipient name',{exact:true})).toHaveCount(0);
+ await page.getByLabel('I confirm the shipping phone and address.',{exact:true}).check();
+ await page.getByRole('button',{name:'Get final quote',exact:true}).click();
+ expect(commands[0].body).toMatchObject({shipping_address_id:aid,shipping_address_version:4,contact_phone_confirmation:true});
+ expect(commands[0].body).not.toHaveProperty('address');
+ await page.route('**/account/shipping-addresses/api',r=>r.fulfill({json:{book_version:9,items:[]}}));
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect(page.getByLabel('Choose shipping address')).toHaveValue('');
+ await expect(page.getByLabel('I confirm the shipping phone and address.',{exact:true})).not.toBeChecked();
+ await fillAddress(page);await page.getByRole('button',{name:'Get final quote',exact:true}).click();
+ expect(commands[1].body).toHaveProperty('address');expect(commands[1].body).not.toHaveProperty('shipping_address_id');
+});
 
 test('phone requires country code; three copies do not require a separate identity',async({page})=>{
  const commands:any[]=[];

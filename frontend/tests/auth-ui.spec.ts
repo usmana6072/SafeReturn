@@ -23,7 +23,7 @@ for (const width of [390, 1440]) {
 test("unauthenticated account never renders private fields", async ({ page }) => {
   await page.goto("/account");
   // Unconfigured isolated test build safely fails closed; configured server redirects to login.
-  await expect(page.locator("h1")).toHaveText(/Account unavailable|Log in to SafeReturn/);
+  await expect(page.locator("h1")).toHaveText(/Couldn’t Load Account|Log in to SafeReturn/);
   await expect(page.locator("input[name=version]")).toHaveCount(0);
 });
 

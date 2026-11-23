@@ -8,6 +8,7 @@ module.exports = function bundleQA(options = {}) {
     if (ids.has(file)) return ids.get(file);
     const id = modules.length; ids.set(file, id); modules.push('');
     let source = fs.readFileSync(file, 'utf8');
+    if(file.endsWith('.json'))source='module.exports='+source+';module.exports.default=module.exports;';
     if (/\.tsx?$/.test(file)) source = ts.transpileModule(source, { fileName:file, compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 } }).outputText;
     source = source.replace(/require\(["']([^"']+)["']\)/g, (_, request) => {
       if (request.endsWith('.module.css')) {

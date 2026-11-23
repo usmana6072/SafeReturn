@@ -16,8 +16,9 @@ test("live Supabase browser login reaches private account and local test logout 
     }, { email: process.env.SAFERETURN_AUTH_TEST_EMAIL!, password: process.env.SAFERETURN_AUTH_TEST_PASSWORD! });
     await page.getByRole("button", { name: "Log in", exact: true }).click();
     await expect(page).toHaveURL(/\/account$/, { timeout: 20000 });
-    await expect(page.getByRole("heading", { name: "Your account", exact: true })).toBeVisible();
-    await expect(page.getByText("Email confirmed.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Account Settings", exact: true })).toBeVisible();
+    await expect(page.getByText("Email Verified", { exact: true })).toBeVisible();
+    await page.getByRole("button",{name:"Edit Profile",exact:true}).click();
     await expect(page.locator('input[name="version"]')).toHaveCount(1);
     const jar = new Map((await context.cookies()).map(item => [item.name, item.value]));
     const authCookies = (await context.cookies()).filter(item => item.name.startsWith("sb-"));
