@@ -1,4 +1,8 @@
 import { getCatalog } from "../../lib/catalog";
 import { getLanguage } from "../../lib/i18n";
-import { CheckoutCart } from "../../components/checkout";
-export default async function Cart(){const language=await getLanguage(),catalog=await getCatalog();return <section id="main" className="container section" tabIndex={-1}><a href="/shop">{language==="ur"?"مصنوعات":"Products"}</a><h1>{language==="ur"?"کارٹ":"Your cart"}</h1><CheckoutCart products={catalog.products} language={language}/></section>;}
+import { ShoppingCart } from "../../components/shopping-cart";
+export const metadata = { title: "Shopping Cart | SafeReturn" };
+export default async function Cart() {
+  const [catalog, language] = await Promise.all([getCatalog(), getLanguage()]);
+  return <ShoppingCart catalog={catalog} ur={language === "ur"}/>;
+}

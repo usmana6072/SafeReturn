@@ -7,7 +7,7 @@ async function mount(page:any,ur=false){
  await page.route('https://owner.test/**',(r:any)=>r.request().resourceType()!=='document'?r.fallback():r.fulfill({contentType:'text/html',body:'<!doctype html><html><head><style>*{box-sizing:border-box}body{padding:16px;margin:0;font:16px sans-serif}label{display:block;margin:8px 0}section,article{min-width:0;overflow-wrap:anywhere}button{max-width:100%}</style></head><body><div id="root"></div></body></html>'}));
  await page.goto('https://owner.test/');await page.evaluate((ur:boolean)=>{(window as any).qaProps={ur};},ur);await page.addScriptTag({content:bundle({componentPath:'../components/independent-qr.tsx',exportName:'IndependentQRs'})});
 }
-test('one delivered identity activates with explicit confirmation; uncertain retry keeps key',async({page})=>{
+test('one print-ready identity activates with explicit confirmation; uncertain retry keeps key',async({page})=>{
  let active=false,confirmations=0;const writes:any[]=[];
  await page.route('**/independent-qr/api**',r=>{
   if(r.request().method()==='GET')return r.fulfill({json:{items:[active?{...first,ownership_status:'active',public_status:'active',revision:3,can_activate:false}:first,second],next_cursor:null,activation_released:true}});
@@ -15,10 +15,10 @@ test('one delivered identity activates with explicit confirmation; uncertain ret
   if(input.action==='begin')return r.fulfill({status:201,json:{intent_id:id(6),logical_item_id:first.logical_item_id,qr_id:first.qr_id,expires_at:new Date(Date.now()+60000).toISOString(),method:'delivered_purchaser'}});
   if(++confirmations===1)return r.fulfill({status:503,json:{error:{code:'PRIVATE_CANARY'}}});active=true;return r.fulfill({status:201,json:{status:'active'}});
  });
- await mount(page);await page.getByRole('button',{name:'Begin activation',exact:true}).first().click();
- await expect(page.getByRole('button',{name:'Confirm activation',exact:true})).toBeDisabled();await page.getByLabel('I am the purchaser and want to activate this QR.',{exact:true}).check();
- await page.getByRole('button',{name:'Confirm activation',exact:true}).click();await expect(page.getByRole('status')).toContainText('uncertain');await page.getByRole('button',{name:'Confirm activation',exact:true}).click();
- await expect(page.getByText('Profile editing is currently unavailable.')).toHaveCount(1);await expect(page.getByRole('button',{name:'Begin activation',exact:true})).toHaveCount(1);
+ await mount(page);await page.getByRole('button',{name:'Activate QR',exact:true}).first().click();
+ await expect(page.getByRole('button',{name:'Confirm Activation',exact:true})).toBeDisabled();await page.getByLabel('I am the purchaser and want to activate this QR.',{exact:true}).check();
+ await page.getByRole('button',{name:'Confirm Activation',exact:true}).click();await expect(page.getByRole('alert')).toContainText('uncertain');await page.getByRole('button',{name:'Confirm Activation',exact:true}).click();
+ await expect(page.getByRole('link',{name:'Manage QR'})).toHaveAttribute('href','/my-qr/'+first.qr_id);await expect(page.getByRole('button',{name:'Activate QR',exact:true})).toHaveCount(1);
  expect(writes[1].key).toBe(writes[2].key);expect(writes[1].body).toEqual({intent_id:id(6),confirmed:true});expect(JSON.stringify(writes)).not.toContain('public_token');expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);expect(await page.locator('body').innerText()).not.toContain('PRIVATE_CANARY');
 });
 test('public availability changes only the selected identity; denied refresh clears rows',async({page})=>{
@@ -27,14 +27,61 @@ test('public availability changes only the selected identity; denied refresh cle
   if(r.request().method()==='GET')return r.fulfill({status:denied?403:200,json:denied?{error:{code:'PRIVATE_CANARY'}}:{items:[{...first,ownership_status:'active',public_status:disabled?'owner_disabled':'active',revision:disabled?4:3,can_activate:false},second],next_cursor:null,activation_released:true}});
   writes.push(r.request().postDataJSON());disabled=true;return r.fulfill({json:{}});
  });
- await mount(page);await expect(page.getByRole('button',{name:'Disable public access',exact:true})).toBeDisabled();await page.getByLabel('I reviewed the effect on public access for this QR.',{exact:true}).check();await page.getByRole('button',{name:'Disable public access',exact:true}).click();await expect(page.getByRole('button',{name:'Resume public access'})).toBeVisible();expect(writes[0].qr_id).toBe(first.qr_id);expect(writes[0].body.expected_revision).toBe(3);
- denied=true;await page.getByRole('button',{name:'Refresh identities'}).click();await expect(page.getByRole('link',{name:'Edit this profile'})).toHaveCount(0);expect(await page.locator('body').innerText()).not.toContain('PRIVATE_CANARY');
+ await mount(page);
+ await page.getByRole('button',{name:'More actions for Synthetic labels'}).click();
+ await page.getByRole('button',{name:'Turn Off Public Access'}).click();
+ await expect(page.getByRole('dialog',{name:'Turn Off This QR Code?'})).toBeVisible();
+ expect(writes).toHaveLength(0);
+ await page.getByRole('button',{name:'Keep QR Active'}).click();
+ expect(writes).toHaveLength(0);
+ await page.getByRole('button',{name:'More actions for Synthetic labels'}).click();
+ await page.getByRole('button',{name:'Turn Off Public Access'}).click();
+ await page.getByRole('button',{name:'Turn Off Access'}).click();
+ await expect(page.getByRole('button',{name:'Enable Public Access'})).toBeVisible();expect(writes[0].qr_id).toBe(first.qr_id);expect(writes[0].body.expected_revision).toBe(3);
+ denied=true;await page.getByRole('button',{name:'Refresh QR Codes'}).click();await expect(page.getByRole('link',{name:'Manage QR'})).toHaveCount(0);expect(await page.locator('body').innerText()).not.toContain('PRIVATE_CANARY');
 });
 test('Urdu mobile keeps unreleased activation disabled and explains account entitlement',async({page},info)=>{
  await page.setViewportSize({width:375,height:900});await page.route('**/independent-qr/api**',r=>r.fulfill({json:{items:[{...first,can_activate:false},{...second,can_activate:false}],next_cursor:null,activation_released:false}}));
- await mount(page,true);await expect(page.getByRole('button',{name:'فعال کرنا شروع کریں'}).first()).toBeDisabled();await expect(page.locator('section[lang="ur"]').first()).toHaveAttribute('dir','rtl');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('independent-qr-ur-mobile.png'),fullPage:true});
+ await mount(page,true);await expect(page.getByRole('button',{name:'فعال ہونے کی حالت دیکھیں'})).toHaveCount(2);await expect(page.getByRole('button',{name:'QR فعال کریں',exact:true})).toHaveCount(0);await expect(page.locator('section[lang="ur"]').first()).toHaveAttribute('dir','rtl');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('independent-qr-ur-mobile.png'),fullPage:true});
 });
 
-test('inconsistent activation payload is rejected without exposing actions',async({page})=>{let writes=0;await page.route('**/independent-qr/api**',r=>{if(r.request().method()!=='GET'){writes++;return r.fulfill({status:409,json:{}});}return r.fulfill({json:{items:[first],next_cursor:null,activation_released:false}});});await mount(page);await expect(page.getByText('Information unavailable. Refresh to retry.')).toBeVisible();await expect(page.getByRole('button',{name:'Begin activation',exact:true})).toHaveCount(0);expect(writes).toBe(0);});
+test('inconsistent activation payload is rejected without exposing actions',async({page})=>{let writes=0;await page.route('**/independent-qr/api**',r=>{if(r.request().method()!=='GET'){writes++;return r.fulfill({status:409,json:{}});}return r.fulfill({json:{items:[first],next_cursor:null,activation_released:false}});});await mount(page);await expect(page.getByText('Your QR codes couldn’t be loaded.')).toBeVisible();await expect(page.getByRole('button',{name:'Activate QR',exact:true})).toHaveCount(0);expect(writes).toBe(0);});
 
-test('closed activation release is explained for a valid empty purchaser list',async({page})=>{await page.route('**/independent-qr/api**',r=>r.fulfill({json:{items:[],next_cursor:null,activation_released:false}}));await mount(page);await expect(page.getByText('QR activation is not available yet.',{exact:false})).toBeVisible();});
+test('closed activation release is explained for a valid empty purchaser list',async({page})=>{await page.route('**/independent-qr/api**',r=>r.fulfill({json:{items:[],next_cursor:null,activation_released:false}}));await mount(page);await expect(page.getByText('QR activation is currently unavailable.',{exact:true})).toBeVisible();});
+test('names, identifiers and filters use the loaded page and survive refresh', async ({ page }) => {
+  let reads = 0;
+  await page.route('**/independent-qr/api**', route => {
+    reads++;
+    const next = new URL(route.request().url()).searchParams.has('after');
+    return route.fulfill({ json: {
+      items: next ? [second] : [{...first, ownership_status:'active', public_status:'active', can_activate:false}],
+      labels: next ? {} : {[first.qr_id]:'Canvas backpack'}, next_cursor: next ? null : first.logical_item_id, activation_released:true,
+    }});
+  });
+  await mount(page);
+  await page.getByRole('searchbox').fill('backpack');
+  await expect(page.getByRole('heading',{name:'Canvas backpack'})).toBeVisible();
+  await page.getByRole('button',{name:'Refresh QR Codes'}).click();
+  await expect(page.getByRole('searchbox')).toHaveValue('backpack');
+  await page.getByRole('button',{name:'Next',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'No Matching QR Codes'})).toBeVisible();
+  await page.getByRole('button',{name:'Clear Filters'}).click();
+  await page.getByRole('searchbox').fill(second.qr_id);
+  await expect(page.getByRole('button',{name:'Activate QR',exact:true})).toBeVisible();
+  expect(reads).toBe(3);
+});
+test('activity sheet uses dated server events and supports older pages', async ({ page }) => {
+  await page.route('**/independent-qr/api**', route => {
+    if(route.request().method()==='GET') return route.fulfill({json:{items:[{...first,ownership_status:'active',public_status:'active',can_activate:false}],next_cursor:null,activation_released:true}});
+    const input=route.request().postDataJSON();
+    expect(input.action).toBe('history');expect(input.qr_id).toBe(first.qr_id);
+    const older=!!input.body.after_revision;
+    return route.fulfill({json:{qr_id:first.qr_id,items:[{event_id:id(older?11:12),state_revision:older?1:2,event_type:older?'activated':'owner_enabled',created_at:older?'2026-03-01T12:00:00Z':'2026-03-03T12:00:00Z'}],next_revision:older?null:2}});
+  });
+  await mount(page);await page.getByRole('button',{name:/More actions/}).click();
+  await page.getByRole('button',{name:'Activity History'}).click();
+  await expect(page.getByRole('dialog').locator('time')).toHaveAttribute('datetime','2026-03-03T12:00:00Z');
+  await page.getByRole('button',{name:'Older Activity'}).click();
+  await expect(page.locator('.lib-timeline li strong')).toHaveText(['Public access restored','QR activated']);
+  await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:/More actions/})).toBeFocused();
+});

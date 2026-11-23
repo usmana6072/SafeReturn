@@ -11,9 +11,9 @@ test("featured data, exact money, details and no draft leakage",async({page})=>{
  await cards.first().getByRole("link",{name:"View details"}).click();await expect(page).toHaveURL(/shop\/PROJECTION-1/);await expect(page.getByRole("heading",{level:1})).toHaveText("Synthetic card 1");
 });
 test("shop search and category URLs",async({page})=>{
- await page.goto("/shop?q=absent-catalog-item");await expect(page.locator(".catalog-card")).toHaveCount(0);
- await page.getByRole("link",{name:"Reset filters"}).click();await expect(page.locator(".catalog-card")).toHaveCount(2);
- await page.getByRole("link",{name:"QR Stickers",exact:true}).click();await expect(page).toHaveURL(/category=qr-stickers/);
+ await page.goto("/shop?q=absent-catalog-item");await expect(page.locator(".shop-card")).toHaveCount(0);
+ await page.getByRole("button",{name:"Clear Filters",exact:true}).first().click();await expect(page.locator(".shop-card")).toHaveCount(2);
+ await page.goto("/shop?category=qr-stickers");await expect(page.locator(".shop-card")).toHaveCount(2);
 });
 for(const width of [320,1440]) test(`featured keyboard, RTL and overflow ${width}`,async({page})=>{
  await page.setViewportSize({width,height:900});await page.goto("/");

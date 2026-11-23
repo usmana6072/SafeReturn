@@ -1,0 +1,108 @@
+.ship-screen {
+  --ship-ink:#352525; --ship-muted:#74635d; --ship-brand:#864431; --ship-line:#e7dcd2; --ship-paper:#fffdfb;
+  color:var(--ship-ink); max-width:72rem; margin-inline:auto; min-width:0; overflow-wrap:anywhere; container:shipments / inline-size;
+}
+.customer-portal:has(.ship-screen) { background:#faf4ef; }
+.ship-intro { display:flex; align-items:start; justify-content:space-between; gap:.75rem; margin-bottom:1.25rem; }
+.customer-portal .ship-intro h1 { font-size:clamp(1.95rem,5vw,2.8rem); font-weight:560; line-height:1.2; letter-spacing:-.045em; margin:0; }
+.ship-intro p { font-size:.94rem; color:var(--ship-muted); margin:.5rem 0 0; line-height:1.6; }
+.customer-portal .ship-screen button { transform:none; transition:background-color .15s; margin:0; }
+.customer-portal .ship-screen .ship-refresh { flex:none; display:grid; place-items:center; width:44px; height:44px; min-width:44px; padding:0; border:1px solid var(--ship-line); border-radius:50%; background:white; color:var(--ship-muted); box-shadow:none; }
+.ship-filters { display:flex; gap:.45rem; max-width:100%; overflow-x:auto; padding:.25rem 0 .55rem; margin-block:.5rem 1rem; scrollbar-width:thin; }
+.customer-portal .ship-filters button { flex:none; display:flex; align-items:center; gap:.4rem; min-height:44px; font-size:.875rem; font-weight:500; border-radius:99px; padding:.5rem .9rem; background:transparent; border:1px solid var(--ship-line); color:var(--ship-muted); box-shadow:none; }
+.customer-portal .ship-filters button.selected { background:white; border-color:#d8c3b3; color:var(--ship-ink); box-shadow:0 2px 5px #35252508; }
+.ship-filters span { display:inline-grid; place-items:center; border-radius:99px; background:#f2e4d6; min-width:1.5rem; min-height:1.5rem; font-size:.8125rem; }
+.customer-portal .ship-screen .ship-clear { border:0; background:transparent; color:var(--ship-brand); box-shadow:none; padding:.4rem 0; margin-bottom:.6rem; }
+.ship-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:1rem; align-items:start; }
+.ship-card,.ship-panel { min-width:0; padding:1rem; background:var(--ship-paper); border:1px solid var(--ship-line); border-radius:20px; box-shadow:0 2px 5px #35252504,0 10px 22px #35252506; }
+.ship-card { display:flex; flex-direction:column; }
+.ship-card-top { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:.6rem; }
+.ship-card-top time { color:var(--ship-muted); font-size:.8125rem; }
+.ship-badge { display:inline-flex; align-items:center; gap:.35rem; border-radius:99px; padding:.2rem .6rem; background:#eee8e2; color:#5b4d47; font-size:.8125rem; line-height:1.45; font-weight:550; }
+.ship-badge::before { content:""; flex:none; width:5px; height:5px; background:currentColor; border-radius:50%; }
+.ship-badge.waiting { color:#73551e; background:#f9edce; }
+.ship-badge.success { color:#365b38; background:#e7f1e2; }
+.ship-badge.transit { color:#3f5a70; background:#e8eff4; }
+.ship-badge.attention { color:#833b37; background:#f3e1de; }
+.ship-product { display:flex; align-items:start; gap:.8rem; margin:1rem 0 .8rem; }
+.ship-product > div { min-width:0; }
+.ship-art { display:grid; place-items:center; width:64px; height:70px; flex:none; border-radius:14px; background:#f2e7db; color:#8b5640; border:1px solid #ece0d4; }
+.ship-art svg { width:28px; height:28px; stroke-width:1.3; }
+.customer-portal .ship-card h2 { margin:0; font-weight:550; font-size:.9rem; line-height:1.5; letter-spacing:0; color:var(--ship-muted); }
+.ship-product p { color:var(--ship-ink); font-weight:580; font-size:1rem; line-height:1.5; margin:.2rem 0; }
+.ship-label,.ship-muted { display:block; font-size:.8125rem; line-height:1.5; color:var(--ship-muted); }
+.ship-product .ship-label { margin-top:.3rem; }
+.ship-carrier { display:flex; align-items:center; gap:.5rem; color:var(--ship-muted); font-size:.875rem; padding-top:.2rem; }
+.ship-carrier svg { width:18px; height:18px; }
+.ship-tracking { padding:.75rem; background:#f8f2eb; border:1px solid #efe4d9; border-radius:13px; margin:.8rem 0; }
+.ship-tracking-value { display:flex; gap:.4rem; align-items:center; justify-content:space-between; }
+.ship-tracking-value bdi { user-select:all; font-variant-numeric:tabular-nums; font-size:.94rem; font-weight:550; min-width:0; overflow-wrap:anywhere; }
+.customer-portal .ship-tracking-value button { display:grid; place-items:center; width:44px; min-width:44px; height:44px; padding:0; background:white; border:1px solid var(--ship-line); border-radius:50%; color:var(--ship-brand); box-shadow:none; }
+.ship-tracking-value svg { width:17px; height:17px; }
+.ship-copy-feedback { font-size:.8125rem; color:var(--ship-brand); margin:.4rem 0 0; }
+.ship-tracking > p { margin:.5rem 0 0; }
+.customer-portal .ship-screen :is(a,button).ship-primary,.customer-portal .ship-screen :is(a,button).ship-secondary { display:inline-flex; min-height:44px; align-items:center; justify-content:center; gap:.5rem; padding:.65rem 1rem; border:1px solid var(--ship-line); border-radius:99px; background:white; color:var(--ship-ink); font-size:.9rem; font-weight:600; line-height:1.4; text-align:center; box-shadow:none; }
+.customer-portal .ship-screen :is(a,button).ship-primary { background:var(--ship-brand); border-color:var(--ship-brand); color:white; }
+.customer-portal .ship-screen .ship-primary:hover { background:#6c3526; }
+.customer-portal .ship-screen .ship-secondary:hover { background:#f3e4d8; }
+.ship-card > .ship-primary { width:100%; }
+.ship-primary .directional { width:16px; height:16px; }
+.ship-order-link { display:flex; min-height:44px; justify-content:center; align-items:center; margin-top:.2rem; font-size:.875rem; color:var(--ship-brand); }
+.ship-pagination { display:flex; flex-wrap:wrap; gap:.75rem; margin-top:1rem; }
+.ship-note { color:var(--ship-muted); font-size:.875rem; line-height:1.6; margin:.6rem 0 1rem; }
+.ship-empty { border:1px solid var(--ship-line); background:var(--ship-paper); border-radius:20px; text-align:center; padding:1.7rem 1.2rem; }
+.ship-empty-icon { display:inline-grid; place-items:center; width:60px; height:60px; background:#f1e6d9; color:var(--ship-brand); border-radius:20px; }
+.ship-empty-icon svg { width:30px; height:30px; }
+.customer-portal .ship-empty h2 { margin:1rem 0 .4rem; font-size:1.25rem; }
+.ship-empty p { font-size:.94rem; color:var(--ship-muted); max-width:28rem; margin:.5rem auto 1rem; }
+.ship-back { display:inline-flex; align-items:center; min-height:44px; gap:.4rem; color:var(--ship-brand); font-size:.9rem; margin-bottom:.8rem; }
+.ship-back svg { width:16px; height:16px; transform:rotate(180deg); }
+.customer-portal[dir=rtl] .ship-back svg { transform:none; }
+.ship-detail-grid,.ship-detail-main { display:grid; gap:1rem; min-width:0; align-items:start; }
+.ship-status-card { display:flex; align-items:center; gap:.8rem; padding:1.25rem; border-radius:20px; background:#3d302f; color:#fffaf5; box-shadow:0 5px 15px #3d302f14; }
+.ship-status-icon { display:grid; place-items:center; flex:none; width:50px; height:50px; border-radius:16px; background:#5c4740; color:#f2d0a9; }
+.ship-status-icon svg { width:26px; height:26px; stroke-width:1.5; }
+.ship-status-card .ship-label { color:#e8d9d0; }
+.customer-portal .ship-status-card h2 { color:inherit; font-size:1.35rem; font-weight:560; letter-spacing:-.025em; line-height:1.4; margin:.3rem 0; }
+.ship-status-card p { color:#e8d9d0; font-size:.8125rem; margin:.3rem 0 0; }
+.customer-portal .ship-panel h2 { font-size:1.15rem; font-weight:600; margin:0 0 .8rem; letter-spacing:-.02em; }
+.customer-portal .ship-panel h3 { font-size:1rem; font-weight:560; line-height:1.5; margin:.3rem 0 1rem; }
+.ship-panel .ship-tracking { margin-top:.5rem; }
+.ship-service { margin-block:1rem; }
+.ship-service strong { display:block; font-size:1rem; font-weight:560; margin-top:.25rem; }
+.ship-panel .ship-note { margin-bottom:0; }
+.ship-timeline { list-style:none; padding:0; margin:1rem 0 .25rem; }
+.ship-timeline li { position:relative; display:flex; gap:.8rem; padding:0 0 1.3rem; }
+.ship-timeline li:last-child { padding-bottom:0; }
+.ship-timeline li:not(:last-child)::after { content:""; position:absolute; inset-inline-start:12px; inset-block:28px 2px; border-inline-start:1px solid #d8c4b5; }
+.ship-timeline li > span { display:grid; place-items:center; width:26px; height:26px; flex:none; border-radius:50%; background:#f2e5d9; color:var(--ship-brand); }
+.ship-timeline li.latest > span { background:var(--ship-brand); color:white; }
+.ship-timeline svg { width:16px; height:16px; }
+.ship-timeline strong { font-size:.94rem; font-weight:550; line-height:1.5; }
+.ship-timeline time { display:block; font-size:.8125rem; color:var(--ship-muted); margin-top:.2rem; }
+.ship-panel address { font-style:normal; font-size:.94rem; color:var(--ship-muted); }
+.ship-panel address p { margin:.4rem 0; }
+.ship-order-products { list-style:none; padding:0; margin:0; }
+.ship-order-products li { display:flex; gap:.7rem; padding:.85rem 0; border-top:1px solid var(--ship-line); }
+.ship-order-products li > div { min-width:0; }
+.ship-order-products .ship-art { width:42px; height:48px; border-radius:11px; }
+.ship-order-products .ship-art svg { width:22px; height:22px; }
+.ship-order-products strong { display:block; font-size:.94rem; font-weight:550; }
+.ship-order-products small { display:block; font-size:.8125rem; color:var(--ship-muted); margin-top:.3rem; }
+.ship-order-total { display:flex; justify-content:space-between; gap:.75rem; padding-top:1rem; border-top:1px solid var(--ship-line); font-size:.94rem; }
+.ship-order-total dd { margin:0; font-weight:600; text-align:end; font-variant-numeric:tabular-nums; }
+.ship-related > .ship-primary { margin-top:1rem; width:100%; }
+.ship-loading i { display:block; height:1rem; border-radius:8px; background:#e9dfd5; margin:.75rem 0; }
+.ship-loading .ship-skeleton-title { height:2rem; width:50%; margin-bottom:1.5rem; }
+.ship-loading .ship-card { min-height:19rem; }
+.ship-loading .ship-card i:nth-child(2) { width:60%; height:4rem; margin-block:1rem; }
+.ship-loading .ship-card i:last-child { height:2.75rem; margin-top:auto; border-radius:99px; }
+@container shipments (min-width:35rem) { .ship-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@container shipments (min-width:59rem) { .ship-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } .ship-detail-grid { grid-template-columns:minmax(0,1fr) minmax(17rem,.65fr); gap:1.4rem; } .ship-related { position:sticky; top:1rem; } }
+@media(max-width:799px) {
+  .customer-portal:has(.ship-screen) .portal-nav { margin:.5rem max(.5rem,env(safe-area-inset-right)) max(.4rem,env(safe-area-inset-bottom)) max(.5rem,env(safe-area-inset-left)); bottom:max(.4rem,env(safe-area-inset-bottom)); padding:.25rem; border:1px solid #4b3e3a; border-radius:24px; background:#302827; box-shadow:0 5px 20px #31262435; }
+  .customer-portal:has(.ship-screen) .portal-nav > :is(a,button) { background:transparent; color:#faf3ed; border-radius:19px; }
+  .customer-portal:has(.ship-screen) .portal-nav > .active { background:#594842; color:white; }
+}
+.customer-portal[dir=rtl] .ship-screen :is(h1,h2,h3) { letter-spacing:normal; line-height:1.6; }
+@media(prefers-reduced-motion:reduce) { .ship-screen * { transition:none!important; } }

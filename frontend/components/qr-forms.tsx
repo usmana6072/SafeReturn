@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { saveQR, prepareActivation, activatePair, beginScan, type QRState } from "../app/qr-actions";
 import type { Profile, Contact, Preferences } from "../lib/qr-contract";
 
@@ -49,7 +50,8 @@ function Editor({ qrId, kind, version, ur, children }: { qrId: string; kind: "lo
     onReset={event => event.preventDefault()}>
     <fieldset className="qr-fieldset" disabled={pending}><input type="hidden" name="version" value={version} />{children}
     {dirty && <p className="form-help">{ur ? "تبدیلیاں ابھی محفوظ نہیں ہوئیں۔" : "You have unsaved changes."}</p>}
-    <Notice state={state} ur={ur} /><button className="button" disabled={pending}>{pending ? (ur ? "انتظار کریں…" : "Saving…") : (ur ? "تبدیلیاں محفوظ کریں" : "Save changes")}</button></fieldset>
+    <Notice state={state} ur={ur} /><div className="profile-actions"><button className="button" disabled={pending}>{pending ? (ur ? "انتظار کریں…" : "Saving…") : (ur ? "تبدیلیاں محفوظ کریں" : "Save Changes")}</button>
+    {!pending && <Link href="/my-qr">{ur ? "منسوخ کریں" : "Cancel"}</Link>}</div></fieldset>
   </form>;
 }
 export function PrivacyDisable({ qrId, scope, version, ur }: { qrId: string; scope: "ice" | "preferences"; version: number; ur: boolean }) {
@@ -64,7 +66,7 @@ export function ProfileEditor({ qrId, kind, profile: p, ur }: { qrId: string; ki
     if (["description", "emergency_instructions"].includes(element.name)) setPreview(old => ({ ...old, description: element.value }));
   }}><Editor qrId={qrId} kind={kind} version={p.version} ur={ur}>
     {kind === "lost" ? <>
-      <Field name="item_label" label={ur ? "چیز کا نام" : "Item label"} value={p.item_label} max={120} />
+      <Field name="item_label" label={ur ? "چیز کا نام" : "Item Name"} value={p.item_label} max={120} />
       <Field name="description" label={ur ? "تفصیل" : "Description"} value={p.description} multiline />
       <Field name="reward_text" label={ur ? "انعام (اختیاری)" : "Reward (optional)"} value={p.reward_text} max={200} />
       <Field name="return_instructions" label={ur ? "واپسی کی ہدایات" : "Return instructions"} value={p.return_instructions} multiline />

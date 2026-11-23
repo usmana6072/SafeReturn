@@ -40,10 +40,10 @@ test("multiple kits show distinct Lost/ICE links without private medical or phon
 
 test("Lost save and draft preview affect only the selected QR", async ({ page, request }) => {
   await login(page); await page.goto(`/my-qr/${id("LOST")}`);
-  await page.getByLabel("Item label", { exact: true }).fill("Synthetic school bag");
+  await page.getByLabel("Item Name", { exact: true }).fill("Synthetic school bag");
   await page.getByLabel("Description", { exact: true }).fill("Blue bag");
   await expect(page.getByLabel("Draft preview")).toContainText("Synthetic school bag");
-  await page.locator(".qr-editor").first().getByRole("button", { name: "Save changes" }).click();
+  await page.locator(".qr-editor").first().getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByRole("status")).toHaveText("Changes saved.");
   expect((await profile(request, id("LOST"), "lost")).item_label).toBe("Synthetic school bag");
   expect((await profile(request, id("OTHER_LOST"), "lost")).item_label).toBeNull();
@@ -53,8 +53,8 @@ test("Lost save and draft preview affect only the selected QR", async ({ page, r
 test("a concurrent save shows a conflict and preserves newer data", async ({ page, request }) => {
   await login(page); await page.goto(`/my-qr/${id("LOST")}`);
   await profile(request, id("LOST"), "lost", { item_label: "Newer synthetic label" });
-  await page.getByLabel("Item label", { exact: true }).fill("Stale browser label");
-  await page.locator(".qr-editor").first().getByRole("button", { name: "Save changes" }).click();
+  await page.getByLabel("Item Name", { exact: true }).fill("Stale browser label");
+  await page.locator(".qr-editor").first().getByRole("button", { name: "Save Changes" }).click();
   await expect(page.locator(".form-notice[role=alert]")).toContainText("Your changes were not saved", { timeout: 15000 });
   expect((await profile(request, id("LOST"), "lost")).item_label).toBe("Newer synthetic label");
 });
@@ -76,18 +76,18 @@ test("WhatsApp preference requires consent, masks the number and can be disabled
   let form = page.locator("form").filter({ has: page.getByRole("heading", { name: "WhatsApp preference" }) });
   await form.locator('input[name="whatsapp_phone"]').fill("+923001234567");
   await form.locator('input[name="whatsapp_enabled"]').check();
-  await form.getByRole("button", { name: "Save changes" }).click();
+  await form.getByRole("button", { name: "Save Changes" }).click();
   await expect(form.getByRole("alert")).toBeVisible();
   await expect(form.locator('input[name="whatsapp_phone"]')).toHaveValue("+923001234567");
   await expect(form.locator('input[name="whatsapp_enabled"]')).toBeChecked();
   await form.locator('input[name="consent"]').check();
-  await form.getByRole("button", { name: "Save changes" }).click();
+  await form.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("••••4567", { exact: true })).toBeVisible();
   await expect(page.locator('input[name="whatsapp_phone"]')).toHaveValue("");
   expect(await page.content()).not.toContain("+923001234567");
   form = page.locator("form").filter({ has: page.getByRole("heading", { name: "WhatsApp preference" }) });
   await form.locator('input[name="whatsapp_enabled"]').uncheck();
-  await form.getByRole("button", { name: "Save changes" }).click();
+  await form.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.locator('input[name="whatsapp_enabled"]')).not.toBeChecked();
 });
 
@@ -95,25 +95,25 @@ test("ICE draft, contact creation, consent renewal and confirmed removal", async
   await login(page); await page.goto(`/my-qr/${id("ICE")}`);
   await page.getByLabel("Display name or alias").fill("Synthetic ICE alias");
   await page.getByLabel("Replace medical notes (optional)").fill("Synthetic private note");
-  await page.locator(".qr-editor").first().getByRole("button", { name: "Save changes" }).click();
+  await page.locator(".qr-editor").first().getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByRole("status")).toHaveText("Changes saved.");
   let form = page.locator("form").filter({ has: page.getByRole("heading", { name: "Add emergency contact" }) });
   await form.getByLabel("Relationship", { exact: true }).fill("Parent");
   await form.locator('input[name="phone"]').fill("+923001234567");
   await form.locator('input[name="published"]').check();
   await form.locator('input[name="consent"]').check();
-  await form.getByRole("button", { name: "Save changes" }).click();
+  await form.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByText("••••4567", { exact: true })).toBeVisible();
   await expect(page.locator('input[name="phone"]').first()).toHaveValue("");
   expect(await page.content()).not.toContain("+923001234567");
   form = page.locator("form").filter({ has: page.getByRole("heading", { name: "Edit contact" }) });
   await form.getByLabel("Relationship", { exact: true }).fill("Guardian");
   await form.locator('input[name="consent"]').check();
-  await form.getByRole("button", { name: "Save changes" }).click();
+  await form.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.locator('input[name="relationship_label"]').first()).toHaveValue("Guardian");
   form = page.locator("form").filter({ has: page.getByRole("heading", { name: "Edit contact" }) });
   await form.locator('input[name="remove"]').check(); await form.locator('input[name="confirm_remove"]').check();
-  await form.getByRole("button", { name: "Save changes" }).click();
+  await form.getByRole("button", { name: "Save Changes" }).click();
   await expect(page.getByRole("heading", { name: "Edit contact" })).toHaveCount(0);
 });
 
@@ -127,7 +127,7 @@ test("key outage still permits privacy disabling without clearing retained medic
     await page.goto(`/my-qr/${id("ICE")}`);
     const form = page.locator("form").filter({ hasText: "Turn publication off while preserving saved private data." });
     await expect(form).toBeVisible();
-    await form.getByRole("button", { name: "Save changes" }).click();
+    await form.getByRole("button", { name: "Save Changes" }).click();
     await expect(page.getByRole("status")).toHaveText("Changes saved.");
   } finally { await request.post(`${api}/fixture/keys/on`); }
   const result = await profile(request, id("ICE"), "ice");

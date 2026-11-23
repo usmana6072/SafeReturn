@@ -1,26 +1,234 @@
-'use client';
-import Link from 'next/link';
-import {useEffect,useRef,useState} from 'react';
-import {collection,type IndependentQR} from '../lib/independent-qr';
-import {CustomerDialog} from './customer-dialog';
-import {customerOperationAvailable} from '../lib/customer-capabilities';
-type Intent={intent_id:string;logical_item_id:string;qr_id:string;expires_at:string;method:string};
-export function IndependentQRs({ur}:{ur:boolean}){
- const [items,setItems]=useState<IndependentQR[]>([]),[next,setNext]=useState<string|null>(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[intent,setIntent]=useState<Intent|null>(null),[confirmed,setConfirmed]=useState(false),[review,setReview]=useState<string|null>(null),[events,setEvents]=useState<{event_id:string;event_type:string;state_revision:number}[]>([]);
- const [filter,setFilter]=useState('all'),[now,setNow]=useState(Date.now());
- const [activationReleased,setActivationReleased]=useState<boolean|null>(null);
- const [historyId,setHistoryId]=useState<string|null>(null),[historyCursor,setHistoryCursor]=useState<number|null>(null);
- const states:Record<string,[string,string]>={unactivated:['Not activated','ابھی فعال نہیں'],active:['Active','فعال'],owner_disabled:['Public access disabled','عوامی رسائی بند'],admin_suspended:['Suspended','معطل'],revoked:['Revoked','منسوخ'],activated:['Activated','فعال کیا گیا'],owner_enabled:['Public access resumed','عوامی رسائی بحال']};
- const stateLabel=(value:string)=>states[value]?.[ur?1:0]??value;
- const keys=useRef(new Map<string,string>()),t=(en:string,u:string)=>ur?u:en;
- function clear(){setActivationReleased(null);setItems([]);setNext(null);setIntent(null);setEvents([]);setHistoryId(null);setHistoryCursor(null);setReview(null);}
- async function read(url:string,options?:RequestInit){const r=await fetch(url,{cache:'no-store',...options});if(!r.ok){if(r.status===401||r.status===403)clear();throw Error();}return r.json();}
- async function load(after?:string){setBusy(true);setNotice('');setEvents([]);setHistoryId(null);setHistoryCursor(null);try{const d=collection(await read('/independent-qr/api'+(after?'?after='+encodeURIComponent(after):'')));setItems(d.items);setNext(d.next_cursor);setActivationReleased(d.activation_released);}catch{clear();setNotice(t('Information unavailable. Refresh to retry.','معلومات دستیاب نہیں۔ دوبارہ تازہ کریں۔'));}finally{setBusy(false);}}
- async function command(action:string,body:unknown,qr_id?:string){const value=JSON.stringify({action,body,qr_id});let key=keys.current.get(value);if(!key){key=crypto.randomUUID();keys.current.set(value,key);}return read('/independent-qr/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,body,qr_id,key})});}
- useEffect(()=>{void load();const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
- async function begin(item:IndependentQR){if(activationReleased!==true||!item.can_activate)return;setBusy(true);setNotice('');setIntent(null);setConfirmed(false);try{const d=await command('begin',{logical_item_id:item.logical_item_id});if(d.logical_item_id!==item.logical_item_id||d.qr_id!==item.qr_id||d.method!=='delivered_purchaser'||!Number.isFinite(Date.parse(d.expires_at)))throw Error();setIntent(d);}catch{setNotice(t('Activation unavailable. Delivery, account and payment checks must pass.','فعال کرنا دستیاب نہیں۔ ترسیل، اکاؤنٹ اور ادائیگی کی جانچ ضروری ہے۔'));}finally{setBusy(false);}}
- async function activate(){if(!intent||!confirmed||Date.parse(intent.expires_at)<=Date.now())return;setBusy(true);try{await command('confirm',{intent_id:intent.intent_id,confirmed:true});setIntent(null);setConfirmed(false);await load();setNotice(t('This QR is activated. Profile editing remains subject to availability.','یہ QR فعال ہو گیا۔ پروفائل کی ترمیم دستیابی سے مشروط ہے۔'));}catch{setNotice(t('Activation uncertain or unavailable. Refresh before retrying; the same request key is retained.','فعال ہونے کی تصدیق دستیاب نہیں۔ دوبارہ کوشش سے پہلے تازہ کریں۔'));}finally{setBusy(false);}}
- async function change(item:IndependentQR){setBusy(true);try{await command('availability',{public_status:item.public_status==='active'?'owner_disabled':'active',expected_revision:item.revision,confirmed:true},item.qr_id);setReview(null);await load();}catch{setNotice(t('Status change unavailable. Refresh before retrying.','حالت تبدیل نہیں ہوئی۔ دوبارہ تازہ کریں۔'));}finally{setBusy(false);}}
- async function history(item:IndependentQR,after?:number){setBusy(true);try{const d=await command('history',after?{after_revision:after}:{},item.qr_id);if(d.qr_id!==item.qr_id||!Array.isArray(d.items))throw Error();setEvents(previous=>after?[...previous,...d.items]:d.items);setHistoryId(item.qr_id);setHistoryCursor(d.next_revision);}catch{setEvents([]);setNotice(t('History unavailable.','تاریخ دستیاب نہیں۔'));}finally{setBusy(false);}}
- return <section dir={ur?'rtl':'ltr'} lang={ur?'ur':'en'} aria-busy={busy} style={{overflowWrap:'anywhere'}}><h1>{t('My QR codes','میرے QR کوڈز')}</h1>{activationReleased===false&&<p role="status">{t('QR activation is not available yet. Delivery, payment and purchaser verification are still required before activation can be enabled.','QR فعال کرنا ابھی دستیاب نہیں۔ ترسیل، ادائیگی اور خریدار کی تصدیق ضروری ہے۔')}</p>}<p>{t('Activate each purchased identity after confirmed delivery. Sign in as the purchaser. A scanned public token does not prove ownership. Gifting and transfers are not available.','ترسیل کی تصدیق کے بعد خریدار کے اکاؤنٹ سے ہر شناخت الگ فعال کریں۔ عوامی ٹوکن ملکیت کا ثبوت نہیں۔ تحفہ اور منتقلی دستیاب نہیں۔')}</p><button disabled={busy} onClick={()=>{setIntent(null);setConfirmed(false);void load();}}>{t('Refresh identities','شناختیں تازہ کریں')}</button><p role="status">{notice}</p><label>{t("Filter this page","اس صفحے کا فلٹر")}<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">{t("All","تمام")}</option><option value="lost">{t("Lost","گمشدہ")}</option><option value="ice">{t("Emergency","ہنگامی")}</option></select></label>{!busy&&activationReleased!==null&&!items.length&&<p className="empty-state">{t("No allocated identities yet.","ابھی کوئی شناخت مختص نہیں۔")} <Link href="/shop">{t("Browse products","مصنوعات دیکھیں")}</Link></p>}<div className="qr-grid">{items.filter(i=>filter==="all"||i.tag_type===filter).map(item=><article className="identity-card" key={item.qr_id}><h2>{item.product_name_snapshot} · {item.tag_type==='lost'?t('Lost','گمشدہ'):t('Emergency','ہنگامی')}</h2><p><bdi dir="ltr">{item.qr_id}</bdi></p><span className="pill">{stateLabel(item.public_status)}</span><p><Link href={"/orders/"+item.order_id}>{t("View purchased item","خریدے گئے آئٹم کی تفصیلات")}</Link></p>{item.ownership_status==='unclaimed'?<><p>{t('Activation requires a delivered order and completed verification.','فعال کرنے کے لیے تصدیق شدہ، پہنچایا گیا آرڈر ضروری ہے۔')}</p><button disabled={busy||activationReleased!==true||!item.can_activate} onClick={()=>begin(item)}>{t('Begin activation','فعال کرنا شروع کریں')}</button></>:item.ownership_status==='active'?<>{customerOperationAvailable('GET','/me/qr/'+item.qr_id)?<Link href={'/my-qr/'+item.qr_id}>{t('Edit this profile','یہ پروفائل ترمیم کریں')}</Link>:<p className="hint">{t('Profile editing is currently unavailable.','پروفائل کی ترمیم فی الحال دستیاب نہیں۔')}</p>} <button disabled={busy} onClick={()=>history(item)}>{t('View history','تاریخ دیکھیں')}</button>{['active','owner_disabled'].includes(item.public_status)&&<><label><input type="checkbox" checked={review===item.qr_id} onChange={e=>setReview(e.target.checked?item.qr_id:null)}/>{t('I reviewed the effect on public access for this QR.','میں نے اس QR کی عوامی رسائی پر اثر کا جائزہ لیا ہے۔')}</label><button disabled={busy||review!==item.qr_id} onClick={()=>change(item)}>{item.public_status==='active'?t('Disable public access','عوامی رسائی بند کریں'):t('Resume public access','عوامی رسائی بحال کریں')}</button></>}</>:null}</article>)}</div>{intent&&<CustomerDialog title={t('Confirm this single identity','صرف اس شناخت کی تصدیق کریں')} ur={ur} busy={busy} onClose={()=>{setIntent(null);setConfirmed(false);}}><p><bdi dir="ltr">{intent.qr_id}</bdi></p><p>{t("Expires","میعاد ختم")}: <time dateTime={intent.expires_at}>{new Date(intent.expires_at).toLocaleString(ur?"ur-PK":"en-PK")}</time></p>{Date.parse(intent.expires_at)<=now&&<p role="alert">{t("This intent expired. Begin activation again.","میعاد ختم ہو گئی۔ فعال کرنا دوبارہ شروع کریں۔")}</p>}<label><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>{t('I am the purchaser and want to activate this QR.','میں خریدار ہوں اور یہ QR فعال کرنا چاہتا ہوں۔')}</label><button disabled={busy||!confirmed||Date.parse(intent.expires_at)<=now} onClick={activate}>{t('Confirm activation','فعال کرنے کی تصدیق')}</button></CustomerDialog>}{events.length>0&&<ol>{events.map(e=><li key={e.event_id}>{stateLabel(e.event_type)} · <bdi>{e.state_revision}</bdi></li>)}</ol>}{historyId&&historyCursor!==null&&<button disabled={busy} onClick={()=>history(items.find(i=>i.qr_id===historyId)!,historyCursor)}>{t('More history','مزید تاریخ')}</button>}{next&&<button disabled={busy} onClick={()=>load(next!)}>{t('Next identities','اگلی شناختیں')}</button>}</section>;
+"use client";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { collection, type IndependentQR } from "../lib/independent-qr";
+import { CustomerDialog } from "./customer-dialog";
+import { CustomerIcon } from "./customer-icon";
+import { QRCard, QRLibrarySkeleton, canEdit, qrType, statusOf, statuses, translate, type FinderHints, type QRAction } from "./qr-library-cards";
+
+type Page = ReturnType<typeof collection> & { labels: Record<string, string> };
+type Intent = { intent_id: string; qr_id: string; logical_item_id: string; expires_at: string; method: string };
+type Event = { event_id: string; event_type: "activated" | "owner_enabled" | "owner_disabled"; created_at: string };
+type Sheet = { kind: QRAction; item: IndependentQR } | { kind: "filters" };
+type History = { qr_id: string; items: Event[]; next_revision: number | null };
+const endpoint = "/independent-qr/api";
+
+async function request(url: string, options?: RequestInit) {
+  const response = await fetch(url, { cache: "no-store", ...options });
+  if (!response.ok) throw new Error(String(response.status));
+  return response.json();
+}
+async function getPage(after: string | null, signal?: AbortSignal): Promise<Page> {
+  const query = new URLSearchParams({ view: "cards" });
+  if (after) query.set("after", after);
+  const { labels = {}, ...raw } = await request(endpoint + "?" + query, { signal });
+  const page = collection(raw);
+  const safeLabels: Record<string, string> = {};
+  for (const item of page.items) {
+    const label = labels?.[item.qr_id];
+    if (typeof label === "string") safeLabels[item.qr_id] = label;
+  }
+  return { ...page, labels: safeLabels };
+}
+function dateLabel(date: string, ur: boolean) {
+  return new Intl.DateTimeFormat(ur ? "ur-PK" : "en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(date));
+}
+
+export function IndependentQRs({ ur, finder = {} }: { ur: boolean; finder?: FinderHints }) {
+  const t = translate(ur);
+  const [page, setPage] = useState<Page | null>(null);
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const [busy, setBusy] = useState(true), [failed, setFailed] = useState(false);
+  const [notice, setNotice] = useState(""), [issue, setIssue] = useState("");
+  const [query, setQuery] = useState(""), [status, setStatus] = useState("all"), [type, setType] = useState("all");
+  const [sort, setSort] = useState("original"), [sheet, setSheet] = useState<Sheet | null>(null);
+  const [intent, setIntent] = useState<Intent | null>(null), [confirmed, setConfirmed] = useState(false), [expired, setExpired] = useState(false);
+  const [history, setHistory] = useState<History | null>(null);
+  const keys = useRef(new Map<string, string>()), locked = useRef(false);
+  const opener = useRef<HTMLElement | null>(null), search = useRef<HTMLInputElement>(null);
+  const after = cursors[cursors.length - 1];
+  useEffect(() => {
+    const controller = new AbortController();
+    async function initial() {
+      if (controller.signal.aborted) return;
+      try {
+        const data = await getPage(null, controller.signal);
+        if (!controller.signal.aborted) setPage(data);
+      } catch { if (!controller.signal.aborted) setFailed(true); }
+      finally { if (!controller.signal.aborted) setBusy(false); }
+    }
+    queueMicrotask(initial);
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
+    if (!intent) return;
+    const timeout = setTimeout(() => setExpired(true), Math.max(0, Date.parse(intent.expires_at) - Date.now()));
+    return () => clearTimeout(timeout);
+  }, [intent]);
+  function close() {
+    setSheet(null); setIntent(null); setHistory(null); setConfirmed(false); setIssue("");
+    requestAnimationFrame(() => opener.current?.focus({ preventScroll: true }));
+  }
+  async function task(work: () => Promise<void>, error: string) {
+    if (locked.current) return;
+    locked.current = true; setBusy(true); setIssue(""); setNotice("");
+    try { await work(); }
+    catch (cause) {
+      if (cause instanceof Error && ["401", "403"].includes(cause.message)) {
+        close(); setPage(null); setCursors([null]); setFailed(true); keys.current.clear();
+      } else setIssue(error);
+    } finally { locked.current = false; setBusy(false); }
+  }
+  async function reload(stack = cursors) {
+    try {
+      const data = await getPage(stack[stack.length - 1]);
+      setPage(data); setCursors(stack); setFailed(false);
+    } catch (cause) {
+      setPage(null); setCursors(stack); setFailed(true); throw cause;
+    }
+  }
+  const load = (stack = cursors) => task(() => reload(stack), t("Your QR codes couldn’t be loaded.", "QR کوڈز لوڈ نہیں ہو سکے۔"));
+  async function command(action: string, body: object, qr_id?: string) {
+    const signature = JSON.stringify({ action, body, qr_id });
+    let key = keys.current.get(signature);
+    if (!key) { key = crypto.randomUUID(); keys.current.set(signature, key); }
+    return request(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, body, qr_id, key }) });
+  }
+  function begin(item: IndependentQR) {
+    if (!page?.activation_released || !item.can_activate) return;
+    void task(async () => {
+      const result: Intent = await command("begin", { logical_item_id: item.logical_item_id });
+      if (result.qr_id !== item.qr_id || result.logical_item_id !== item.logical_item_id || result.method !== "delivered_purchaser" || !Number.isFinite(Date.parse(result.expires_at))) throw Error();
+      setConfirmed(false); setExpired(Date.parse(result.expires_at) <= Date.now()); setIntent(result);
+    }, t("Activation couldn’t start. Check your order or try again.", "QR فعال کرنے کی درخواست شروع نہیں ہو سکی۔ آرڈر چیک کریں یا دوبارہ کوشش کریں۔"));
+  }
+  function activate() {
+    if (!intent || !confirmed || Date.parse(intent.expires_at) <= Date.now()) return;
+    void task(async () => {
+      await command("confirm", { intent_id: intent.intent_id, confirmed: true });
+      close(); await reload(); setNotice(t("QR activated. You can now edit its profile.", "QR فعال ہو گیا۔ اب پروفائل میں ترمیم کریں۔"));
+    }, t("Activation is uncertain. You can retry this confirmation.", "فعال ہونے کی تصدیق نہیں ہو سکی۔ دوبارہ تصدیق کریں۔"));
+  }
+  function change(item: IndependentQR) {
+    if (item.ownership_status !== "active" || !["active", "owner_disabled"].includes(item.public_status)) return;
+    const enable = item.public_status === "owner_disabled";
+    void task(async () => {
+      await command("availability", { public_status: enable ? "active" : "owner_disabled", expected_revision: item.revision, confirmed: true }, item.qr_id);
+      close(); await reload(); setNotice(enable ? t("Public access is on.", "عوامی رسائی بحال ہے۔") : t("Public access is off.", "عوامی رسائی بند ہے۔"));
+    }, t("The access change wasn’t confirmed. Refresh your QR codes before trying again.", "تبدیلی کی تصدیق نہیں ہو سکی۔ دوبارہ کوشش سے پہلے QR کوڈز تازہ کریں۔"));
+  }
+  function readHistory(item: IndependentQR, cursor?: number) {
+    void task(async () => {
+      const result: History = await command("history", cursor ? { after_revision: cursor } : {}, item.qr_id);
+      if (result.qr_id !== item.qr_id || !Array.isArray(result.items) || result.items.some(e => !Number.isFinite(Date.parse(e.created_at)))) throw Error();
+      setHistory(previous => ({ ...result, items: cursor ? [...(previous?.items ?? []), ...result.items] : result.items }));
+    }, t("Activity couldn’t be loaded.", "سرگرمیاں لوڈ نہیں ہو سکیں۔"));
+  }
+  function open(kind: QRAction, item: IndependentQR) {
+    if (busy) return;
+    if (!sheet) opener.current = document.activeElement as HTMLElement;
+    setSheet({ kind, item }); setIssue(""); setIntent(null); setConfirmed(false); setHistory(null);
+    if (kind === "activation") begin(item);
+    if (kind === "history") readHistory(item);
+  }
+  function reset() { setQuery(""); setStatus("all"); setType("all"); setSort("original"); }
+  const items = page?.items ?? [], term = query.trim().toLocaleLowerCase();
+  const name = (item: IndependentQR) => page?.labels[item.qr_id] || item.product_name_snapshot || qrType(item, ur);
+  const visible = items.filter(item => (type === "all" || type === item.tag_type) &&
+    (status === "all" || (status === "pending" ? item.ownership_status === "unclaimed" : statusOf(item) === status)) &&
+    [name(item), item.product_name_snapshot, item.qr_id, qrType(item, ur)].some(s => s.toLocaleLowerCase().includes(term)));
+  if (sort === "name") visible.sort((a, b) => name(a).localeCompare(name(b), ur ? "ur" : "en"));
+  const activeFilters = Number(status !== "all") + Number(type !== "all") + Number(sort !== "original");
+  const selected = sheet && "item" in sheet ? sheet.item : null;
+  const enable = selected?.public_status === "owner_disabled";
+  const titles = {
+    menu: selected ? name(selected) : "", filters: t("Filter", "فلٹر"), activation: t("Activate QR", "QR فعال کریں"),
+    history: t("Activity History", "سرگرمیوں کی تاریخ"), product: t("Linked Product", "منسلک پروڈکٹ"),
+    status: t("QR Status", "QR کی حالت"), access: enable ? t("Enable Public Access?", "عوامی رسائی بحال کریں؟") : t("Turn Off This QR Code?", "اس QR کو بند کریں؟"),
+  };
+  const message = <>{issue && <p role="alert" className="lib-error">{issue}</p>}</>;
+  if (busy && !page && !failed) return <QRLibrarySkeleton ur={ur}/>;
+  return <section className="qr-library" dir={ur ? "rtl" : "ltr"} lang={ur ? "ur" : "en"}>
+    <header className="lib-intro"><div><h1>{t("My QR Codes", "میرے QR کوڈز")}</h1>
+      <p>{t("Manage the QR codes that help protect your belongings.", "اپنے سامان کی حفاظت کرنے والے QR کوڈز کا انتظام کریں۔")}</p></div>
+      <button className="lib-round" disabled={busy} aria-label={t("Refresh QR Codes", "QR کوڈز تازہ کریں")} title={t("Refresh QR Codes", "QR کوڈز تازہ کریں")} onClick={() => load()}><CustomerIcon name="refresh"/></button>
+    </header>
+    {notice && <p className="lib-feedback" role="status">{notice}</p>}
+    {!sheet && !failed && message}
+    {failed && <div className="lib-empty"><CustomerIcon name="refresh"/><h2>{t("Your QR codes couldn’t be loaded.", "QR کوڈز لوڈ نہیں ہو سکے۔")}</h2>
+      <button className="lib-secondary" disabled={busy} onClick={() => load()}>{t("Retry", "دوبارہ کوشش کریں")}</button></div>}
+    {page && <>
+      {items.length > 0 && <>
+        <dl className="lib-overview">{([
+          [t("Active", "فعال"), items.filter(i => statusOf(i) === "active").length],
+          [t("Pending Activation", "فعال ہونے کا انتظار"), items.filter(i => i.ownership_status === "unclaimed").length],
+          [t("Ready to Activate", "فعال کرنے کے لیے تیار"), items.filter(i => i.can_activate).length],
+        ] as const).map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl>
+      </>}
+      {(after || page.next_cursor) && <p className="lib-note">{t("Counts, search and filters apply to this page.", "تعداد، تلاش اور فلٹر اسی صفحے کے لیے ہیں۔")}</p>}
+      {!page.activation_released && <p className="lib-note" role="status">{t("QR activation is currently unavailable.", "QR فعال کرنا فی الحال دستیاب نہیں۔")}</p>}
+      {items.length > 0 && <><div className="lib-tools"><div className="lib-search"><CustomerIcon name="search"/>
+        <input ref={search} type="search" enterKeyHint="search" autoComplete="off" aria-label={t("Search your QR codes", "اپنے QR کوڈز تلاش کریں")}
+          placeholder={t("Search your QR codes", "اپنے QR کوڈز تلاش کریں")} value={query} onChange={e => setQuery(e.target.value)}/>
+        {query && <button className="lib-clear" aria-label={t("Clear search", "تلاش صاف کریں")} onClick={() => { setQuery(""); search.current?.focus(); }}><CustomerIcon name="close"/></button>}
+        </div><button className="lib-filter" aria-haspopup="dialog" onClick={e => { opener.current = e.currentTarget; setSheet({ kind: "filters" }); }}><CustomerIcon name="filter"/>{t("Filter", "فلٹر")}{activeFilters > 0 && <span>{activeFilters}</span>}</button>
+        </div>{(activeFilters > 0 || term) && <div className="lib-results"><span role="status">{visible.length} {t("matching QR codes", "مماثل QR کوڈز")}</span>
+          {visible.length > 0 && <button onClick={reset}>{t("Clear Filters", "فلٹر صاف کریں")}</button>}</div>}</>}
+      {visible.length ? <div className="lib-grid">{visible.map(item => <QRCard key={item.qr_id} ur={ur} item={item} name={page.labels[item.qr_id]} released={page.activation_released}
+        hint={finder[item.qr_id]} busy={busy} act={open}/>)}</div> :
+        <div className="lib-empty"><span className="lib-empty-icon"><CustomerIcon name={items.length ? "search" : "tag"}/></span>
+          <h2>{items.length ? t("No Matching QR Codes", "کوئی مماثل QR کوڈ نہیں") : after ? t("No More QR Codes", "مزید QR کوڈز نہیں") : t("No QR Codes Yet", "ابھی کوئی QR کوڈ نہیں")}</h2>
+          <p>{items.length ? t("Try a different search or filter.", "تلاش یا فلٹر تبدیل کریں۔") : after ? t("Return to the previous page to see your tags.", "اپنے ٹیگ دیکھنے کے لیے پچھلے صفحے پر جائیں۔") : t("Start protecting your belongings with a SafeReturn QR tag.", "اپنے سامان کی حفاظت SafeReturn QR ٹیگ سے شروع کریں۔")}</p>
+          {items.length ? <button className="lib-secondary" onClick={reset}>{t("Clear Filters", "فلٹر صاف کریں")}</button>
+            : !after && <Link className="lib-primary" href="/shop">{t("Shop QR Tags", "QR ٹیگز خریدیں")}</Link>}</div>}
+      {(after || page.next_cursor) && <div className="lib-pager"><button disabled={busy || !after} onClick={() => load(cursors.slice(0, -1))}>{t("Previous", "پچھلا")}</button>
+        <span>{t("Page", "صفحہ")} {cursors.length}</span><button disabled={busy || !page.next_cursor} onClick={() => load([...cursors, page.next_cursor])}>{t("Next", "اگلا")}</button></div>}
+    </>}
+    {sheet && <CustomerDialog title={titles[sheet.kind]} ur={ur} busy={busy} dismissOnBackdrop onClose={close}>
+      {sheet.kind === "filters" && <div className="lib-filter-fields">
+        <label>{t("Status", "حالت")}<select aria-label={t("Status", "حالت")} value={status} onChange={e => setStatus(e.target.value)}><option value="all">{t("All QR Codes", "تمام QR کوڈز")}</option>
+          {Object.entries(statuses).map(([key, text]) => <option key={key} value={key}>{text[ur ? 1 : 0]}</option>)}</select></label>
+        <label>{t("Tag type", "ٹیگ کی قسم")}<select aria-label={t("Tag type", "ٹیگ کی قسم")} value={type} onChange={e => setType(e.target.value)}><option value="all">{t("All types", "تمام اقسام")}</option>
+          <option value="lost">{t("Lost", "گمشدہ")}</option><option value="ice">{t("Emergency", "ہنگامی")}</option></select></label>
+        <label>{t("Sort by", "ترتیب")}<select aria-label={t("Sort by", "ترتیب")} value={sort} onChange={e => setSort(e.target.value)}><option value="original">{t("Original order", "اصل ترتیب")}</option><option value="name">{t("Name A–Z", "نام کے لحاظ سے")}</option></select></label>
+        <div className="lib-sheet-actions"><button className="lib-secondary" onClick={reset}>{t("Clear Filters", "فلٹر صاف کریں")}</button>
+          <button className="lib-primary" onClick={close}>{t("Done", "مکمل")}</button></div></div>}
+      {selected && <>
+        {sheet.kind !== "menu" && <p className="lib-sheet-context"><bdi>{name(selected)}</bdi> · <bdi>{selected.qr_id.slice(-8).toUpperCase()}</bdi></p>}
+        {sheet.kind === "menu" && <div className="lib-menu">
+          {canEdit(selected) && <Link href={`/my-qr/${selected.qr_id}`} prefetch={false} onClick={close}><CustomerIcon name="tag"/>{t("Edit QR Profile", "QR پروفائل میں ترمیم")}</Link>}
+          <button onClick={() => open("product", selected)}><CustomerIcon name="box"/>{t("View Linked Product", "منسلک پروڈکٹ دیکھیں")}</button>
+          {selected.ownership_status === "active" && <button onClick={() => open("history", selected)}><CustomerIcon name="pending"/>{titles.history}</button>}
+          {(selected.ownership_status === "active" || finder[selected.qr_id]) && <Link href={`/inbox?qr_id=${selected.qr_id}`} prefetch={false} onClick={close}><CustomerIcon name="inbox"/>{t("View Finder Messages", "فائنڈر پیغامات دیکھیں")}</Link>}
+          {selected.ownership_status === "active" && (selected.public_status === "active" || enable && page?.activation_released) && <button onClick={() => open("access", selected)}><CustomerIcon name="qr"/>{enable ? t("Enable Public Access", "عوامی رسائی بحال کریں") : t("Turn Off Public Access", "عوامی رسائی بند کریں")}</button>}
+        </div>}
+        {sheet.kind === "product" && <><h3><bdi>{selected.product_name_snapshot}</bdi></h3><p>{qrType(selected, ur)}</p>
+          <Link className="lib-secondary" href={`/orders/${selected.order_id}`}>{t("View Purchase", "خریداری دیکھیں")}<CustomerIcon name="arrow"/></Link></>}
+        {sheet.kind === "status" && <><span className={"lib-badge is-" + statusOf(selected)}>{statuses[statusOf(selected)][ur ? 1 : 0]}</span>
+          <p>{statusOf(selected) === "pending" ? t("Activation becomes available after payment verification when your print file is ready.", "ادائیگی کی تصدیق اور پرنٹ فائل تیار ہونے پر QR فعال کیا جا سکے گا۔")
+            : t("This QR’s current status limits the actions available.", "اس QR کی موجودہ حالت میں اقدامات محدود ہیں۔")}</p>
+          <Link className="lib-secondary" href={`/orders/${selected.order_id}`}>{t("View Purchase", "خریداری دیکھیں")}</Link></>}
+        {sheet.kind === "activation" && <>
+          {intent && <><p>{t("Confirm that you purchased this tag to activate it for your account.", "اپنے اکاؤنٹ میں ٹیگ فعال کرنے کے لیے خریداری کی تصدیق کریں۔")}</p>
+            <p className="lib-note">{t("Confirmation expires", "تصدیق کی میعاد")} <time dateTime={intent.expires_at}>{dateLabel(intent.expires_at, ur)}</time></p>
+            {expired && <p role="alert">{t("This confirmation has expired. Start activation again.", "تصدیق کی میعاد ختم ہو گئی۔ دوبارہ درخواست کریں۔")}</p>}
+            <label className="lib-check"><input type="checkbox" disabled={busy || expired} checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/>{t("I am the purchaser and want to activate this QR.", "میں خریدار ہوں اور یہ QR فعال کرنا چاہتا ہوں۔")}</label></>}
+          {busy && !intent && <p role="status">{t("Checking activation…", "فعال کرنے کی اہلیت چیک ہو رہی ہے…")}</p>}{message}
+          {intent && <button className="lib-primary" disabled={busy || !confirmed || expired} onClick={activate}>{t("Confirm Activation", "فعال کرنے کی تصدیق")}</button>}
+          {(!intent && !busy || expired) && <button className="lib-secondary" disabled={busy} onClick={() => begin(selected)}>{t("Start Again", "دوبارہ شروع کریں")}</button>}</>}
+        {sheet.kind === "access" && <><p>{enable ? t("People who scan this tag can access the information you’ve chosen to publish.", "ٹیگ اسکین کرنے والے آپ کی شائع کردہ معلومات دیکھ سکیں گے۔")
+          : t("People who scan this tag may no longer be able to view its public page or contact you. Your profile and history stay saved.", "ٹیگ اسکین کرنے والے اس کا عوامی صفحہ دیکھنے یا آپ سے رابطہ کرنے سے محروم ہو سکتے ہیں۔ آپ کا پروفائل اور تاریخ محفوظ رہیں گے۔")}</p>{message}
+          <div className="lib-sheet-actions"><button className="lib-secondary" disabled={busy} onClick={close}>{enable ? t("Cancel", "منسوخ") : t("Keep QR Active", "QR فعال رکھیں")}</button>
+            <button className="lib-primary" disabled={busy} onClick={() => change(selected)}>{enable ? t("Enable Public Access", "عوامی رسائی بحال کریں") : t("Turn Off Access", "رسائی بند کریں")}</button></div></>}
+        {sheet.kind === "history" && <>
+          {busy && <p role="status">{t("Loading activity…", "سرگرمیاں لوڈ ہو رہی ہیں…")}</p>}{message}
+          {history && (history.items.length ? <ol className="lib-timeline">{history.items.map(e => <li key={e.event_id}><CustomerIcon name={e.event_type === "activated" ? "check" : "pending"}/>
+            <div><strong>{e.event_type === "activated" ? t("QR activated", "QR فعال ہو گیا") : e.event_type === "owner_disabled" ? t("Public access turned off", "عوامی رسائی بند ہوئی") : t("Public access restored", "عوامی رسائی بحال ہوئی")}</strong>
+              <time dateTime={e.created_at}>{dateLabel(e.created_at, ur)}</time></div></li>)}</ol> :
+            <><h3>{t("No Activity Yet", "ابھی کوئی سرگرمی نہیں")}</h3><p>{t("Updates for this QR code will appear here.", "اس QR کوڈ کی سرگرمیاں یہاں دکھائی دیں گی۔")}</p></>)}
+          {(issue || history?.next_revision) && <button className="lib-secondary" disabled={busy} onClick={() => readHistory(selected, history?.next_revision ?? undefined)}>{issue ? t("Retry", "دوبارہ کوشش کریں") : t("Older Activity", "پرانی سرگرمیاں")}</button>}
+        </>}
+      </>}
+    </CustomerDialog>}
+  </section>;
 }

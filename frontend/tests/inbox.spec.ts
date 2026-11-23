@@ -10,11 +10,11 @@ test("private inbox controls, settings and help",async({page})=>{
  await page.getByRole('button',{name:'Submit deletion request',exact:true}).click();
  await expect(page.getByRole('status')).toContainText('saved for review');
  await page.goto('/help');await expect(page.getByRole('heading',{name:'Help',exact:true})).toBeVisible();
- await page.goto('/inbox');await expect(page.getByRole('heading',{name:'Finder inbox',exact:true})).toBeVisible();
+ await page.goto('/inbox');await expect(page.getByRole('heading',{name:'Finder Messages',exact:true})).toBeVisible();
  await page.goto('/inbox/'+process.env.TASK57_MESSAGE);await expect(page.getByText('SYNTHETIC PRIVATE MESSAGE',{exact:true})).toBeVisible();
- await page.getByLabel('Message status',{exact:true}).selectOption('flagged');await page.getByRole('button',{name:'Save status',exact:true}).click();
+ await page.getByLabel('Message Status',{exact:true}).selectOption('flagged');await page.getByRole('button',{name:'Save Status',exact:true}).click();
  await expect(page.getByRole('status')).toContainText('Changes saved');
- await page.getByLabel('I want to delete this message.').check();await page.getByRole('button',{name:'Delete message',exact:true}).click();
+ await page.getByRole('button',{name:'Delete Message',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Delete Message',exact:true}).click();
  await expect(page).toHaveURL(/inbox\?result=deleted/);await expect(page.getByRole('status')).toContainText('removed');
  expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
 });

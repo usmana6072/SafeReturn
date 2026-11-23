@@ -98,3 +98,20 @@ for(const [code,message] of [['SINGLE_QR_CHECKOUT_NOT_RELEASED','Online purchasi
 }
 
 test('browse-only published product shows order availability instead of an Add to cart button',async({page})=>{await mount(page,'KitConfigurator',{product:{...product,checkout_available:false},language:'en'},[]);await expect(page.getByText('Online ordering is not available yet.')).toBeVisible();await expect(page.getByRole('button',{name:'Order now',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'Add to cart',exact:true})).toHaveCount(0);await expect(page.getByRole('link',{name:'Back to Shop'})).toHaveAttribute('href','/shop');});
+
+test("shop configuration keeps QR options readable and validates whole copy counts", async ({ page }) => {
+ await page.setViewportSize({width:320,height:844});
+ await mount(page,"ItemConfigurator",{product,language:"en",premium:true},[]);
+ const fs=require("node:fs");
+ await page.addStyleTag({content:require("./compiled-admin-css.cjs")()+fs.readFileSync("components/customer-portal.css","utf8")+fs.readFileSync("components/shop.css","utf8")});
+ await page.evaluate(()=>{document.body.classList.add("customer-portal");document.getElementById("root")!.classList.add("shop-screen");});
+ await expect(page.getByLabel("35 mm",{exact:true})).toHaveValue("1");
+ await expect(page.getByRole("button",{name:"Decrease copies for 35 mm"})).toBeDisabled();
+ await expect(page.locator(".shop-identity input").first()).toHaveCSS("width","20px");
+ expect((await page.locator(".shop-identity label > span").first().boundingBox())!.width).toBeGreaterThan(100);
+ await page.getByLabel("45 mm",{exact:true}).fill("2");
+ await expect(page.locator(".shop-price-summary")).toContainText("PKR 36.90");
+ await page.getByLabel("35 mm",{exact:true}).fill("1.5");
+ await expect(page.getByRole("button",{name:"Add to Cart",exact:true})).toBeDisabled();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

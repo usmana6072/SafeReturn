@@ -8,16 +8,42 @@ import {SavedAddressSelector,type SavedAddress} from "./shipping-addresses";
 export function OfficialPaymentInstructions({value,ur}:{value:PaymentInstructions;ur:boolean}){
  return <section aria-label={ur?"ادائیگی کی سرکاری ہدایات":"Official payment instructions"}><h2>{ur?"بینک / راست":"Bank / Raast"}</h2><p style={{whiteSpace:"pre-line"}}>{ur?value.instructions_ur:value.instructions_en}</p><dl>{[[ur?"بینک":"Bank",value.bank_name],[ur?"اکاؤنٹ کا عنوان":"Account title",value.account_title],[ur?"اکاؤنٹ نمبر":"Account number",value.account_number],[ur?"راست آئی ڈی":"Raast ID",value.raast_id]].map(([label,text])=><div key={label}><dt>{label}</dt><dd><bdi>{text}</bdi></dd></div>)}</dl><p>{ur?"ادائیگی کی تصویر تصدیق شدہ ادائیگی نہیں ہے۔":"Payment evidence is not verified payment."}</p></section>;
 }
-export function ItemConfigurator({product,language}:{product:CatalogProduct;language:"en"|"ur"}){
- const ur=language==="ur",[sizes,setSizes]=useState(product.variants.map(v=>({variant_id:v.variant_id,copies:0}))),[separate,setSeparate]=useState(false),[status,setStatus]=useState("");
+export function ItemConfigurator({product,language,premium=false}:{product:CatalogProduct;language:"en"|"ur";premium?:boolean}){
+ const ur=language==="ur",[sizes,setSizes]=useState(product.variants.map((v,index)=>({variant_id:v.variant_id,copies:premium&&index===0?1:0}))),[separate,setSeparate]=useState(false),[status,setStatus]=useState("");
+ const submitting=useRef(false),[busy,setBusy]=useState(false);
  function handleAction(redirectUrl: string){try{
+  if(submitting.current)return;
   if(!canOrder(product)){setStatus(checkoutUnavailableMessage(product,language));return;}
   if(sizes.some(s=>!Number.isInteger(s.copies)||s.copies<0||s.copies>product.max_order_copies)){setStatus(ur?"کاپیوں کی درست مکمل تعداد درج کریں۔":"Enter whole copy counts within the product limit.");return;}
   if(!sizes.some(s=>s.copies>0)){setStatus(ur?"کم از کم ایک کاپی منتخب کریں۔":"Select at least one copy.");return;}
   const next=mergeItemCart(readItemCart(),{product_id:product.product_id,identity_group:separate?crypto.randomUUID():null,sizes:sizes.filter(s=>s.copies>0)});
   if(next.length>50||next.reduce((n,i)=>n+i.sizes.length,0)>50||next.some(i=>i.product_id===product.product_id&&i.sizes.reduce((n,s)=>n+s.copies,0)>product.max_order_copies)){setStatus(ur?"تمام سائز کی مشترکہ حد سے تجاوز ہے۔":"Combined copies exceed the product limit.");return;}
-  localStorage.setItem(itemCartKey,JSON.stringify(next));location.href=redirectUrl;
- }catch{setStatus(ur?"کارٹ محفوظ نہیں ہو سکا۔":"Cart could not be saved.");}}
+  submitting.current=true;setBusy(true);localStorage.setItem(itemCartKey,JSON.stringify(next));location.href=redirectUrl;
+ }catch{submitting.current=false;setBusy(false);setStatus(ur?"کارٹ محفوظ نہیں ہو سکا۔":"Cart could not be saved.");}}
+ if(premium){
+  const total=sizes.reduce((n,s)=>n+s.copies,0);
+  const invalid=sizes.some(s=>!Number.isInteger(s.copies)||s.copies<0)||total<1||total>product.max_order_copies;
+  const cents=Number(product.price_per_copy.replace(".",""));
+  function update(index:number,value:number){setSizes(previous=>previous.map((s,i)=>i===index?{...s,copies:value}:s));setStatus("");}
+  return <section className="shop-config" aria-label={ur?"اپنا ٹیگ منتخب کریں":"Customize your tag"}>
+    <h2>{ur?"سائز اور کاپیاں":"Sizes & Copies"}</h2><p>{ur?"سائز کے مطابق کاپیوں کی تعداد منتخب کریں۔":"Choose how many copies you’d like in each size."}</p>
+    <div className="shop-sizes">{sizes.map((s,i)=><div className="shop-size" key={s.variant_id}><label htmlFor={"copies-"+s.variant_id}>{product.variants[i].name}</label>
+      <div className="shop-stepper"><button type="button" aria-label={(ur?"کم کریں، ":"Decrease copies for ")+product.variants[i].name} disabled={busy||s.copies<=0||total<=1} onClick={()=>update(i,s.copies-1)}>−</button>
+      <input id={"copies-"+s.variant_id} type="number" inputMode="numeric" min={0} max={product.max_order_copies} step={1} disabled={busy} value={Number.isNaN(s.copies)?"":s.copies} onChange={e=>update(i,e.target.value===""?NaN:Number(e.target.value))}/>
+      <button type="button" aria-label={(ur?"بڑھائیں، ":"Increase copies for ")+product.variants[i].name} disabled={busy||!Number.isInteger(total)||total>=product.max_order_copies} onClick={()=>update(i,s.copies+1)}>+</button></div></div>)}</div>
+    <small>{ur?"تمام سائز ملا کر زیادہ سے زیادہ":"Maximum across all sizes"} {product.max_order_copies} {ur?"کاپیاں":"copies"}</small>
+    {invalid&&<p role="alert">{ur?"کم از کم ایک کاپی اور حد کے اندر مکمل تعداد منتخب کریں۔":"Select at least one copy using whole numbers within the combined limit."}</p>}
+    <fieldset className="shop-identity"><legend>{ur?"QR کوڈ کے اختیارات":"QR Code Options"}</legend>
+      <label><input type="radio" name="identity" checked={!separate} onChange={()=>setSeparate(false)} disabled={busy}/><span><strong>{ur?"کارٹ میں موجود QR استعمال کریں":"Use This Product’s Cart QR"}</strong><small>{ur?"کاپیاں اس پروڈکٹ کے موجودہ کارٹ آئٹم میں شامل ہوں گی۔":"Copies join this product’s existing cart item. A new item is created if needed."}</small></span></label>
+      <label><input type="radio" name="identity" checked={separate} onChange={()=>setSeparate(true)} disabled={busy}/><span><strong>{ur?"اس بیچ کے لیے نیا QR":"New QR for This Batch"}</strong><small>{ur?"تمام منتخب سائز اور کاپیاں ایک نیا QR استعمال کریں گی۔":"All selected sizes and copies share one new QR, separate from other cart items."}</small></span></label>
+    </fieldset>
+    <dl className="shop-price-summary"><div><dt>{ur?"فی کاپی":"Unit price"}</dt><dd>PKR {product.price_per_copy}</dd></div><div><dt>{ur?"کل کاپیاں":"Total copies"}</dt><dd>{Number.isFinite(total)?total:"—"}</dd></div>
+      <div><dt>{ur?"مصنوعات کی کل قیمت":"Product subtotal"}</dt><dd>{invalid?"—":"PKR "+(cents*total/100).toFixed(2)}</dd></div></dl>
+    <p className="shop-charge-note">{ur?"ترسیل اور ٹیکس کی تصدیق چیک آؤٹ پر ہوگی۔":"Delivery and tax are confirmed at checkout."}</p>
+    <p role="status">{status}</p><div className="shop-buy-actions"><button className="shop-primary" disabled={busy||invalid} onClick={()=>handleAction("/cart")}>{ur?"کارٹ میں شامل کریں":"Add to Cart"}</button>
+      <button className="shop-secondary" disabled={busy||invalid} onClick={()=>handleAction("/checkout")}>{ur?"ابھی خریدیں":"Buy Now"}</button></div>
+  </section>;
+ }
  return <section dir={ur?"rtl":"ltr"}><h2>{ur?"سائز اور کاپیاں":"Sizes and copies"}</h2><p>{product.qr_type==="ice"?(ur?"ایمرجنسی":"Emergency"):"Lost"} · PKR {product.price_per_copy} {ur?"فی کاپی، تمام سائز":"per copy, all sizes"}</p><p>{ur?"ہر آئٹم کے لیے ایک منفرد QR، تمام کاپیاں اسی QR کو استعمال کریں گی۔":"One distinct QR per item. Every selected size and copy shares that identity."}</p><p>{ur?"زیادہ سے زیادہ مشترکہ کاپیاں":"Maximum combined copies"}: {product.max_order_copies}</p>{sizes.map((s,i)=><label className="copy-count" key={s.variant_id}>{product.variants[i].name}<input type="number" min={0} max={product.max_order_copies} value={s.copies} onChange={e=>setSizes(sizes.map((row,n)=>n===i?{...row,copies:Number(e.target.value)}:row))}/></label>)}<label className="check-field"><input type="checkbox" checked={separate} onChange={e=>setSeparate(e.target.checked)}/>{ur?"اس مصنوعہ کے لیے الگ QR شناخت بنائیں":"Create a separate QR identity for this product"}</label><p>{ur?"ورنہ اس مصنوعہ کی کاپیاں کارٹ کے موجودہ آئٹم میں شامل ہوں گی۔":"By default, copies merge into the existing cart item for this product."}</p><div style={{display:"flex",gap:"12px",alignItems:"center",flexWrap:"wrap",marginBlockStart:"1rem"}}><button type="button" className="button secondary" onClick={()=>handleAction("/cart")}>{ur?"کارٹ میں شامل کریں":"Add to cart"}</button><button type="button" className="button" onClick={()=>handleAction("/checkout")}>{ur?"ابھی خریدیں":"Buy now"}</button></div><p role="status">{status}</p></section>;
 }
 

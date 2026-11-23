@@ -1,60 +1,23 @@
+import Link from "next/link";
 import { ApiError } from "../../../../lib/api/transport";
 import { changeMessage } from "../../../inbox-actions";
-import Link from "next/link";
-import { ownerApi, ownerSession } from "../../../../lib/qr-server";
+import { ownerApi,ownerSession } from "../../../../lib/qr-server";
 import { getLanguage } from "../../../../lib/i18n";
-import { Unavailable } from "../../../../components/customer";
-import { CustomerSubmit } from "../../../../components/customer-submit";
-
-type Message = {
-  tag_type: string;
-  finder_name: string | null;
-  finder_email: string | null;
-  finder_phone: string | null;
-  message: string;
-  status: string;
-  submitted_at: string;
-  location: { latitude: number; longitude: number; accuracy_m: number | null; maps_url: string } | null;
-};
-
-export default async function FinderMessagePage({ params, searchParams }: { params: Promise<{ messageId: string }>; searchParams: Promise<{ result?: string }> }) {
-  const ur = await getLanguage() === "ur";
-  const session = await ownerSession();
-  const { messageId } = await params;
-  const result = (await searchParams).result;
-  let message: Message;
-  try { message = await ownerApi(session.token)<Message>(`/me/finder-messages/${encodeURIComponent(messageId)}`); }
-  catch (error) { return <><h1>{ur ? "فائنڈر پیغام" : "Finder message"}</h1>
-    {error instanceof ApiError && error.status === 404 ? <p role="status">{ur ? "یہ پیغام دستیاب نہیں ہے۔" : "This message is no longer available."}</p> : <Unavailable ur={ur} />}
-    <Link className="text-link" href="/inbox">{ur ? "واپس اِن باکس" : "Back to inbox"}</Link></>; }
-  return <>
-    <p><Link className="text-link" href="/inbox">{ur ? "واپس اِن باکس" : "Back to inbox"}</Link></p>
-    <h1>{ur ? "فائنڈر پیغام" : "Finder message"}</h1>
-    {result && <p role="status">{result === "saved" ? (ur ? "محفوظ ہو گیا۔" : "Changes saved.") : (ur ? "تبدیلی محفوظ نہیں ہوئی۔ دوبارہ کوشش کریں۔" : "Changes could not be saved. Confirm deletion if requested and try again.")}</p>}
-    <article className="qr-card">
-      <p className="eyebrow"><bdi>{message.tag_type}</bdi></p>
-      <h2>{message.finder_name || (ur ? "نامعلوم فائنڈر" : "Anonymous finder")}</h2>
-      <p>{message.message}</p>
-      {message.finder_email && <p>{ur ? "ای میل" : "Email"}: <bdi>{message.finder_email}</bdi></p>}
-      {message.finder_phone && <p>{ur ? "فون" : "Phone"}: <bdi>{message.finder_phone}</bdi></p>}
-      {message.location && <p><a className="text-link" href={message.location.maps_url} rel="noreferrer">
-        {ur ? "نقشے میں مقام دیکھیں" : "View consented location on map"}
-      </a></p>}
-      <p>{ur ? "حالت" : "Status"}: <bdi>{message.status}</bdi></p>
-      <form action={changeMessage.bind(null, messageId)}>
-        <label htmlFor="message-status">{ur ? "پیغام کی حالت" : "Message status"}</label>
-        <select id="message-status" name="status" defaultValue={message.status === "new" ? "viewed" : message.status}>
-          <option value="viewed">{ur ? "دیکھا گیا" : "Viewed"}</option>
-          <option value="archived">{ur ? "محفوظ شدہ" : "Archived"}</option>
-          <option value="flagged">{ur ? "رپورٹ کیا گیا" : "Flagged"}</option>
-        </select><CustomerSubmit ur={ur}>{ur ? "محفوظ کریں" : "Save status"}</CustomerSubmit>
-      </form>
-      <form action={changeMessage.bind(null, messageId)}>
-        <input type="hidden" name="status" value="deleted" />
-        <p>{ur ? "پیغام اِن باکس سے ہٹ جائے گا۔ قانونی اور تحفظ کی پالیسی کے تحت ریکارڈ برقرار رہ سکتا ہے۔" : "Deletion removes this message from your inbox. Records may remain under retention or legal obligations."}</p>
-        <label><input type="checkbox" name="confirm" required /> {ur ? "میں یہ پیغام حذف کرنا چاہتا ہوں۔" : "I want to delete this message."}</label>
-        <CustomerSubmit ur={ur} secondary>{ur ? "پیغام حذف کریں" : "Delete message"}</CustomerSubmit>
-      </form>
-    </article>
-  </>;
+import { uuid } from "../../../../lib/qr-contract";
+import { finderDetail,finderPage,inboxContext,inboxQuery,inboxHref,type InboxContext,type FinderSummary } from "../../../../lib/finder-inbox";
+import { FinderMessageDetails } from "../../../../components/finder-message-details";
+import { FinderRetry } from "../../../../components/finder-inbox";
+export const metadata={title:"Message Details | SafeReturn"};
+export default async function FinderMessagePage({params,searchParams}:{params:Promise<{messageId:string}>;searchParams:Promise<Record<string,string|string[]|undefined>>}){
+ const ur=await getLanguage()==="ur",session=await ownerSession(),{messageId}=await params,p=await searchParams;
+ let context:InboxContext={};try{context=inboxContext(p);}catch{}
+ let message;
+ try{if(!uuid(messageId))throw new ApiError("http",404);message=finderDetail(await ownerApi(session.token)<unknown>("/me/finder-messages/"+messageId));if(message.id!==messageId)throw Error("Unavailable");}
+ catch(error){const missing=!uuid(messageId)||(error instanceof ApiError&&error.status===404);
+ return <section className="finder-screen"><Link className="finder-back" href={inboxHref(context)}>{ur?"پیغامات پر واپس":"Back to Messages"}</Link><div className="finder-empty" role="alert"><h1>{ur?"پیغام دستیاب نہیں":missing?"Message Unavailable":"Couldn’t Load Message"}</h1><p>{ur?"دوبارہ کوشش کریں یا اِن باکس پر واپس جائیں۔":missing?"This message is no longer available.":"Please try again."}</p>{!missing&&<FinderRetry ur={ur}/>}</div></section>;}
+ let summary:FinderSummary|null=null;
+ // The detail API does not expose QR ownership metadata. Only link an association
+ // verified by matching the message ID in the authenticated owner list.
+ try{const q=inboxQuery({...context,status:undefined});q.set("limit","100");const page=finderPage(await ownerApi(session.token)<unknown>("/me/finder-messages?"+q));summary=page.items.find(m=>m.id===messageId)??null;}catch{}
+ return <FinderMessageDetails message={message} summary={summary} context={context} action={changeMessage.bind(null,messageId)} ur={ur} result={typeof p.result==="string"?p.result:undefined}/>;
 }
