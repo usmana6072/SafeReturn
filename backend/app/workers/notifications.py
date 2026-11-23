@@ -227,7 +227,7 @@ class BrevoProvider:
                     "sender": self._sender(from_email),
                     "to": [{"email": to}],
                     "subject": subject,
-                    "html": html,
+                    "htmlContent": html,
                 },
                 timeout=self.timeout,
                 follow_redirects=False,

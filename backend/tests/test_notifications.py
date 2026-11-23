@@ -34,6 +34,7 @@ def test_brevo_returns_provider_id(mock_post):
     request = mock_post.call_args.kwargs
     assert request["headers"]["Idempotency-Key"] == "finder-message:123"
     assert request["json"]["to"] == [{"email": "owner@example.test"}]
+    assert request["json"]["htmlContent"] == "<p>body</p>"
     assert mock_post.call_args.args[0] == "https://api.brevo.com/v3/smtp/email"
     assert request["follow_redirects"] is False
 
