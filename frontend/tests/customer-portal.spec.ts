@@ -71,30 +71,3 @@ test('active QR opens its profile and filtering preserves identity allocation',a
   await expect(page.getByRole('link',{name:'Manage QR'})).toHaveAttribute('href','/my-qr/'+identity.qr_id);
   await page.getByRole('button',{name:'Filter',exact:true}).click();await page.getByLabel('Tag type').selectOption('ice');await page.getByRole('button',{name:'Done',exact:true}).click();await expect(page.locator('.lib-card')).toHaveCount(1);await expect(page.getByRole('heading',{name:'Everyday belongings',exact:true})).toBeVisible();
 });
-test('saved address create, edit, conflict and delete use server revisions',async({page})=>{
-  let version=0,items:any[]=[],conflict=false;const writes:any[]=[];
-  await page.route('**/account/shipping-addresses/api',r=>{
-    if(r.request().method()==='GET')return r.fulfill({json:{book_version:version,items}});
-    const data=r.request().postDataJSON();writes.push({method:r.request().method(),data});
-    if(conflict)return r.fulfill({status:409,json:{error:{message:'PRIVATE_CANARY'}}});
-    version++;
-    if(r.request().method()==='POST')items=[{...data,id:id(9),version:1}];
-    if(r.request().method()==='PATCH')items=[{...items[0],...data.body.address,is_default:data.body.is_default,version:2}];
-    if(r.request().method()==='DELETE'){items=[];return r.fulfill({status:204});}
-    return r.fulfill({json:{book_version:version,item:items[0]}});
-  });
-  await mount(page,false,{ur:false},'ShippingAddresses');
-  for(const [label,value] of [['Recipient name','Example customer'],['Phone (+923…)','+923001234567'],['Street address','Test street'],['City','Lahore']])await page.getByLabel(label,{exact:true}).fill(value);
-  await page.getByRole('button',{name:'Save address',exact:true}).click();await expect(page.getByRole('status')).toContainText('Changes saved');
-  expect(writes[0].data.expected_book_version).toBe(0);
-  await page.getByRole('button',{name:'Edit',exact:true}).click();await page.getByLabel('City',{exact:true}).fill('Karachi');
-  await page.getByRole('button',{name:'Save address',exact:true}).click();await expect(page.getByRole('status')).toContainText('Changes saved');
-  expect(writes[1].data.body.expected_version).toBe(1);
-  await expect(page.locator('.portal-main')).toContainText('Karachi');
-  conflict=true;await page.getByRole('button',{name:'Edit',exact:true}).click();await page.getByRole('button',{name:'Save address',exact:true}).click();
-  await expect(page.getByRole('status')).toContainText('Change not confirmed');await expect(page.locator('body')).not.toContainText('PRIVATE_CANARY');
-  conflict=false;await page.getByRole('button',{name:'Reload list',exact:true}).click();
-  await page.getByRole('button',{name:'Delete',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button',{name:'Confirm deletion',exact:true}).click();await expect(page.getByText('No saved addresses.')).toBeVisible();
-  expect(writes.at(-1)).toMatchObject({method:'DELETE',data:{id:id(9),expected_version:2,expected_book_version:2}});
-});

@@ -39,13 +39,36 @@ export function inboxHref(context:InboxContext={},result?:string){
 export function finderPage(value:unknown):{items:FinderSummary[];next_cursor:string|null}{
   if(!value||typeof value!=="object")throw Error("Unavailable");
   const page=value as {items:FinderSummary[];next_cursor:string|null};
-  if(!Array.isArray(page.items)||page.items.length>100||!(page.next_cursor===null||typeof page.next_cursor==="string"))throw Error("Unavailable");
+  if(!Array.isArray(page.items)||page.items.length>100||!(page.next_cursor===null||(typeof page.next_cursor==="string"&&page.next_cursor.length>0&&page.next_cursor.length<=256)))throw Error("Unavailable");
   const items=page.items.map(m=>{
     if(!m||!uuid(m.id)||!uuid(m.qr_id)||!["lost","ice"].includes(m.tag_type)||!finderStatuses.includes(m.status)||!isDate(m.submitted_at)||
       ![m.qr_label,m.finder_name,m.notification_status].every(optionalString))throw Error("Unavailable");
     return {id:m.id,qr_id:m.qr_id,qr_label:m.qr_label,finder_name:m.finder_name,tag_type:m.tag_type,status:m.status,submitted_at:m.submitted_at,notification_status:m.notification_status};
   });
   return {items,next_cursor:page.next_cursor};
+}
+
+// Only owner-list records can establish a message's QR association. Follow the
+// API's opaque cursors instead of trusting QR IDs supplied in a detail URL.
+export async function findFinderSummary(
+  message:Pick<FinderMessage,"id"|"status"|"submitted_at">,
+  read:(path:string)=>Promise<unknown>,
+):Promise<FinderSummary|null>{
+  const query=new URLSearchParams({status:message.status,limit:"100"});
+  const cursors=new Set<string>();
+  const submitted=Date.parse(message.submitted_at);
+  for(;;){
+    const page=finderPage(await read("/me/finder-messages?"+query));
+    const match=page.items.find(item=>item.id===message.id);
+    if(match)return match;
+    if(!page.next_cursor)return null;
+    if(!page.items.length||cursors.has(page.next_cursor))throw Error("Unavailable");
+    // The endpoint sorts newest first. A missing message cannot be on a page
+    // older than its submission time (for example, after a concurrent deletion).
+    if(Date.parse(page.items[page.items.length-1].submitted_at)<submitted)return null;
+    cursors.add(page.next_cursor);
+    query.set("cursor",page.next_cursor);
+  }
 }
 export function finderDetail(value:unknown):FinderMessage{
   if(!value||typeof value!=="object")throw Error("Unavailable");

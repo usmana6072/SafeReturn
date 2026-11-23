@@ -117,6 +117,26 @@ export async function saveAccount(_previous: FormState, form: FormData): Promise
   redirect("/account?saved=1");
 }
 
+// The existing profile endpoint supports locale-only edits. Keep a language
+// change from silently replacing a missing or concurrently edited display name.
+export async function saveAccountLanguage(_previous: FormState, form: FormData): Promise<FormState> {
+  try {
+    if (!(await sameOrigin())) return { status: "error", reason: "denied" };
+    const session = await verifiedSession();
+    if (!session) return { status: "error", reason: "denied" };
+    const locale = String(form.get("preferred_locale") ?? "");
+    const version = String(form.get("version") ?? "");
+    if (!["en", "ur"].includes(locale) || !/^(0|[0-9]{1,12}\.[0-9]{1,6})$/.test(version)) return { status: "error", reason: "invalid" };
+    await accountRequest(session.token, { preferred_locale: locale, version });
+    (await cookies()).set("safereturn-language", locale, {
+      sameSite: "lax", path: "/", secure: process.env.NODE_ENV === "production", maxAge: 31536000,
+    });
+  } catch (error) {
+    return { status: "error", reason: error instanceof Error && error.message === "stale" ? "stale" : "unavailable" };
+  }
+  redirect("/account?saved=1");
+}
+
 export async function requestEmail(mode: "resend" | "recovery", _previous: FormState,
   form: FormData): Promise<FormState> {
   try {

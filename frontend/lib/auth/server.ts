@@ -22,7 +22,7 @@ export type Account = { user_id: string; display_name: string | null;
   masked_contact: { phone: string | null }; version: string };
 
 export async function accountRequest(token: string, edit?: {
-  display_name: string; preferred_locale: string; version: string;
+  display_name?: string; preferred_locale: string; version: string;
 }): Promise<Account> {
   const origin = validateOrigin(process.env.SAFERETURN_API_ORIGIN ?? "");
   const response = await fetch(`${origin}/api/v1/me`, {
