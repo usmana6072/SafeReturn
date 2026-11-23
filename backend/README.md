@@ -525,7 +525,7 @@ page provides bilingual submission controls and optional browser geolocation.
 A short worker-role transaction claims a due event with `FOR UPDATE SKIP LOCKED`,
 records its numbered attempt, resolves the original recipient's verified account
 through a lease-scoped function, and freezes an AES-GCM encrypted email snapshot.
-The claim commits before Resend is called. Finder content, contact details,
+The claim commits before Brevo is called. Finder content, contact details,
 coordinates, QR tokens and medical information are excluded from the generic mail.
 
 Completion checks the current worker, attempt number and unexpired lease in a
@@ -536,9 +536,9 @@ idempotency key and frozen recipient preserve the request across crash recovery.
 
 Transient errors use capped exponential backoff with jitter and bounded
 `Retry-After`; permanent failures and exhausted attempts become `dead`.
-Concurrent Resend idempotency requests retry; a changed-payload conflict does not.
+Concurrent Brevo idempotency requests retry; a changed-payload conflict does not.
 Ambiguous sends older than 23 hours stop for manual review, within
-[Resend's 24-hour idempotency window](https://resend.com/docs/dashboard/emails/idempotency-keys).
+The worker's durable outbox idempotency key prevents duplicate sends across retries.
 Do not automatically replay old ambiguous events with a fresh key.
 
 Migration `0014a_notification_delivery` follows applied revision 0014. It adds only
@@ -555,7 +555,8 @@ Run a worker with a separately provisioned worker-only environment:
 
 `--once` processes at most one due finder event. The continuous command polls
 when idle. Required runtime settings are `SAFERETURN_WORKER_DATABASE_URL`,
-`SAFERETURN_RESEND_API_KEY`, `SAFERETURN_NOTIFICATION_FROM_EMAIL` and the existing
+`SAFERETURN_BREVO_API_KEY`, `SAFERETURN_EMAIL_PROVIDER=brevo`,
+`SAFERETURN_NOTIFICATION_FROM_EMAIL` and the existing
 profile keyring. It never falls back to an API/migration login. Lease duration must
 exceed the HTTP timeout by five seconds. Keep migration credentials out of the
 deployed worker environment; neither a public frontend key nor a Supabase browser
@@ -839,7 +840,7 @@ The rehearsal helper's optional expected revision does not loosen metadata or
 cleanup checks. It preserves installed catalog, row counts and runtime roles;
 all synthetic rows/rate events live in owned UUID namespaces.
 The final case starts isolated Next/API runtimes on 3100/8115 and runs
-`frontend/tests/public-qr.spec.ts` against real PostgreSQL. No Auth, Resend,
+`frontend/tests/public-qr.spec.ts` against real PostgreSQL. No Auth, Brevo,
 contact reveal, WhatsApp, finder submission or other provider acceptance is
 claimed by this task. Later unapplied migrations, including 0014's replacement
 projection, must be re-reviewed against these invariants before application.
@@ -880,7 +881,7 @@ Required runtime configuration (no real values are written by this task):
 - Backend ignored `.env`: `SAFERETURN_TURNSTILE_SECRET_KEY` and
   `SAFERETURN_TURNSTILE_EXPECTED_HOSTNAME` (hostname only, without scheme/port).
 - Frontend ignored environment: `NEXT_PUBLIC_SAFERETURN_TURNSTILE_SITE_KEY` (public widget key).
-- Existing profile encryption keyring remains separate; no Resend or Meta API
+- Existing profile encryption keyring remains separate; no Brevo or Meta API
   credential is needed for contact reveal or click-to-chat.
 
 Widget loads only after a click, uses the compact dimensions and provider-supported
@@ -950,7 +951,7 @@ Email delivery/worker acceptance was subsequently verified in Task 4.4.
 Task 4.4 development acceptance (2026-10-16): 17 integration checks across focused
 runs, 6 final browser checks, 16 restricted-login checks and 159 local tests passed;
 production build/typecheck, focused Ruff/format, pip and diff checks passed. One
-explicitly authorized synthetic Resend email was accepted and the user confirmed
+explicitly authorized synthetic Brevo email was accepted and the user confirmed
 receipt. Do not repeat that live smoke without new authorization. No continuous
 worker was started. Only 0014a was applied, preserving 40 RLS tables, three original
 domain rows, roles and unrelated functions. Later migrations remain unapplied.

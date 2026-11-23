@@ -22,7 +22,7 @@ def test_service_uses_worker_connection_and_drains_before_closing():
         settings = Settings(
             database_url="postgresql://api:secret@localhost/api",
             worker_database_url="postgresql://worker:secret@localhost/worker",
-            resend_api_key="synthetic",
+            brevo_api_key="synthetic",
             notification_from_email="SafeReturn <hello@example.test>",
         )
         database = MagicMock()
@@ -40,7 +40,7 @@ def test_service_uses_worker_connection_and_drains_before_closing():
                 "app.workers.notification_service.Database.from_settings",
                 return_value=database,
             ),
-            patch("app.workers.notification_service.ResendProvider"),
+            patch("app.workers.notification_service.BrevoProvider"),
             patch(
                 "app.workers.notification_service.process_one", side_effect=process
             ) as step,

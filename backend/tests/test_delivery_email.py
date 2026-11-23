@@ -6,7 +6,7 @@ from app.api.v1.fulfillment import ShipmentForOrder, ShipmentUpdate
 from app.core.config import Settings
 from app.workers.notifications import (
     DELIVERY_FROM_EMAIL,
-    ResendProvider,
+    BrevoProvider,
     delivery_email_html,
 )
 
@@ -41,11 +41,11 @@ def test_create_does_not_require_tracking_and_delivery_does_not_require_note_or_
 
 @patch("app.workers.notifications.httpx.post")
 def test_delivery_email_uses_requested_domain_sender(mock_post):
-    mock_post.return_value = httpx.Response(200, json={"id": "delivery-1"})
+    mock_post.return_value = httpx.Response(200, json={"messageId": "delivery-1"})
     settings = Settings(
-        resend_api_key="synthetic", notification_from_email="old@example.test"
+        brevo_api_key="synthetic", notification_from_email="old@example.test"
     )
-    ResendProvider(settings).send(
+    BrevoProvider(settings).send(
         to="buyer@example.test",
         subject="Delivered",
         html=delivery_email_html(payload()),
@@ -53,6 +53,6 @@ def test_delivery_email_uses_requested_domain_sender(mock_post):
         from_email=DELIVERY_FROM_EMAIL,
     )
     assert (
-        mock_post.call_args.kwargs["json"]["from"]
-        == "SafeReturn <services@safereturnqr.me>"
+        mock_post.call_args.kwargs["json"]["sender"]
+        == {"email": "services@safereturnqr.me", "name": "SafeReturn"}
     )

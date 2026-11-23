@@ -9,8 +9,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.session import Database
 from app.workers.notifications import (
+    BrevoProvider,
     NotificationProviderError,
-    ResendProvider,
     process_one,
 )
 
@@ -25,13 +25,13 @@ async def notification_service(settings):
     if not (
         settings.worker_database_url
         and settings.worker_database_url.get_secret_value().strip()
-        and settings.resend_api_key
-        and settings.resend_api_key.get_secret_value().strip()
+        and settings.brevo_api_key
+        and settings.brevo_api_key.get_secret_value().strip()
         and settings.notification_from_email
         and settings.notification_from_email.strip()
     ):
         logger.warning(
-            "Customer email processing is inactive: worker database and Resend configuration are required."
+            "Customer email processing is inactive: worker database and Brevo configuration are required."
         )
         yield
         return
@@ -43,12 +43,12 @@ async def notification_service(settings):
     )
     database = Database.from_settings(configuration)
     try:
-        provider = ResendProvider(configuration)
+        provider = BrevoProvider(configuration)
     except NotificationProviderError:
         if database is not None:
             database.close()
         logger.error(
-            "Customer email processing could not start: check Resend sender configuration."
+            "Customer email processing could not start: check Brevo sender configuration."
         )
         yield
         return

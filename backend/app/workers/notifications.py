@@ -9,6 +9,7 @@ import sys
 import time
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from email.utils import parseaddr
 from html import escape
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -181,18 +182,28 @@ def _valid_recipient(value):
     )
 
 
-class ResendProvider:
+class BrevoProvider:
     def __init__(self, settings: Settings):
         if (
-            not settings.resend_api_key
-            or not settings.resend_api_key.get_secret_value().strip()
+            settings.email_provider != "brevo"
+            or not settings.brevo_api_key
+            or not settings.brevo_api_key.get_secret_value().strip()
             or not settings.notification_from_email
             or any(c in settings.notification_from_email for c in "\r\n")
         ):
             raise NotificationProviderError("provider_not_configured", transient=False)
-        self.api_key = settings.resend_api_key.get_secret_value()
+        self.api_key = settings.brevo_api_key.get_secret_value()
         self.from_email = settings.notification_from_email
+        self.from_name, self.from_address = parseaddr(self.from_email)
+        if not _valid_recipient(self.from_address):
+            raise NotificationProviderError("provider_not_configured", transient=False)
         self.timeout = settings.notification_http_timeout_seconds
+
+    def _sender(self, override: str | None) -> dict[str, str]:
+        name, address = parseaddr(override or self.from_email)
+        if not _valid_recipient(address):
+            raise NotificationProviderError("provider_not_configured", transient=False)
+        return {"email": address, **({"name": name} if name else {})}
 
     def send(
         self,
@@ -207,14 +218,14 @@ class ResendProvider:
             raise NotificationProviderError("invalid_recipient", transient=False)
         try:
             response = httpx.post(
-                "https://api.resend.com/emails",
+                "https://api.brevo.com/v3/smtp/email",
                 headers={
-                    "Authorization": f"Bearer {self.api_key}",
+                    "api-key": self.api_key,
                     "Idempotency-Key": idempotency_key,
                 },
                 json={
-                    "from": from_email or self.from_email,
-                    "to": [to],
+                    "sender": self._sender(from_email),
+                    "to": [{"email": to}],
                     "subject": subject,
                     "html": html,
                 },
@@ -227,9 +238,9 @@ class ResendProvider:
             ) from None
         if 200 <= response.status_code < 300:
             try:
-                provider_id = response.json()["id"]
+                provider_id = response.json()["messageId"]
                 if not isinstance(provider_id, str) or not re.fullmatch(
-                    r"[A-Za-z0-9_-]{1,150}", provider_id
+                    r"[A-Za-z0-9_@.<>-]{1,254}", provider_id
                 ):
                     raise ValueError()
                 return provider_id
@@ -585,7 +596,7 @@ def main():
         print("Worker database is not configured.", file=sys.stderr)
         return 1
     try:
-        provider = ResendProvider(settings)
+        provider = BrevoProvider(settings)
         while True:
             try:
                 processed = process_one(database, settings, provider)
