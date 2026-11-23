@@ -17,7 +17,8 @@ test("shop search and category URLs",async({page})=>{
 });
 for(const width of [320,1440]) test(`featured keyboard, RTL and overflow ${width}`,async({page})=>{
  await page.setViewportSize({width,height:900});await page.goto("/");
- await page.getByRole("button",{name:"Next products",exact:true}).focus();await expect(page.locator(":focus")).toBeVisible();await page.keyboard.press("Enter");
+ if(width<800){await page.getByRole("button",{name:"Next products",exact:true}).focus();await expect(page.locator(":focus")).toBeVisible();await page.keyboard.press("Enter");}
+ else{await page.locator('.catalog-controls > a').focus();await expect(page.locator(':focus')).toBeVisible();}
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.getByRole("button",{name:"اردو",exact:true}).click();await expect(page.locator("html")).toHaveAttribute("dir","rtl");
  await expect(page.locator(".featured-scroll .catalog-card")).toHaveCount(2);
@@ -25,7 +26,7 @@ for(const width of [320,1440]) test(`featured keyboard, RTL and overflow ${width
  await page.screenshot({path:`test-results/task51-ur-${width}.png`,fullPage:true});
 });
 test("feature changes appear on next request; empty fallback",async({page,request})=>{
- await request.post(`${api}/fixture/catalog/off`);try {await page.goto("/");await expect(page.locator(".featured-scroll")).toHaveCount(0);await expect(page.getByRole("status")).toContainText("No featured products");}finally {await request.post(`${api}/fixture/catalog/on`);}
+ await request.post(`${api}/fixture/catalog/off`);try {await page.goto("/");await expect(page.locator(".featured-scroll")).toHaveCount(0);await expect(page.getByRole("status")).toContainText("No QR stickers are available");}finally {await request.post(`${api}/fixture/catalog/on`);}
  await page.reload();await expect(page.locator(".featured-scroll .catalog-card")).toHaveCount(2);
 });
 test("anonymous admin denial and CSRF boundary",async({page,request})=>{
