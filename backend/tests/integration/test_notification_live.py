@@ -7,7 +7,7 @@ from test_notification_delivery import notification_database as _notification_da
 from test_notification_delivery import sample as _sample
 
 from app.core.config import Settings
-from app.workers.notifications import ResendProvider, process_one
+from app.workers.notifications import BrevoProvider, process_one
 
 notification_database = _notification_database
 sample = _sample
@@ -32,7 +32,7 @@ def test_authorized_single_notification(sample):
         {"recipient": recipient, "id": sample.owner},
     )
     oid = sample.enqueue(idempotency_key=key)
-    actual_provider = ResendProvider(settings)
+    actual_provider = BrevoProvider(settings)
 
     class AuthorizedProvider:
         calls = 0
@@ -67,5 +67,5 @@ def test_authorized_single_notification(sample):
     )
     assert provider.calls == 1
     print(
-        "Authorized notification accepted by Resend; no second send from the completed event."
+        "Authorized notification accepted by Brevo; no second send from the completed event."
     )
