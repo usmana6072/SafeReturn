@@ -1,11 +1,18 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProduct } from "../../../lib/catalog";
 import { getLanguage } from "../../../lib/i18n";
 import { KitConfigurator } from "../../../components/checkout";
-import { ProductCard } from "../../../components/catalog";
+import { ShopImage, ShopCartLink, ShopRetry } from "../../../components/shop-catalog";
 export default async function Product({ params }: { params: Promise<{ sku: string }> }) {
- const { sku } = await params, product = await getProduct(sku), language = await getLanguage();
- if (product === undefined) return <section id="main" className="container section"><h1>{language === "ur" ? "مصنوعات لوڈ نہیں ہو سکیں۔ دوبارہ کوشش کریں۔" : "Product could not be loaded. Please try again."}</h1><a href="/shop">{language === "ur" ? "تمام مصنوعات" : "All products"}</a></section>;
- if (product === null) notFound();
- return <section id="main" className="container section" tabIndex={-1}><a href="/shop">{language === "ur" ? "تمام مصنوعات" : "All products"}</a><h1>{product.name}</h1><ProductCard product={product} language={language}/><div id="order" tabIndex={-1}><KitConfigurator product={product} language={language}/></div><p>{product.commerce_model==="single_qr"?(language==="ur"?"ہر آئٹم کے لیے ایک منتخب قسم کا QR۔":"One selected QR type per item."):language === "ur" ? "Lost اور ICE کے لیے ایک جوڑا، دو الگ پروفائل۔ ایک QR کی اضافی کاپیاں اسی پروفائل سے منسلک رہتی ہیں۔" : "One pair provides separate Lost and ICE profiles. Extra copies of the same QR share its profile."}</p></section>;
+  const { sku } = await params;
+  const [product, language] = await Promise.all([getProduct(sku), getLanguage()]);
+  const ur = language === "ur";
+  if (product === null) notFound();
+  if (product === undefined) return <section className="shop-screen"><div className="shop-empty"><h1>{ur ? "مصنوعہ لوڈ نہیں ہو سکی۔" : "Product could not be loaded. Please try again."}</h1><ShopRetry ur={ur}/><Link href="/shop">{ur ? "تمام مصنوعات" : "All Products"}</Link></div></section>;
+  return <section className="shop-screen shop-detail"><div className="shop-detail-nav"><Link href="/shop">{ur ? "واپس دکان" : "Back to Shop"}</Link><ShopCartLink ur={ur}/></div>
+    <div className="shop-detail-grid"><div className="shop-product-story"><ShopImage product={product}/><span className="shop-category">{product.category.name}</span><h1>{product.name}</h1>
+      {product.description && <p className="shop-description">{product.description}</p>}
+      <p>{product.commerce_model === "single_qr" ? (ur ? "اس آئٹم کی تمام کاپیاں ایک QR پروفائل استعمال کرتی ہیں۔" : "Every copy of this item uses the same QR profile.") : (ur ? "ایک جوڑا، الگ Lost اور Emergency پروفائل۔ اضافی کاپیاں وہی پروفائل استعمال کرتی ہیں۔" : "One pair provides separate Lost and Emergency profiles. Extra copies share those profiles.")}</p></div>
+      <div id="order" tabIndex={-1} className="shop-purchase"><KitConfigurator product={product} language={language} premium/></div></div></section>;
 }

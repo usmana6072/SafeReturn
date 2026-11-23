@@ -15,18 +15,18 @@ async function mount(page:any,ur=false,props?:object,component='IndependentQRs')
   await expect(page.locator('.customer-portal'),errors.join('\n')).toBeVisible({timeout:15000});
   expect(errors).toEqual([]);
 }
-for(const width of [320,375,390,430,768,1024,1440])for(const ur of [false,true]) {
+for(const width of [320,360,375,390,412,430,768,1024,1440])for(const ur of [false,true]) {
   test(`approved palette and responsive navigation ${width}px ${ur?'Urdu':'English'}`,async({page},info)=>{
     await page.setViewportSize({width,height:950});
     await page.route('**/independent-qr/api**',r=>r.fulfill({json:{items:[identity,{...identity,logical_item_id:id(4),qr_id:id(5),tag_type:'ice',product_name_snapshot:'Emergency contact'}],next_cursor:null,activation_released:false}}));
     await mount(page,ur);
-    await expect(page.locator('.identity-card')).toHaveCount(2);
+    await expect(page.locator('.lib-card')).toHaveCount(2);
     await expect(page.locator('.portal-nav [aria-current=page]')).toHaveAttribute('href','/my-qr');
     expect(await page.locator('.portal-header').evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgb(61, 44, 46)');
-    expect(await page.locator('.customer-portal').evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgb(255, 241, 230)');
-    expect(await page.locator('.portal-nav .active').evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgb(201, 124, 93)');
+    expect(await page.locator('.customer-portal').evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgb(248, 242, 236)');
+    expect(await page.locator('.portal-nav .active').evaluate(e=>getComputedStyle(e).backgroundColor)).toBe(width < 800 ? 'rgb(89, 72, 66)' : 'rgb(201, 124, 93)');
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await expect(page.getByRole('button',{name:ur?'فعال کرنا شروع کریں':'Begin activation'}).first()).toBeDisabled();
+    await expect(page.getByRole('button',{name:ur?'فعال ہونے کی حالت دیکھیں':'View Activation Status'})).toHaveCount(2);
     await page.screenshot({path:info.outputPath(`portal-${width}-${ur?'ur':'en'}.png`),fullPage:true});
   });
 }
@@ -58,18 +58,18 @@ test('expired server intent cannot confirm; native dialog restores navigation',a
     if(command.action==='confirm')confirmations++;
     return r.fulfill({json:{intent_id:id(8),logical_item_id:identity.logical_item_id,qr_id:identity.qr_id,expires_at:new Date(Date.now()-1000).toISOString(),method:'delivered_purchaser'}});
   });
-  await mount(page);await page.getByRole('button',{name:'Begin activation'}).click();
+  await mount(page);await page.getByRole('button',{name:'Activate QR'}).click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByLabel('I am the purchaser and want to activate this QR.').check();
-  await expect(page.getByRole('button',{name:'Confirm activation',exact:true})).toBeDisabled();
+  await expect(page.getByLabel('I am the purchaser and want to activate this QR.')).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Confirm Activation',exact:true})).toBeDisabled();
   await expect(page.getByRole('alert')).toContainText('expired');
   await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);expect(confirmations).toBe(0);
 });
 test('active QR opens its profile and filtering preserves identity allocation',async({page})=>{
   await page.route('**/independent-qr/api**',r=>r.fulfill({json:{items:[{...identity,ownership_status:'active',public_status:'active'},{...identity,logical_item_id:id(4),qr_id:id(5),tag_type:'ice'}],next_cursor:null,activation_released:false}}));
   await mount(page);
-  await expect(page.getByRole('link',{name:'Edit this profile'})).toHaveAttribute('href','/my-qr/'+identity.qr_id);
-  await page.getByLabel('Filter this page').selectOption('ice');await expect(page.locator('.identity-card')).toHaveCount(1);await expect(page.getByRole('heading',{name:'Emergency QR',exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Manage QR'})).toHaveAttribute('href','/my-qr/'+identity.qr_id);
+  await page.getByRole('button',{name:'Filter',exact:true}).click();await page.getByLabel('Tag type').selectOption('ice');await page.getByRole('button',{name:'Done',exact:true}).click();await expect(page.locator('.lib-card')).toHaveCount(1);await expect(page.getByRole('heading',{name:'Everyday belongings',exact:true})).toBeVisible();
 });
 test('saved address create, edit, conflict and delete use server revisions',async({page})=>{
   let version=0,items:any[]=[],conflict=false;const writes:any[]=[];

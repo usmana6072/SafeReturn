@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 
 const paths = {
+  copy: <><path d="M8 8h13v13H8zM16 8V3H3v13h5"/></>,
+  search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>,
+  filter: <><path d="M3 7h5m5 0h8M3 17h9m5 0h4"/><circle cx="10.5" cy="7" r="2.5"/><circle cx="14.5" cy="17" r="2.5"/></>,
+  refresh: <><path d="M20 10a8 8 0 1 0-1 7M20 4v6h-6"/></>,
+  tag: <><path d="m3 4 7-1 11 11-7 7L3 10Z"/><circle cx="7" cy="7" r="1"/></>,
+  medical: <path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z"/>,
+  close: <path d="m6 6 12 12M18 6 6 18"/>,
   home: <><path d="m3 10 9-7 9 7v10H3z"/><path d="M9 20v-7h6v7"/></>,
   qr: <><path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM14 14h3v4h4v3h-6v-3M21 13v2"/></>,
   shop: <><path d="m4 4-2 6a3 3 0 0 0 5 2 3 3 0 0 0 5 0 3 3 0 0 0 5 0 3 3 0 0 0 5-2l-2-6zM4 13v7h16v-7M9 20v-5h5v5"/></>,

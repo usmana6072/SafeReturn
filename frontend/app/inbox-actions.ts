@@ -5,19 +5,23 @@ import { redirect } from "next/navigation";
 import { authConfig } from "../lib/auth/config";
 import { ownerApi, ownerSession } from "../lib/qr-server";
 import { uuid } from "../lib/qr-contract";
+import { inboxContext, inboxQuery, inboxHref } from "../lib/finder-inbox";
 
 export async function changeMessage(messageId: string, form: FormData) {
   const session = await ownerSession();
   if ((await headers()).get("origin") !== authConfig().origin || !uuid(messageId)) throw new Error("Invalid inbox request");
+  const context = inboxContext({status:form.get("return_status")??undefined,cursor:form.get("return_cursor")??undefined,qr_id:form.get("return_qr_id")??undefined});
+  const detail = (result:string) => {const q=inboxQuery(context);q.set("result",result);return `/inbox/${messageId}?${q}`;};
   const status = String(form.get("status") ?? "");
   if (!["viewed", "archived", "flagged", "deleted"].includes(status)) throw new Error("Invalid inbox request");
-  if (status === "deleted" && form.get("confirm") !== "on") redirect(`/inbox/${messageId}?result=confirm`);
+  if (status === "deleted" && form.get("confirm") !== "on") redirect(detail("confirm"));
   try {
     await ownerApi(session.token)(`/me/finder-messages/${messageId}`, status === "deleted" ? "DELETE" : "PATCH", status === "deleted" ? undefined : { status });
-  } catch { redirect(`/inbox/${messageId}?result=error`); }
+  } catch { redirect(detail("error")); }
   revalidatePath("/inbox");
   revalidatePath(`/inbox/${messageId}`);
-  redirect(status === "deleted" ? "/inbox?result=deleted" : `/inbox/${messageId}?result=saved`);
+  revalidatePath("/", "layout");
+  redirect(status === "deleted" ? inboxHref(context,"deleted") : detail("saved"));
 }
 
 
