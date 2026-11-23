@@ -28,7 +28,7 @@ test("translations retain identical keys and list lengths", () => {
   for (const key of ["chips", "steps", "faqs"] as const) expect(ur[key]).toHaveLength(en[key].length);
 });
 
-for (const width of [320, 390, 768, 1440]) {
+for (const width of [320, 360, 375, 390, 412, 430, 768, 1024, 1440]) {
   test(`layout fits ${width}px in English and Urdu`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
@@ -36,7 +36,7 @@ for (const width of [320, 390, 768, 1440]) {
       if (language === "ur") await page.getByRole("button", { name: "اردو", exact: true }).click();
       await expect(page.locator("html")).toHaveAttribute("lang", language);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-      if (width < 640) {
+      if (width < 800) {
         await page.locator(".mobile-menu summary").click();
         await expect(page.locator(".mobile-menu nav")).toBeVisible();
         await page.locator(".mobile-menu summary").click();
@@ -56,10 +56,10 @@ test("keyboard skip link reaches main content", async ({ page }) => {
   await expect(page).toHaveURL(/#main$/);
 });
 
-test("mobile navigation and FAQ work without JavaScript", async ({ browser }) => {
+test("mobile navigation and FAQ work without JavaScript", async ({ browser,baseURL }) => {
   const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
-  await page.goto("http://127.0.0.1:3100/");
+  await page.goto(baseURL!);
   await page.locator(".mobile-menu summary").click();
   await expect(page.locator(".mobile-menu nav")).toBeVisible();
   await page.getByText(en.faqs[0][0], { exact: true }).click();
