@@ -595,13 +595,18 @@ def review_payment(
             "review_id": str(rid),
         }, rid
 
-    return record(
+    res = record(
         context,
         request,
         "payment.review",
         dict(attempt_id=str(attempt_id), **body.model_dump()),
         work,
     )
+    if body.decision == "verify":
+        from app.workers.print_service import trigger_print_worker
+
+        trigger_print_worker()
+    return res
 
 
 @router.get(
@@ -640,7 +645,11 @@ def retry_allocation(order_id: UUID, body: AllocationRetry, context: Authenticat
         context.session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
         return value, order_id
 
-    return record(context, request, "allocation.retry", {"order_id": str(order_id), **body.model_dump()}, work)
+    res = record(context, request, "allocation.retry", {"order_id": str(order_id), **body.model_dump()}, work)
+    from app.workers.print_service import trigger_print_worker
+
+    trigger_print_worker()
+    return res
 
 
 @router.get(
