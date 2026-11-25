@@ -20,9 +20,9 @@ export async function StorefrontShell({ children }: { children: ReactNode }) {
       </a>
       <header className="site-header storefront-header">
         <div className="home-container header-inner">
-          <Link className="brand home-brand" href="/" aria-label="SafeReturn">
-            <img src="/brand/safereturn_logo.svg" alt="" width="34" height="34" />
-            <bdi>SafeReturn</bdi>
+          <Link className="brand home-brand" href="/" aria-label="SafeReturn" style={{ flexShrink: 0, whiteSpace: "nowrap" }}>
+            <img src="/brand/safereturn_logo.svg" alt="" width="34" height="34" style={{ flexShrink: 0 }} />
+            <bdi style={{ whiteSpace: "nowrap" }}>SafeReturn</bdi>
           </Link>
           <nav className="desktop-nav" aria-label={ur ? "دکان مینو" : "Store menu"}>
             <Link href="/">{ur ? "ہوم" : "Home"}</Link>
