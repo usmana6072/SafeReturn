@@ -16,9 +16,31 @@ export default async function Continue() {
     // Genuine activation intent keeps priority over the staff landing.
     if (activation) target = "/activate";
     else {
-      try { target = staffLanding(await staffState(session.token)); }
-      catch (error) {
-        if (error instanceof StaffAccessError && error.status === 403) target = staffLanding(null);
+      try {
+        const state = await staffState(session.token);
+        if (state) {
+          target = staffLanding(state);
+        } else {
+          const returnToCookie = jar.get("sr-return-to")?.value;
+          const safeReturn = returnToCookie && returnToCookie.startsWith("/") && !returnToCookie.startsWith("//") ? returnToCookie : null;
+          if (safeReturn) {
+            jar.delete("sr-return-to");
+            target = safeReturn;
+          } else {
+            target = staffLanding(null);
+          }
+        }
+      } catch (error) {
+        if (error instanceof StaffAccessError && error.status === 403) {
+          const returnToCookie = jar.get("sr-return-to")?.value;
+          const safeReturn = returnToCookie && returnToCookie.startsWith("/") && !returnToCookie.startsWith("//") ? returnToCookie : null;
+          if (safeReturn) {
+            jar.delete("sr-return-to");
+            target = safeReturn;
+          } else {
+            target = staffLanding(null);
+          }
+        }
         else throw error;
       }
     }

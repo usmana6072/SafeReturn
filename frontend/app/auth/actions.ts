@@ -46,6 +46,8 @@ function limited(email: string) {
 export async function submitIdentity(mode: "login" | "signup", _previous: FormState,
   form: FormData): Promise<FormState> {
   let signedIn = false;
+  const returnTo = String(form.get("returnTo") ?? "").trim();
+  const safeReturn = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : null;
   try {
     if (!(await sameOrigin())) return { status: "error", reason: "denied" };
     const email = String(form.get("email") ?? "").trim();
@@ -75,9 +77,19 @@ export async function submitIdentity(mode: "login" | "signup", _previous: FormSt
     if (!signedIn) return { status: "confirmation" };
   } catch { return { status: "error", reason: "unavailable" }; }
   if (signedIn) {
-    const scan = readTicket<ScanTicket>((await cookies()).get("sr-scan")?.value, "scan");
-    const activation = readTicket<ActivationTicket>((await cookies()).get("sr-activation")?.value, "activation");
-    redirect(scan || activation ? "/activate" : "/auth/continue");
+    const jar = await cookies();
+    if (safeReturn) {
+      jar.set("sr-return-to", safeReturn, {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 3600,
+      });
+    }
+    const scan = readTicket<ScanTicket>(jar.get("sr-scan")?.value, "scan");
+    const activation = readTicket<ActivationTicket>(jar.get("sr-activation")?.value, "activation");
+    redirect(scan || activation ? "/activate" : safeReturn || "/auth/continue");
   }
   return { status: "error", reason: "unavailable" };
 }

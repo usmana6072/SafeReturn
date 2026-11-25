@@ -1,5 +1,8 @@
-import { CustomerShell } from "../../components/customer";
-import { getLanguage } from "../../lib/i18n";
+import { StorefrontShell } from "../../components/storefront-shell";
 import "../../components/shop.css";
+
 export const viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
-export default async function Layout({children}:{children:React.ReactNode}) { return <CustomerShell ur={await getLanguage() === "ur"}>{children}</CustomerShell>; }
+
+export default async function Layout({ children }: { children: React.ReactNode }) {
+  return <StorefrontShell>{children}</StorefrontShell>;
+}

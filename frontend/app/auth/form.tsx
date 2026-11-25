@@ -23,12 +23,13 @@ function Notice({ state, ur, signup = false }: { state: FormState; ur: boolean; 
     : messages[state.reason ?? "unavailable"]}</p>;
 }
 
-export function IdentityForm({ mode, ur }: { mode: "login" | "signup"; ur: boolean }) {
+export function IdentityForm({ mode, ur, returnTo }: { mode: "login" | "signup"; ur: boolean; returnTo?: string }) {
   const signup = mode === "signup";
   const [state, action, pending] = useActionState(submitIdentity.bind(null, mode), initial);
   const [visible, setVisible] = useState(false);
   return <>
     <form action={action} className="account-form">
+      {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
       {signup && <label>{ur ? "پورا نام" : "Full name"}<input name="display_name"
         autoComplete="name" required maxLength={120} /></label>}
       <label>{ur ? "ای میل" : "Email address"}<input name="email" type="email"
@@ -51,7 +52,7 @@ export function IdentityForm({ mode, ur }: { mode: "login" | "signup"; ur: boole
     {state.status === "confirmation" && <p><Link className="text-link" href="/auth/verify-email">{ur ? "تصدیق میں مدد" : "Confirmation help"}</Link></p>}
     <p>{signup ? (ur ? "پہلے سے اکاؤنٹ ہے؟ " : "Already have an account? ")
       : (ur ? "نیا اکاؤنٹ؟ " : "New to SafeReturn? ")}
-      <Link className="text-link" href={signup ? "/auth/sign-in" : "/auth/sign-up"}>
+      <Link className="text-link" href={signup ? (returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login") : (returnTo ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : "/signup")}>
         {signup ? (ur ? "لاگ اِن" : "Log in") : (ur ? "اکاؤنٹ بنائیں" : "Create an account")}</Link></p>
   </>;
 }

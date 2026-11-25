@@ -11,5 +11,5 @@ export default async function Login({ searchParams }: { searchParams: Promise<Re
     <p>{ur ? "اپنے QR پروفائلز ایک جگہ سنبھالیں۔" : "Manage your QR profiles in one simple place."}</p>
     {params.confirmation === "failed" && <p role="status">{ur ? "تصدیقی لنک مکمل نہیں ہو سکا۔ دوبارہ لاگ اِن کریں۔" : "That confirmation link could not be completed. Try logging in after confirming your email."}</p>}
     {params.reset === "done" && <p role="status">{ur ? "پاس ورڈ بدل گیا۔ دوبارہ لاگ اِن کریں۔" : "Password updated. Log in again."}</p>}
-    <IdentityForm mode="login" ur={ur} /></AuthShell>;
+    <IdentityForm mode="login" ur={ur} returnTo={params.returnTo} /></AuthShell>;
 }
