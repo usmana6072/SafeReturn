@@ -11,6 +11,16 @@ test("homepage renders honest catalog state and expandable FAQ", async ({ page }
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
 });
 
+test("homepage desktop Shop navigation opens the public shop", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto("/");
+  const homeShop = page.locator(".desktop-nav").getByRole("link", { name: "Shop" });
+  await expect(homeShop).toHaveAttribute("href", "/shop");
+  await homeShop.click();
+  await expect(page).toHaveURL(/\/shop$/);
+  await expect(page.locator(".storefront-header .desktop-nav").getByRole("link", { name: "Shop" })).toHaveAttribute("href", "/shop");
+});
+
 test("language switch changes server-rendered direction and persists", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "اردو", exact: true }).click();

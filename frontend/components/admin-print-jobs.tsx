@@ -7,7 +7,7 @@ import { useAdminRole } from './admin-shell';
 import { printRead, printError } from '../lib/admin-print-jobs-client';
 import { states, filterKeys, orderStates, paymentStates, fulfillmentStates, countLabel, type JobPage, type Counts, type Detail, type OrderJob } from '../lib/admin-print-jobs-contract';
 import styles from './admin-print-jobs.module.css';
-const blank = { job_id: '', order_id: '', order_number: '', job_status: '', order_status: '', payment_status: '', fulfillment_status: '', created_from: '', created_before: '', sort: 'oldest' };
+const blank = { job_id: '', order_id: '', order_number: '', job_status: '', order_status: '', payment_status: '', fulfillment_status: '', created_from: '', created_before: '', sort: 'newest' };
 export function AdminPrintJobs({ jobId, initialOrderId, ur = false }: {
     jobId?: string;
     initialOrderId?: string;

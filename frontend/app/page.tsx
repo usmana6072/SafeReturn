@@ -33,7 +33,11 @@ export default async function Home() {
             <bdi>SafeReturn</bdi>
           </a>
           <nav className="desktop-nav" aria-label={t.menu}>
-            {links}
+            <a href="#stickers">{t.products}</a>
+            <a href="/shop">{h.navShop}</a>
+            <a href="#how-it-works">{t.how}</a>
+            <a href="#faq">{t.help}</a>
+            <a href="/login">{h.login}</a>
           </nav>
           <form action={changeLanguage}>
             <input type="hidden" name="language" value={ur ? "en" : "ur"} />

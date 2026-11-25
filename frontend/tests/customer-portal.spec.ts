@@ -4,17 +4,37 @@ const bundle=require('./qa-browser-bundle.cjs');
 const compiledCss=require('./compiled-admin-css.cjs');
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const identity={logical_item_id:id(1),qr_id:id(2),order_id:id(3),product_name_snapshot:'Everyday belongings',tag_type:'lost',ownership_status:'unclaimed',public_status:'unactivated',revision:1,activated_at:null,can_activate:false};
-async function mount(page:any,ur=false,props?:object,component='IndependentQRs') {
+async function mount(page:any,ur=false,props?:object,component='IndependentQRs',routePath='/my-qr') {
   const errors:string[]=[];
   page.on('pageerror',(error:Error)=>errors.push(error.message));
   await page.route('https://portal.test/**',(route:any)=>route.request().resourceType()==='document'?route.fulfill({contentType:'text/html',body:'<!doctype html><html><head></head><body><div id="root"></div></body></html>'}):route.fallback());
-  await page.goto('https://portal.test/my-qr');
-  await page.addStyleTag({content:compiledCss()+'\n'+fs.readFileSync('components/customer-portal.css','utf8')});
+  await page.goto('https://portal.test'+routePath);
+  await page.addStyleTag({content:compiledCss()+'\n'+fs.readFileSync('components/customer-portal.css','utf8')+(component==='ShopCatalog'?fs.readFileSync('components/shop.css','utf8'):'')});
   await page.evaluate(({ur,props}:any)=>{(window as any).qaUr=ur;(window as any).qaProps=props??{ur};document.documentElement.dir=ur?'rtl':'ltr';},{ur,props});
-  await page.addScriptTag({content:bundle({componentPath:component==='ShippingAddresses'?'../components/shipping-addresses.tsx':'../components/independent-qr.tsx',exportName:component,wrapperPath:'../components/customer.tsx',wrapperExport:'CustomerShell'})});
+  const componentPath=component==='ShippingAddresses'?'../components/shipping-addresses.tsx':component==='ShopCatalog'?'../components/shop-catalog.tsx':'../components/independent-qr.tsx';
+  await page.addScriptTag({content:bundle({componentPath,exportName:component,wrapperPath:'../components/customer.tsx',wrapperExport:'CustomerShell'})});
   await expect(page.locator('.customer-portal'),errors.join('\n')).toBeVisible({timeout:15000});
   expect(errors).toEqual([]);
 }
+test('portal shop keeps the customer navigation on mobile and desktop',async({page})=>{
+  for(const width of [430,1024]){
+    await page.setViewportSize({width,height:900});
+    await mount(page,false,{ur:false,catalog:{products:[],unavailable:false},shopPath:'/portal/shop'},'ShopCatalog','/portal/shop');
+    const nav=page.getByRole('navigation',{name:'Customer navigation'});
+    await expect(nav.getByRole('link',{name:'Shop',exact:true})).toHaveAttribute('href','/portal/shop');
+    await expect(nav.getByRole('link',{name:'Shop',exact:true})).toHaveAttribute('aria-current','page');
+    await expect(nav.getByRole('link',{name:'Home',exact:true})).toHaveAttribute('href','/dashboard');
+    if(width<800){
+      await expect(nav.getByRole('link')).toHaveCount(4);
+      await nav.getByRole('button',{name:'More'}).click();
+      await expect(page.getByRole('dialog',{name:'More'}).getByRole('link',{name:'Support'})).toHaveAttribute('href','/help');
+    }else{
+      await expect(nav.getByRole('link',{name:'Support'})).toHaveAttribute('href','/help');
+      await expect(nav.getByRole('link',{name:'Account Settings'})).toHaveAttribute('href','/account');
+    }
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+});
 for(const width of [320,360,375,390,412,430,768,1024,1440])for(const ur of [false,true]) {
   test(`approved palette and responsive navigation ${width}px ${ur?'Urdu':'English'}`,async({page},info)=>{
     await page.setViewportSize({width,height:950});
