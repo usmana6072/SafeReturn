@@ -632,9 +632,14 @@ def update_shipment(
             "tracking_reference": tracking,
         }, shipment_id
 
-    return command(
+    res = command(
         context, request, "shipment.update:" + str(shipment_id), body.model_dump(), work
     )
+    if body.status == "delivered":
+        from app.workers.print_service import trigger_print_worker
+
+        trigger_print_worker()
+    return res
 
 
 @router.get("/admin/orders/{order_id}", operation_id="API-081")

@@ -1,9 +1,10 @@
 from decimal import Decimal
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.public_site import (
@@ -100,6 +101,8 @@ class Settings(BaseSettings):
     )
     print_lease_seconds: int = Field(default=180, ge=30, le=900)
     print_max_attempts: int = Field(default=5, ge=1, le=10)
+    print_worker_enabled: bool = True
+    print_worker_poll_seconds: int = Field(default=5, ge=1, le=300)
     checkout_enabled: bool = False
     single_qr_checkout_enabled: bool = False
     # Percentage of subtotal plus shipping; independent checkout only.
@@ -225,3 +228,11 @@ class Settings(BaseSettings):
     database_pool_timeout_seconds: int = Field(default=5, ge=1, le=30)
     database_connect_timeout_seconds: int = Field(default=3, ge=1, le=30)
     database_statement_timeout_ms: int = Field(default=5000, ge=100, le=30000)
+
+    @model_validator(mode="after")
+    def _default_print_template_asset_root(self) -> "Settings":
+        if not self.print_template_asset_root and not Path("/app/print-assets").is_dir():
+            default_dir = Path(__file__).resolve().parents[2] / "print-assets"
+            if default_dir.is_dir():
+                self.print_template_asset_root = str(default_dir)
+        return self

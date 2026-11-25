@@ -50,6 +50,7 @@ from app.core.config import Settings
 from app.core.observability import RequestObservabilityMiddleware
 from app.db.session import Database
 from app.workers.notification_service import notification_service
+from app.workers.print_service import print_service
 
 
 def create_app(
@@ -63,7 +64,7 @@ def create_app(
         application.state.database = database
         application.state.jwt_verifier = verifier or JWTVerifier(configuration)
         try:
-            async with notification_service(configuration):
+            async with notification_service(configuration), print_service(configuration):
                 yield
         finally:
             if database is not None:
