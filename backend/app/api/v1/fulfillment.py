@@ -456,11 +456,13 @@ def eligible(s, oid, *, template_clear=True):
 
 @router.post("/admin/shipments", operation_id="API-095", status_code=201)
 def create_shipment(body: ShipmentRequest, context: Authenticated, request: Request):
+    require_staff(context, "operations")
     return create_order_shipment(body.order_id, body.carrier, None, body.reason, context, request, body)
 
 
 @router.post("/admin/orders/{order_id}/shipment", operation_id="create-order-shipment", status_code=201)
 def create_shipment_from_order(order_id: UUID, body: ShipmentForOrder, context: Authenticated, request: Request):
+    require_staff(context, "operations")
     result = create_order_shipment(order_id, body.carrier, body.tracking_reference, "Operations created a tracked shipment", context, request)
     return {key: result[key] for key in ("shipment_id", "order_id", "status")}
 
@@ -582,9 +584,8 @@ def update_order_shipment(order_id: UUID, body: ShipmentUpdate, context: Authent
 
 
 @router.patch("/admin/shipments/{shipment_id}", operation_id="API-096")
-def update_shipment(
-    shipment_id: UUID, body: ShipmentUpdate, context: Authenticated, request: Request
-):
+def update_shipment(shipment_id: UUID, body: ShipmentUpdate, context: Authenticated, request: Request):
+    require_staff(context, "operations")
     def work(s, settings):
         found = rows(
             s, "SELECT order_id FROM public.shipments WHERE id=:id", id=shipment_id

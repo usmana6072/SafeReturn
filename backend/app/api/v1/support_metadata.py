@@ -91,6 +91,7 @@ LIST_QUERY = {
     openapi_extra={"parameters": parameters(LIST_QUERY)},
 )
 def cases(context: Authenticated, request: Request):
+    require_staff(context, "operations")
     return service.listing(context, request)
 
 
@@ -100,6 +101,7 @@ def cases(context: Authenticated, request: Request):
     operation_id="support_metadata_detail_v1",
 )
 def case(case_id: str, context: Authenticated, request: Request):
+    require_staff(context, "operations")
     return service.detail(context, request, case_id)
 
 
@@ -110,6 +112,7 @@ def case(case_id: str, context: Authenticated, request: Request):
     openapi_extra={"parameters": parameters(PAGING)},
 )
 def events(case_id: str, context: Authenticated, request: Request):
+    require_staff(context, "operations")
     return service.history(context, request, case_id)
 
 

@@ -532,6 +532,7 @@ def audit(context, action, target):
 
 @router.post("/admin/print-jobs/{job_id}/qa", operation_id="API-237")
 def record_job_qa(
+    require_staff(context, "operations")
     job_id: UUID, body: JobQARequest, context: Authenticated, request: Request
 ):
     return record_physical_qa(job_id, body, context, request)
@@ -555,6 +556,7 @@ def require_current_print(session, job):
 
 @router.get("/admin/print-jobs/{job_id}/physical-qa", operation_id="view-physical-print-qa")
 def physical_qa(job_id: UUID, context: Authenticated, request: Request):
+    require_staff(context, "operations")
     job = get_print_job(job_id, context)
     require_current_print(context.session, job)
     if job["status"] not in {"ready", "downloaded", "qa_passed"}:
@@ -579,6 +581,7 @@ def physical_qa(job_id: UUID, context: Authenticated, request: Request):
 
 @router.post("/admin/print-jobs/{job_id}/physical-qa", operation_id="record-physical-print-qa")
 def submit_physical_qa(job_id: UUID, body: JobQARequest, context: Authenticated, request: Request):
+    require_staff(context, "operations")
     return record_physical_qa(job_id, body, context, request, current_only=True)
 
 

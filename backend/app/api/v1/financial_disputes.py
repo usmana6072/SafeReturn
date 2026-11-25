@@ -257,6 +257,7 @@ def parse_token(settings, case_id, revision, token):
     response_model=ReviewProjection,
 )
 def review(
+    require_staff(context, "operations")
     case_id: UUID,
     context: Authenticated,
     request: Request,
@@ -314,6 +315,7 @@ def review(
     response_model=DecisionReceipt,
 )
 def decide(
+    require_staff(context, "operations")
     case_id: UUID, body: FinancialDecision, context: Authenticated, request: Request
 ):
     guard(context, request, True)

@@ -233,6 +233,8 @@ def execute(
     response_model=StateReceipt,
 )
 def suspend(user_id: UUID, body: Suspend, request: Request, context: Authenticated):
+    require_staff(context, "operations")
+    require_staff(context, "operations")
     return execute(user_id, body, "suspend", request, context)
 
 
@@ -242,6 +244,7 @@ def suspend(user_id: UUID, body: Suspend, request: Request, context: Authenticat
     response_model=StateReceipt,
 )
 def restore(user_id: UUID, body: Restore, request: Request, context: Authenticated):
+    require_staff(context, "operations")
     return execute(user_id, body, "restore", request, context)
 
 
@@ -252,6 +255,7 @@ def restore(user_id: UUID, body: Restore, request: Request, context: Authenticat
     status_code=202,
 )
 def recovery(user_id: UUID, body: Recovery, request: Request, context: Authenticated):
+    require_staff(context, "operations")
     return execute(user_id, body, "recovery_escalated", request, context)
 
 

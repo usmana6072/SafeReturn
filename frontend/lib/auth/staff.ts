@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { verifiedSession } from "./server";
 import { validateOrigin } from "../api/transport";
@@ -7,14 +8,14 @@ import { mfaReturn } from "./mfa-return";
 export class StaffAccessError extends Error {
   constructor(public status: number) { super("Staff access unavailable"); }
 }
-export async function staffState(token: string) {
+export const staffState = cache(async (token: string) => {
   const response = await fetch(`${validateOrigin(process.env.SAFERETURN_API_ORIGIN ?? "")}/api/v1/me/staff-security`, {
     cache: "no-store", redirect: "error", signal: AbortSignal.timeout(8000),
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) throw new StaffAccessError(response.status);
   return parseStaffSecurity(await response.json());
-}
+});
 export async function staffSecurity() {
   const session = await verifiedSession();
   if (!session) throw new StaffAccessError(401);

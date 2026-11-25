@@ -7,8 +7,8 @@ import { SavedAddressSelector, type SavedAddress } from "./shipping-addresses";
 import { ItemCheckoutCart, ItemConfigurator } from "./item-checkout";
 import { readItemCart } from "../lib/item-cart";
 type Lang="en"|"ur";
-export function KitConfigurator({product,language,premium=false}:{product:CatalogProduct;language:Lang;premium?:boolean}) {
- if(!canOrder(product))return <section><h2>{language==='ur'?'اپنا آرڈر':'Your order'}</h2><button type="button" className="button" disabled>{language==='ur'?'آرڈر کریں':'Order now'}</button><p role="status">{checkoutUnavailableMessage(product, language)}</p><a href="/shop">{language==="ur"?"مصنوعات دیکھیں":"Back to Shop"}</a></section>;
+export function KitConfigurator({product,language,premium=false,shopPath="/shop"}:{product:CatalogProduct;language:Lang;premium?:boolean;shopPath?:string}) {
+ if(!canOrder(product))return <section><h2>{language==='ur'?'اپنا آرڈر':'Your order'}</h2><button type="button" className="button" disabled>{language==='ur'?'آرڈر کریں':'Order now'}</button><p role="status">{checkoutUnavailableMessage(product, language)}</p><a href={shopPath}>{language==="ur"?"مصنوعات دیکھیں":"Back to Shop"}</a></section>;
  return product.commerce_model==="single_qr"?<ItemConfigurator product={product} language={language} premium={premium}/>:<LegacyKitConfigurator product={product} language={language}/>;
 }
 function LegacyKitConfigurator({product,language}:{product:CatalogProduct;language:Lang}) {

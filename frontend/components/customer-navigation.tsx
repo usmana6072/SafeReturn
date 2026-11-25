@@ -12,7 +12,7 @@ type Destination = readonly [string, CustomerIconName, string, string];
 const primary: Destination[] = [
   ["/dashboard", "home", "Home", "ہوم"],
   ["/my-qr", "qr", "My QRs", "میرے QR"],
-  ["/shop", "shop", "Shop", "دکان"],
+  ["/portal/shop", "shop", "Shop", "دکان"],
   ["/orders", "orders", "Orders", "آرڈرز"],
 ];
 const more: Destination[] = [

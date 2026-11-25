@@ -38,7 +38,7 @@ function Metric({ icon, label, value, note, unread, ur }: Language & { icon: Cus
 }
 function QuickActions({ ur }: Language) {
   const actions: [string, CustomerIconName, string, string][] = [
-    ["/my-qr", "qr", "Manage My QR Codes", "میرے QR کوڈز کا انتظام"], ["/shop", "shop", "Shop QR Tags", "QR ٹیگز خریدیں"],
+    ["/my-qr", "qr", "Manage My QR Codes", "میرے QR کوڈز کا انتظام"], ["/portal/shop", "shop", "Shop QR Tags", "QR ٹیگز خریدیں"],
     ["/orders", "orders", "View My Orders", "میرے آرڈرز دیکھیں"], ["/inbox", "inbox", "Finder Messages", "فائنڈر پیغامات"],
   ];
   return <section><h2>{ur ? "فوری اقدامات" : "Quick Actions"}</h2><div className="dash-actions">
@@ -65,7 +65,7 @@ function QRPreview({ ur, identities, hasNoOrders, names }: Language & Pick<Dashb
       </> : <div className="dash-empty"><CustomerIcon name="qr"/><h3>{t("No QR Codes Yet", "ابھی کوئی QR کوڈ نہیں")}</h3>
         <p>{hasNoOrders ? t("Purchase a QR tag to help protect your belongings.", "اپنے سامان کی حفاظت کے لیے QR ٹیگ خریدیں۔")
           : t("Your QR codes will appear here once they’re allocated to your order.", "آپ کے آرڈر کے لیے QR کوڈز مختص ہونے پر یہاں دکھائی دیں گے۔")}</p>
-        {hasNoOrders && <ActionLink href="/shop">{t("Shop QR Tags", "QR ٹیگز خریدیں")}</ActionLink>}</div>}
+        {hasNoOrders && <ActionLink href="/portal/shop">{t("Shop QR Tags", "QR ٹیگز خریدیں")}</ActionLink>}</div>}
       {!identities.activation_released && <p className="dash-note">{t("Activation is currently unavailable.", "فعال کرنے کی سہولت فی الحال دستیاب نہیں۔")}</p>}
     </>}
     <div className="panel-footer"><ActionLink href="/my-qr">{t("Manage All QR Codes", "تمام QR کوڈز کا انتظام")}</ActionLink></div>
@@ -105,7 +105,7 @@ function Orders({ ur, orders }: Language & Pick<DashboardData, "orders">) {
       </div><ActionLink href={`/orders/${order.id}`}>{t("View Order Details", "آرڈر کی تفصیلات دیکھیں")}</ActionLink></div>
     </li>)}</ul> : <div className="dash-empty"><CustomerIcon name="box"/><h3>{t("No Orders Yet", "ابھی کوئی آرڈر نہیں")}</h3>
       <p>{t("Your purchases will appear here once you place an order.", "آرڈر دینے کے بعد آپ کی خریداری یہاں دکھائی دے گی۔")}</p>
-      <ActionLink href="/shop">{t("Browse Products", "مصنوعات دیکھیں")}</ActionLink></div>}
+      <ActionLink href="/portal/shop">{t("Browse Products", "مصنوعات دیکھیں")}</ActionLink></div>}
     <div className="panel-footer"><ActionLink href="/orders">{t("View All Orders", "تمام آرڈرز دیکھیں")}</ActionLink></div>
   </section>;
 }

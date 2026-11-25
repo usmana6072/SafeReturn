@@ -180,7 +180,7 @@ export function IndependentQRs({ ur, finder = {} }: { ur: boolean; finder?: Find
           <h2>{items.length ? t("No Matching QR Codes", "کوئی مماثل QR کوڈ نہیں") : after ? t("No More QR Codes", "مزید QR کوڈز نہیں") : t("No QR Codes Yet", "ابھی کوئی QR کوڈ نہیں")}</h2>
           <p>{items.length ? t("Try a different search or filter.", "تلاش یا فلٹر تبدیل کریں۔") : after ? t("Return to the previous page to see your tags.", "اپنے ٹیگ دیکھنے کے لیے پچھلے صفحے پر جائیں۔") : t("Start protecting your belongings with a SafeReturn QR tag.", "اپنے سامان کی حفاظت SafeReturn QR ٹیگ سے شروع کریں۔")}</p>
           {items.length ? <button className="lib-secondary" onClick={reset}>{t("Clear Filters", "فلٹر صاف کریں")}</button>
-            : !after && <Link className="lib-primary" href="/shop">{t("Shop QR Tags", "QR ٹیگز خریدیں")}</Link>}</div>}
+            : !after && <Link className="lib-primary" href="/portal/shop">{t("Shop QR Tags", "QR ٹیگز خریدیں")}</Link>}</div>}
       {(after || page.next_cursor) && <div className="lib-pager"><button disabled={busy || !after} onClick={() => load(cursors.slice(0, -1))}>{t("Previous", "پچھلا")}</button>
         <span>{t("Page", "صفحہ")} {cursors.length}</span><button disabled={busy || !page.next_cursor} onClick={() => load([...cursors, page.next_cursor])}>{t("Next", "اگلا")}</button></div>}
     </>}

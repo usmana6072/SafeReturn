@@ -230,6 +230,7 @@ def generate(body: GenerateRequest, context: Authenticated, request: Request):
     operation_id="typed-inventory-batches",
 )
 def batches(context: Authenticated, filters: Annotated[BatchFilters, Query()]):
+    require_staff(context, "operations")
     return page(
         read(context, "batches", paging(filters)),
         filters.limit,
@@ -244,6 +245,7 @@ def batches(context: Authenticated, filters: Annotated[BatchFilters, Query()]):
     operation_id="typed-inventory-batch-detail",
 )
 def batch_detail(batch_id: UUID, context: Authenticated):
+    require_staff(context, "operations")
     return read(context, "batch", {"batch_id": str(batch_id)})
 
 
@@ -253,6 +255,7 @@ def batch_detail(batch_id: UUID, context: Authenticated):
     operation_id="typed-inventory-summary",
 )
 def summary(context: Authenticated, filters: Annotated[SummaryFilters, Query()]):
+    require_staff(context, "operations")
     return read(context, "summary", filters.model_dump(mode="json"))
 
 
@@ -262,6 +265,7 @@ def summary(context: Authenticated, filters: Annotated[SummaryFilters, Query()])
     operation_id="typed-inventory-codes",
 )
 def codes(context: Authenticated, filters: Annotated[QRFilters, Query()]):
+    require_staff(context, "operations")
     return page(
         read(context, "codes", paging(filters)), filters.limit, QRMetadata, "qr_id"
     )
@@ -273,4 +277,5 @@ def codes(context: Authenticated, filters: Annotated[QRFilters, Query()]):
     operation_id="typed-inventory-code-detail",
 )
 def code_detail(qr_id: UUID, context: Authenticated):
+    require_staff(context, "operations")
     return read(context, "code", {"qr_id": str(qr_id)})

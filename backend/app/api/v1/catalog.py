@@ -536,25 +536,46 @@ def admin_products(
         .all()
     )
     items = []
-    for row in rows[:limit]:
-        item = dict(row)
-        for key, table in (
-            ("variants", "product_variants"),
-            ("images", "product_images"),
-        ):
-            item[key] = [
-                dict(r)
-                for r in context.session.execute(
-                    text(
-                        f"SELECT * FROM public.{table} WHERE product_id=:id ORDER BY id"
-                    ),
-                    {"id": row["id"]},
-                ).mappings()
-            ]
-        # Variant prices are legacy metadata; expose the product price for every size.
-        for variant in item["variants"]:
-            variant["unit_price"] = item["price_per_copy"]
-        items.append(jsonable_encoder(item, custom_encoder={Decimal: str}))
+    selected_rows = rows[:limit]
+    if selected_rows:
+        product_ids = [row["id"] for row in selected_rows]
+        variants_by_product: dict[UUID, list[dict]] = {pid: [] for pid in product_ids}
+        images_by_product: dict[UUID, list[dict]] = {pid: [] for pid in product_ids}
+
+        variant_rows = (
+            context.session.execute(
+                text(
+                    "SELECT * FROM public.product_variants WHERE product_id = ANY(:ids) ORDER BY id"
+                ),
+                {"ids": product_ids},
+            )
+            .mappings()
+            .all()
+        )
+        for v in variant_rows:
+            variants_by_product[v["product_id"]].append(dict(v))
+
+        image_rows = (
+            context.session.execute(
+                text(
+                    "SELECT * FROM public.product_images WHERE product_id = ANY(:ids) ORDER BY id"
+                ),
+                {"ids": product_ids},
+            )
+            .mappings()
+            .all()
+        )
+        for img in image_rows:
+            images_by_product[img["product_id"]].append(dict(img))
+
+        for row in selected_rows:
+            item = dict(row)
+            item["variants"] = variants_by_product.get(row["id"], [])
+            item["images"] = images_by_product.get(row["id"], [])
+            # Variant prices are legacy metadata; expose the product price for every size.
+            for variant in item["variants"]:
+                variant["unit_price"] = item["price_per_copy"]
+            items.append(jsonable_encoder(item, custom_encoder={Decimal: str}))
     return {
         "items": items,
         "next_cursor": str(rows[limit - 1]["id"]) if len(rows) > limit else None,

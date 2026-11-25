@@ -266,6 +266,7 @@ def application_state(
 
 @router.get("/admin/users", operation_id="API-346", response_model=Page)
 def users(request: Request, context: Authenticated) -> Page:
+    require_staff(context, "operations")
     guard(
         context,
         request,
@@ -304,6 +305,7 @@ def users(request: Request, context: Authenticated) -> Page:
 
 @router.get("/admin/users/count", operation_id="API-348", response_model=Total)
 def total(request: Request, context: Authenticated) -> Total:
+    require_staff(context, "operations")
     guard(context, request, {"user_id", "email_verified", "provider_access"})
     selected = filters(request)
     try:
@@ -318,6 +320,7 @@ def total(request: Request, context: Authenticated) -> Total:
 
 @router.get("/admin/users/{user_id}", operation_id="API-347", response_model=Detail)
 def detail(user_id: UUID, request: Request, context: Authenticated) -> Detail:
+    require_staff(context, "operations")
     guard(context, request, {"include"})
     include = request.query_params.get("include")
     if include not in (None, "account_security"):

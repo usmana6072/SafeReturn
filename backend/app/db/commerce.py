@@ -181,6 +181,8 @@ class Order(Identity, Timestamps, Base):
             "placed_at IS NULL OR order_status <> 'draft'", name="no_unplace"
         ),
         Index("idx_orders_customer", "customer_user_id", "created_at"),
+        Index("idx_orders_created_at_id", "created_at", "id"),
+        Index("idx_orders_status_created", "order_status", "created_at"),
     )
 
 
@@ -575,6 +577,8 @@ class Shipment(Identity, Created, Base):
             "status <> 'delivered' OR delivered_at IS NOT NULL", name="delivery"
         ),
         Index("idx_shipments_order", "order_id"),
+        Index("idx_shipments_created_at_id", "created_at", "id"),
+        Index("idx_shipments_status_created", "status", "created_at"),
     )
 
 

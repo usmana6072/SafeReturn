@@ -210,6 +210,7 @@ class AuditEvent(Identity, Base):
         CheckConstraint("jsonb_typeof(safe_details)='object'", name="details"),
         Index("idx_audit_target", "target_type", "target_id", text("occurred_at DESC")),
         Index("idx_audit_actor", "actor_user_id", text("occurred_at DESC")),
+        Index("idx_audit_occurred_id", text("occurred_at DESC"), "id"),
     )
 
 
@@ -382,6 +383,8 @@ class PrintJob(Identity, Timestamps, Base):
         ),
         CheckConstraint("jsonb_typeof(render_config)='object'", name="config"),
         Index("idx_print_jobs_order", "order_id", "created_at"),
+        Index("idx_print_jobs_created_at_id", "created_at", "id"),
+        Index("idx_print_jobs_status_created", "status", "created_at"),
     )
 
 
@@ -488,4 +491,7 @@ class SupportCase(Identity, Created, Base):
             "(description_ciphertext IS NULL AND description_key_version IS NULL) OR (description_ciphertext IS NOT NULL AND description_key_version IS NOT NULL AND description_key_version>0)",
             name="description_key",
         ),
+        Index("idx_support_cases_created_at_id", "created_at", "id"),
+        Index("idx_support_cases_status_created", "status", "created_at"),
+        Index("idx_support_cases_assigned_staff", "assigned_staff_id", "created_at"),
     )

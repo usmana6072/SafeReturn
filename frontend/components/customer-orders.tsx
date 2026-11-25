@@ -59,6 +59,6 @@ export function OrdersList({items,next,older,cursor,ur,unavailable=false}:{items
       })}</div>}
     <div className="orders-pagination">{older&&<Link className="orders-secondary" href="/orders">{t("Latest Orders","تازہ ترین آرڈرز")}</Link>}
       {next&&<Link className="orders-secondary" href={"/orders?cursor="+encodeURIComponent(next)}>{t("Older Orders","پرانے آرڈرز")}</Link>}
-      <Link className="orders-shopping" href="/shop">{t("Continue Shopping","خریداری جاری رکھیں")}</Link></div>
+      <Link className="orders-shopping" href="/portal/shop">{t("Continue Shopping","خریداری جاری رکھیں")}</Link></div>
   </section>;
 }

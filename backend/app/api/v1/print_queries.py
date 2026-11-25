@@ -207,6 +207,7 @@ def timed(context, sql, params):
 
 @router.get("/admin/print-jobs/counts", operation_id="API-350", response_model=Counts)
 def counts(context: Authenticated, request: Request):
+    require_staff(context, "operations")
     filters = selected(context, request, False)
     as_of = datetime.now(UTC)
     measures = [
@@ -246,6 +247,7 @@ def counts(context: Authenticated, request: Request):
 
 @router.get("/admin/print-jobs", operation_id="API-349", response_model=Page)
 def jobs(context: Authenticated, request: Request):
+    require_staff(context, "operations")
     filters = selected(context, request, True)
     values = request.query_params
     raw_limit, sort = values.get("limit", "20"), values.get("sort", "oldest")

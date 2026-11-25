@@ -27,8 +27,8 @@ export function ShopImage({ product }: { product: CatalogProduct }) {
 export function shopPrice(product: CatalogProduct) {
   return Number(product.price_per_copy);
 }
-export function ShopProductCard({ product, ur }: { product: CatalogProduct; ur: boolean }) {
-  const href = "/shop/" + encodeURIComponent(product.variants[0].sku);
+export function ShopProductCard({ product, ur, shopPath }: { product: CatalogProduct; ur: boolean; shopPath: string }) {
+  const href = shopPath + "/" + encodeURIComponent(product.variants[0].sku);
   return <article className="shop-card"><Link href={href} prefetch={false} aria-label={(ur ? "تفصیلات دیکھیں، " : "View details for ") + product.name}><ShopImage product={product}/></Link>
     <div className="shop-card-content"><span className="shop-category">{product.category.name}</span><h2><Link href={href} prefetch={false}>{product.name}</Link></h2>
       {product.description && <p className="shop-summary">{product.description}</p>}
@@ -41,7 +41,7 @@ export function ShopRetry({ ur }: { ur: boolean }) {
   const router = useRouter(), [pending, start] = useTransition();
   return <button className="shop-secondary" disabled={pending} onClick={() => start(() => router.refresh())}>{pending ? (ur ? "کوشش جاری ہے…" : "Retrying…") : (ur ? "دوبارہ کوشش کریں" : "Retry")}</button>;
 }
-export function ShopCatalog({ catalog, ur, initialQuery = "", initialCategory = "" }: { catalog: Catalog; ur: boolean; initialQuery?: string; initialCategory?: string }) {
+export function ShopCatalog({ catalog, ur, initialQuery = "", initialCategory = "", shopPath = "/shop" }: { catalog: Catalog; ur: boolean; initialQuery?: string; initialCategory?: string; shopPath?: string }) {
   const [query, setQuery] = useState(initialQuery), [category, setCategory] = useState(initialCategory);
   const [availability, setAvailability] = useState("all"), [sort, setSort] = useState("featured"), [open, setOpen] = useState(false);
   const search = useRef<HTMLInputElement>(null), trigger = useRef<HTMLButtonElement>(null);
@@ -67,7 +67,7 @@ export function ShopCatalog({ catalog, ur, initialQuery = "", initialCategory = 
     </div>
     {(filters > 0 || term) && <button className="shop-clear" onClick={clear}>{ur ? "فلٹر صاف کریں" : "Clear Filters"}</button>}
     {catalog.unavailable ? <div className="shop-empty" role="status"><CustomerIcon name="refresh"/><h2>{ur ? "مصنوعات لوڈ نہیں ہو سکیں۔" : "Products couldn’t be loaded."}</h2><p>{ur ? "تھوڑی دیر بعد دوبارہ کوشش کریں۔" : "Please try again in a moment."}</p><ShopRetry ur={ur}/></div>
-      : products.length ? <div className="shop-grid">{products.map(p => <ShopProductCard key={p.product_id} product={p} ur={ur}/>)}</div>
+      : products.length ? <div className="shop-grid">{products.map(p => <ShopProductCard key={p.product_id} product={p} ur={ur} shopPath={shopPath}/>)}</div>
       : <div className="shop-empty"><CustomerIcon name={catalog.products.length ? "search" : "shop"}/><h2>{catalog.products.length ? (ur ? "کوئی مماثل مصنوعہ نہیں" : "No Matching Products") : (ur ? "مصنوعات دستیاب نہیں" : "No Products Available")}</h2>
         <p>{catalog.products.length ? (ur ? "تلاش یا فلٹر تبدیل کریں۔" : "Try another search or adjust your filters.") : (ur ? "نئے QR ٹیگز اور لوازمات دستیاب ہونے پر یہاں دکھائی دیں گے۔" : "New QR tags and accessories will appear here when available.")}</p>
         {catalog.products.length > 0 && <button className="shop-secondary" onClick={clear}>{ur ? "فلٹر صاف کریں" : "Clear Filters"}</button>}</div>}

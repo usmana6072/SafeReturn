@@ -489,6 +489,7 @@ def cursor(request, context, scope, value=None):
     "/admin/print-templates", operation_id="API-300", response_model=TemplateList
 )
 def listing(request: Request, context: Authenticated):
+    require_staff(context, "operations")
     guard(context, request)
     query(request, {"purpose", "status", "limit", "cursor"})
     p = dict(request.query_params)
@@ -518,6 +519,7 @@ def listing(request: Request, context: Authenticated):
     response_model=CreateReceipt,
 )
 def create(body: Create, request: Request, context: Authenticated):
+    require_staff(context, "operations")
     return command(context, request, "create", body)
 
 
@@ -527,6 +529,7 @@ def create(body: Create, request: Request, context: Authenticated):
     response_model=TemplateDetail,
 )
 def detail(
+    require_staff(context, "operations")
     template_id: UUID, request: Request, response: Response, context: Authenticated
 ):
     guard(context, request)
@@ -556,6 +559,7 @@ def detail(
     response_model=RevisionReceipt,
 )
 def revision(
+    require_staff(context, "operations")
     template_id: UUID, body: NewRevision, request: Request, context: Authenticated
 ):
     return command(context, request, "revision", body, template_id=str(template_id))
@@ -567,6 +571,7 @@ def revision(
     response_model=EditReceipt,
 )
 def edit(
+    require_staff(context, "operations")
     template_id: UUID,
     revision_id: UUID,
     body: DraftEditRequest,
@@ -597,6 +602,7 @@ def edit(
     },
 )
 def preview(
+    require_staff(context, "operations")
     template_id: UUID,
     revision_id: UUID,
     body: Preview,
@@ -686,6 +692,7 @@ def proof(context, request, template_id, revision_id, expected, *, draft=True):
     response_model=SubmitReceipt,
 )
 def submit(
+    require_staff(context, "operations")
     template_id: UUID,
     revision_id: UUID,
     body: Reason,
@@ -720,6 +727,7 @@ def submit(
     response_model=PublishedTemplateReceipt,
 )
 def publish(
+    require_staff(context, "operations")
     template_id: UUID,
     revision_id: UUID,
     body: Publish,
@@ -750,6 +758,7 @@ def publish(
     response_model=TemplateBindingReceipt,
 )
 def bind(body: Bind, request: Request, context: Authenticated):
+    require_staff(context, "operations")
     return command(context, request, "bind", body)
 
 
@@ -759,6 +768,7 @@ def bind(body: Bind, request: Request, context: Authenticated):
     response_model=TemplateBindingsPage,
 )
 def bindings(request: Request, context: Authenticated):
+    require_staff(context, "operations")
     guard(context, request)
     query(request, {"variant_id", "tag_type", "active", "limit", "cursor"})
     p = dict(request.query_params)
@@ -794,6 +804,7 @@ def bindings(request: Request, context: Authenticated):
     response_model=RetiredTemplateReceipt,
 )
 def retire(
+    require_staff(context, "operations")
     template_id: UUID,
     revision_id: UUID,
     body: Retire,
@@ -878,6 +889,7 @@ def review_available(context):
 
 @router.get("/admin/print-templates/{template_id}/revisions/{revision_id}/qa", operation_id="API-311", response_model=QAStateView)
 def qa_status(template_id: UUID, revision_id: UUID, request: Request, context: Authenticated):
+    require_staff(context, "operations")
     from app.db.template_registry import RegistryRepository
     guard(context, request)
     recent_template_auth(context)
@@ -888,6 +900,7 @@ def qa_status(template_id: UUID, revision_id: UUID, request: Request, context: A
 
 @router.post("/admin/print-templates/{template_id}/revisions/{revision_id}/qa-decision", operation_id="API-312", response_model=QADecisionReceipt)
 def qa_decision(template_id: UUID, revision_id: UUID, body: QADecision, request: Request, context: Authenticated):
+    require_staff(context, "operations")
     guard(context, request, write=True)
     web_origin = canonical_web_origin(request.app.state.settings.print_template_web_origin)
     if request.headers.getlist("origin") != [web_origin]:

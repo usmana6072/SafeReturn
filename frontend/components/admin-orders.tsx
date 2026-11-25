@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AdminCard, AdminEmptyState, AdminPageContainer, AdminPageHeader, AdminStatusBadge } from './admin-ui';
 import { useAdminRole } from './admin-shell';
@@ -73,6 +73,36 @@ export function AdminOrders({ orderId, ur = false }: {
     useEffect(() => { if (orderId === undefined && allowed)
         void load(empty); return () => { request.current?.abort(); sequence.current++; }; }, [orderId, allowed]);
     const t = (en: string, u: string) => ur ? u : en;
+    const isOperations = authenticatedRoles.includes('operations');
+    const isFinance = authenticatedRoles.includes('finance');
+    const renderedTable = useMemo(() => {
+        if (!page) return null;
+        if (!page.items.length) {
+            return <AdminEmptyState title="No orders found" description="No records match the current filters."/>;
+        }
+        return (
+            <div className={styles.scroll} role="region" tabIndex={0} aria-label="Orders table">
+                <table className={styles.ordersTable}>
+                    <thead>
+                        <tr>{['Actions', 'Order number / ID', 'Created', 'Order status', 'Payment status', 'Historical total'].map(s => <th key={s} scope="col">{s}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                        {page.items.map(o => (
+                            <tr key={o.order_id}>
+                                <td><OrderActions order={o} operations={isOperations} finance={isFinance} ur={ur}/></td>
+                                <td className={styles.mono}><span>{o.order_number}</span><br />{o.order_id}</td>
+                                <td>{o.created_at}</td>
+                                <td><OrderStateBadge value={o.order_status}/></td>
+                                <td><OrderStateBadge value={o.payment_status}/></td>
+                                <td className={styles.money}>{historicalAmount(o)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+    }, [page, isOperations, isFinance, ur]);
+
     if (!allowed)
         return <p role="alert">Your authenticated role cannot view order metadata.</p>;
     if (orderId !== undefined)
@@ -82,5 +112,5 @@ export function AdminOrders({ orderId, ur = false }: {
  <label>Order status<select aria-label="Order status" value={form.order_status} onChange={e => setForm({ ...form, order_status: e.target.value })}><option value="">All</option>{orderStates.map(s => <option key={s}>{s}</option>)}</select></label><label>Payment status<select aria-label="Payment status" value={form.payment_status} onChange={e => setForm({ ...form, payment_status: e.target.value })}><option value="">All</option>{paymentStates.map(s => <option key={s}>{s}</option>)}</select></label>
  {(['created_from', 'created_before'] as const).map(k => <label key={k}>{k === 'created_from' ? 'Created from (inclusive RFC3339)' : 'Created before (exclusive RFC3339)'}<input aria-label={k} placeholder="2026-10-01T00:00:00Z" value={form[k]} onChange={e => setForm({ ...form, [k]: e.target.value })}/></label>)}
  <label>Sort<select aria-label="Sort" value={form.sort} onChange={e => setForm({ ...form, sort: e.target.value })}><option value="newest">Newest</option><option value="oldest">Oldest</option></select></label><button disabled={busy}>Apply filters</button><button type="button" disabled={busy} onClick={() => { setForm(empty); void load(empty); }}>Clear filters</button><button type="button" disabled={busy} onClick={() => void load(active)}>Refresh Orders</button></form>
- {busy && <p role="status">Loading order metadata…</p>}{error && <p role="alert" className={styles.notice}>{error}</p>}{page && <><p className={styles.footer}>Creation watermark: {page.as_of}. Statuses can change between pages.</p>{!page.items.length ? <AdminEmptyState title="No orders found" description="No records match the current filters."/> : <div className={styles.scroll} role="region" tabIndex={0} aria-label="Orders table"><table className={styles.ordersTable}><thead><tr>{['Actions', 'Order number / ID', 'Created', 'Order status', 'Payment status', 'Historical total'].map(s => <th key={s} scope="col">{s}</th>)}</tr></thead><tbody>{page.items.map(o => <tr key={o.order_id}><td><OrderActions order={o} operations={authenticatedRoles.includes('operations')} finance={authenticatedRoles.includes('finance')} ur={ur}/></td><td className={styles.mono}><span>{o.order_number}</span><br />{o.order_id}</td><td>{o.created_at}</td><td><OrderStateBadge value={o.order_status}/></td><td><OrderStateBadge value={o.payment_status}/></td><td className={styles.money}>{historicalAmount(o)}</td></tr>)}</tbody></table></div>}<div className={styles.footer}><button disabled={busy || history.length < 2} onClick={() => { const previous = history.slice(0, -1); void load(active, previous.at(-1), previous); }}>Previous</button><button disabled={busy || !page.next_cursor} onClick={() => void load(active, page.next_cursor!, [...history, page.next_cursor!])}>Next</button></div></>}</AdminCard></AdminPageContainer></div>;
+ {busy && <p role="status">Loading order metadata…</p>}{error && <p role="alert" className={styles.notice}>{error}</p>}{page && <><p className={styles.footer}>Creation watermark: {page.as_of}. Statuses can change between pages.</p>{renderedTable}<div className={styles.footer}><button disabled={busy || history.length < 2} onClick={() => { const previous = history.slice(0, -1); void load(active, previous.at(-1), previous); }}>Previous</button><button disabled={busy || !page.next_cursor} onClick={() => void load(active, page.next_cursor!, [...history, page.next_cursor!])}>Next</button></div></>}</AdminCard></AdminPageContainer></div>;
 }

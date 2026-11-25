@@ -232,6 +232,7 @@ def query(context: AuthContext, deadline: float, sql: str, params: dict):
 
 @router.get("/admin/dashboard/summary", operation_id="API-344", response_model=Summary)
 def summary(request: Request, context: Authenticated):
+
     permitted = guard(context, request, set())
     settings = request.app.state.settings
     deadline, observed = monotonic() + 8, datetime.now(UTC)
@@ -296,6 +297,7 @@ def trends(
     context: Authenticated,
     display_timezone: Literal["UTC", "Asia/Karachi"] = "UTC",
 ):
+    require_staff(context, "operations")
     permitted = guard(context, request, {"display_timezone"})
     observed = datetime.now(UTC)
     end = observed.replace(hour=0, minute=0, second=0, microsecond=0)

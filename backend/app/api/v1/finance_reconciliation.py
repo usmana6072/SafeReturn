@@ -152,6 +152,7 @@ def audit(context, action):
     "/admin/finance/reconciliation", operation_id="API-342", response_model=Page
 )
 def reconciliation(
+    require_staff(context, "operations")
     context: Authenticated,
     request: Request,
     limit: int = Query(default=20, ge=1, le=100),
@@ -217,6 +218,7 @@ def capped(value):
     response_model=Counts,
 )
 def counts(context: Authenticated, request: Request):
+    require_staff(context, "operations")
     guard(context, request, set())
     as_of = datetime.now(UTC)
     # One statement/snapshot; distinct affected orders has a separate cap because

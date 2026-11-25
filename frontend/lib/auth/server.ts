@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createAuthClient } from "./client";
 import { cookies } from "next/headers";
 import { authConfig } from "./config";
@@ -44,7 +45,7 @@ export async function accountRequest(token: string, edit?: {
   return data;
 }
 
-export async function verifiedSession() {
+export const verifiedSession = cache(async () => {
   const client = await authClient();
   const { data, error } = await client.auth.getUser();
   if (error || !data.user) return null;
@@ -52,4 +53,4 @@ export async function verifiedSession() {
   const { data: { session } } = await client.auth.getSession();
   if (!session) return null;
   return { client, user: data.user, token: session.access_token };
-}
+});

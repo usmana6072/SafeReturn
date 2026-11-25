@@ -36,6 +36,7 @@ test('mobile More exposes the secondary routes and returns keyboard focus', asyn
   await mount(page);
   const nav = page.getByRole('navigation', { name: 'Customer navigation' });
   await expect(nav.getByRole('link')).toHaveCount(4);
+  await expect(nav.getByRole('link', { name: 'Shop' })).toHaveAttribute('href', '/portal/shop');
   const trigger = nav.getByRole('button', { name: 'More' });
   await trigger.focus();
   await page.keyboard.press('Enter');

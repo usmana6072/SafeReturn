@@ -169,21 +169,22 @@ def request_cancel(
 @router.post(
     "/admin/orders/{order_id}/cancellation-reconciliations", operation_id="API-340"
 )
-def reconcile(
-    order_id: UUID, body: Reconciliation, context: Authenticated, request: Request
-):
+def reconcile(order_id: UUID, body: Reconciliation, context: Authenticated, request: Request):
+    require_staff(context, "operations")
     guard(context, request, "finance")
     return run(context, request, order_id, "reconcile", body)
 
 
 @router.post("/admin/orders/{order_id}/cancellation-decisions", operation_id="API-341")
 def decide(order_id: UUID, body: Decision, context: Authenticated, request: Request):
+    require_staff(context, "operations")
     guard(context, request, "operations")
     return run(context, request, order_id, "decision", body)
 
 
 @router.post("/admin/tag-pairs/{pair_id}/release-allocation", operation_id="API-087")
 def release(pair_id: UUID, body: Release, context: Authenticated, request: Request):
+    require_staff(context, "operations")
     guard(context, request, "operations", recent=True)
     return run(context, request, None, "release", body, pair_id=pair_id)
 

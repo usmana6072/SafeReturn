@@ -27,12 +27,14 @@ def admission(context):
 
 @router.get("/admin/finance/reconciliation", response_model=Reconciliation)
 def reconciliation(order_id: UUID, request: Request, context: Authenticated):
+    require_staff(context, "operations")
     admission(context)
     return service.snapshot(context, request, order_id)
 
 
 @router.post("/admin/payment-attempts/{attempt_id}/reviews")
 def review(
+    require_staff(context, "operations")
     attempt_id: UUID, body: ReviewRequest, request: Request, context: Authenticated
 ):
     admission(context)
@@ -41,6 +43,7 @@ def review(
 
 @router.post("/admin/orders/{order_id}/qr-allocation/retry")
 def retry(
+    require_staff(context, "operations")
     order_id: UUID, body: AllocationRetry, request: Request, context: Authenticated
 ):
     admission(context)
