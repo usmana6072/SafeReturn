@@ -171,3 +171,23 @@ html[dir=rtl] .home-page .home-button>svg:last-child,html[dir=rtl] .home-text-li
 .home-faq-list summary>span::before{content:"+"}@media(max-width:799px){.home-page .featured-scroll:has(.catalog-card:first-child:last-child) .catalog-card{flex-basis:100%;max-width:440px}}
 .home-page .home-hero-note,.home-page .home-visual figcaption,.home-page .home-safety,.home-page .home-footer-main>div>small,.home-page .home-footer-bottom small{color:#8c7b74}.home-page .home-scan-note small,.home-page .home-purpose-ice .home-card-kicker{color:#74635d}.home-page .home-product-type{color:#864431}.home-page .home-profile-note{color:#74635d}.home-page .home-footer nav{color:#74635d}.home-page .home-visual-kicker{color:#864431}.home-page .home-trust li,.home-page .home-visual figcaption{font-size:.75rem}
 .home-page .header-inner{flex-wrap:wrap}.home-page main>section[id]{scroll-margin-top:calc(var(--home-header-height,82px) + 16px)}html[dir=rtl] .home-carousel-buttons button{transform:scaleX(-1)}@media(max-width:799px){.home-page .header-inner{padding-block:8px}.home-page .mobile-menu nav{top:100%}}
+
+/* Products Section Skeleton (Streaming Suspense) */
+.skeleton-product{pointer-events:none;user-select:none}
+.skeleton-image{background:#f6ede3!important}
+.skeleton-shimmer{width:100%;height:100%;background:linear-gradient(90deg,#f3e8dd 0%,#faefe5 50%,#f3e8dd 100%);background-size:200% 100%;animation:homeSkeletonShimmer 1.8s infinite ease-in-out}
+@keyframes homeSkeletonShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.skeleton-body{display:flex;flex-direction:column;gap:.65rem}
+.skeleton-line{background:linear-gradient(90deg,#eddcd0 0%,#f7ebe1 50%,#eddcd0 100%);background-size:200% 100%;animation:homeSkeletonShimmer 1.8s infinite ease-in-out;border-radius:8px}
+.skeleton-badge{width:70px;height:18px;border-radius:99px;margin-bottom:.2rem}
+.skeleton-title{width:75%;height:22px;border-radius:8px}
+.skeleton-text{width:100%;height:14px;border-radius:6px}
+.skeleton-text.short{width:55%}
+.skeleton-price-row{display:flex;align-items:center;gap:.5rem;margin-block:.5rem .2rem}
+.skeleton-price{width:85px;height:24px}
+.skeleton-unit{width:50px;height:14px}
+.skeleton-actions{display:flex;gap:.5rem;margin-top:.4rem}
+.skeleton-button{flex:1;height:44px;border-radius:99px;background:linear-gradient(90deg,#ecdcd0 0%,#f7ece2 50%,#ecdcd0 100%);background-size:200% 100%;animation:homeSkeletonShimmer 1.8s infinite ease-in-out}
+.skeleton-button.primary{background:linear-gradient(90deg,#d4a99b 0%,#e2b9ac 50%,#d4a99b 100%)}
+@media(prefers-reduced-motion:reduce){.skeleton-shimmer,.skeleton-line,.skeleton-button{animation:none!important;background:#f0e2d5!important}}
+
