@@ -6,8 +6,57 @@ import {itemCartKey,mergeItemCart,readItemCart,type ItemCart,type PaymentInstruc
 import { uuid } from "../lib/qr-contract";
 import {SavedAddressSelector,type SavedAddress} from "./shipping-addresses";
 
+import { CustomerIcon } from "./customer-icon";
+
 export function OfficialPaymentInstructions({value,ur}:{value:PaymentInstructions;ur:boolean}){
- return <section aria-label={ur?"ادائیگی کی سرکاری ہدایات":"Official payment instructions"}><h2>{ur?"بینک / راست":"Bank / Raast"}</h2><p style={{whiteSpace:"pre-line"}}>{ur?value.instructions_ur:value.instructions_en}</p><dl>{[[ur?"بینک":"Bank",value.bank_name],[ur?"اکاؤنٹ کا عنوان":"Account title",value.account_title],[ur?"اکاؤنٹ نمبر":"Account number",value.account_number],[ur?"راست آئی ڈی":"Raast ID",value.raast_id]].map(([label,text])=><div key={label}><dt>{label}</dt><dd><bdi>{text}</bdi></dd></div>)}</dl><p>{ur?"ادائیگی کی تصویر تصدیق شدہ ادائیگی نہیں ہے۔":"Payment evidence is not verified payment."}</p></section>;
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copy = (key: string, text: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopiedKey(key);
+        setTimeout(() => setCopiedKey(null), 2000);
+      }).catch(() => {});
+    }
+  };
+
+  const fields = [
+    { key: "bank", label: ur ? "بینک" : "Bank Name", value: value.bank_name, copyable: false },
+    { key: "title", label: ur ? "اکاؤنٹ کا عنوان" : "Account Title", value: value.account_title, copyable: false },
+    { key: "account", label: ur ? "اکاؤنٹ نمبر" : "Account Number", value: value.account_number, copyable: true },
+    { key: "raast", label: ur ? "راست آئی ڈی" : "Raast ID", value: value.raast_id, copyable: true },
+  ];
+
+  return (
+    <div className="bank-instructions-card" aria-label={ur ? "ادائیگی کی سرکاری ہدایات" : "Official payment instructions"}>
+      <h2>{ur ? "بینک / راست ادائیگی کی تفصیلات" : "Bank & Raast Payment Details"}</h2>
+      <p className="bank-instructions-text">{ur ? value.instructions_ur : value.instructions_en}</p>
+      <div className="bank-grid">
+        {fields.map((f) => (
+          <div className="bank-item" key={f.key}>
+            <div>
+              <span className="bank-item-label">{f.label}</span>
+              <strong className="bank-item-value"><bdi>{f.value}</bdi></strong>
+            </div>
+            {f.copyable && (
+              <button
+                type="button"
+                className="copy-badge-btn"
+                onClick={() => copy(f.key, f.value)}
+                aria-label={(ur ? "کاپی کریں " : "Copy ") + f.label}
+              >
+                <CustomerIcon name={copiedKey === f.key ? "check" : "copy"} />
+                <span>{copiedKey === f.key ? (ur ? "کاپی ہو گیا!" : "Copied!") : (ur ? "کاپی" : "Copy")}</span>
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      <p style={{ fontSize: "0.8rem", color: "var(--checkout-muted)", marginTop: "1rem", marginBottom: 0 }}>
+        {ur ? "نوٹ: رقم بھیجنے کے بعد رسید کا اسکرین شاٹ محفوظ رکھیں اور نیچے فارم میں اپ لوڈ کریں۔" : "Note: Keep the screenshot after transferring funds and upload it in the form below."}
+      </p>
+    </div>
+  );
 }
 export function ItemConfigurator({product,language,premium=false}:{product:CatalogProduct;language:"en"|"ur";premium?:boolean}){
  const ur=language==="ur",[sizes,setSizes]=useState(product.variants.map((v,index)=>({variant_id:v.variant_id,copies:premium&&index===0?1:0}))),[separate,setSeparate]=useState(false),[status,setStatus]=useState("");
@@ -81,8 +130,170 @@ export function ItemCheckoutCart({products,language,checkout=false}:{products:Ca
    setBusy(false);
   }
  }
- if(!loaded)return <p role="status">{ur?"کارٹ لوڈ ہو رہا ہے۔":"Loading cart…"}</p>;
- if(!items.length)return <p>{ur?"الگ QR کارٹ خالی ہے۔":"Your independent QR cart is empty."}</p>;
- return <section dir={ur?"rtl":"ltr"} aria-label={ur?"الگ QR کارٹ":"Independent QR cart"}><h2>{ur?"QR آئٹمز":"QR items"}</h2><p>{ur?"ہر آئٹم کا ایک QR، کاپیوں کی تعداد سے قطع نظر۔":"Each item receives one distinct QR after verified payment, regardless of copy count."}</p>{items.map((item,index)=><fieldset key={`${item.product_id}:${item.identity_group}`} disabled={busy}><legend>{catalog.get(item.product_id)?.name??(ur?"مصنوعہ دستیاب نہیں":"Product unavailable")} · {item.identity_group?(ur?"الگ شناخت":"Separate identity"):(ur?"مشترکہ آئٹم":"Merged item")}</legend>{item.sizes.map((s,n)=><label className="copy-count" key={s.variant_id}>{catalog.get(item.product_id)?.variants.find(v=>v.variant_id===s.variant_id)?.name??(ur?"سائز دستیاب نہیں":"Size unavailable")}<input type="number" min={1} max={100} value={s.copies} onChange={e=>save(items.map((i,j)=>j===index?{...i,sizes:i.sizes.map((row,k)=>k===n?{...row,copies:Math.max(1,Math.min(100,Math.trunc(Number(e.target.value))||1))}:row)}:i))}/><button type="button" onClick={()=>save(items.map((i,j)=>j===index?{...i,sizes:i.sizes.filter((_,k)=>k!==n)}:i).filter(i=>i.sizes.length))}>{ur?"سائز ہٹائیں":"Remove size"}</button></label>)}<button type="button" onClick={()=>save(items.filter((_,j)=>j!==index))}>{ur?"آئٹم ہٹائیں":"Remove item"}</button></fieldset>)}{items.map(i=>catalog.get(i.product_id)).filter((p):p is CatalogProduct=>!!p&&!canOrder(p)).map(p=><p role="status" key={p.product_id}>{p.name}: {checkoutUnavailableMessage(p,language)}</p>)}{unavailable&&<p role="alert">{ur?"دستیاب سائز اور مشترکہ حد چیک کریں۔":"Some selected products are unavailable for ordering, or their size/copy limits changed. Your cart is preserved."}</p>}
- {!checkout?<a href="/checkout">{ur?"چیک آؤٹ":"Continue to checkout"}</a>:<><SavedAddressSelector ur={ur} onSelect={selectAddress} disabled={busy}/><form onSubmit={getQuote}><fieldset disabled={busy}>{!saved&&Object.entries(address).map(([key,value])=><label className="copy-count" key={key}>{({recipient_name:ur?"وصول کنندہ":"Recipient name",phone:ur?"فون":"Phone",address:ur?"پتہ":"Street address",city:ur?"شہر":"City",province:ur?"صوبہ":"Province",postal_code:ur?"پوسٹل کوڈ":"Postal code"} as Record<string,string>)[key]}<input value={value} type={key==="phone"?"tel":"text"} aria-label={key==="phone"?(ur?"فون":"Phone"):undefined} aria-describedby={key==="phone"?"checkout-phone-help":undefined} pattern={key==="phone"?"\\+[1-9][0-9]{7,14}":undefined} title={key==="phone"?(ur?"ملک کے کوڈ کے ساتھ نمبر، مثلاً +923001234567":"Include the country code, for example +923001234567"):undefined} maxLength={key==="address"?500:key==="postal_code"?20:key==="recipient_name"?160:key==="phone"?16:100} required={!['province','postal_code'].includes(key)} onChange={e=>{setAddress({...address,[key]:e.target.value});setConfirmed(false);invalidate();}}/>{key==="phone"&&<small id="checkout-phone-help">{ur?"ملک کا کوڈ ضروری ہے۔ پاکستان: +92، پھر ابتدائی 0 کے بغیر نمبر۔ مثال: +923001234567۔":"Country code required. Pakistan: +92 followed by the number without its leading 0. Example: +923001234567."}</small>}</label>)}<label className="check-field"><input type="checkbox" required checked={confirmed} onChange={e=>{setConfirmed(e.target.checked);invalidate();}}/>{ur?"میں ترسیل کے فون اور پتے کی تصدیق کرتا ہوں۔":"I confirm the shipping phone and address."}</label><button disabled={unavailable||!confirmed} type="submit">{ur?"حتمی قیمت حاصل کریں":"Get final quote"}</button></fieldset></form>{quote&&<section aria-label={ur?"حتمی قیمت":"Final quote"}><h2>{ur?"آرڈر کا جائزہ":"Review order"}</h2>{quote.items.map((i,n)=><article key={n}><h3>{i.product_name} · {i.qr_type==="ice"?"Emergency":"Lost"}</h3><p>{ur?"ایک QR شناخت":"One QR identity"}</p><ul>{i.sizes.map((s,k)=><li key={k}>{s.name}: {s.copies}</li>)}</ul><p>{i.quantity} × PKR {i.unit_price} = PKR {i.line_total}</p></article>)}<dl>{(["subtotal_pkr","shipping_pkr","tax_pkr","total_pkr"] as const).map(key=><div key={key}><dt>{({subtotal_pkr:ur?"مصنوعات":"Subtotal",shipping_pkr:ur?"ترسیل":"Shipping",tax_pkr:ur?"ٹیکس":"Tax",total_pkr:ur?"کل":"Total"})[key]}</dt><dd>PKR {quote[key]}</dd></div>)}</dl><OfficialPaymentInstructions value={quote.payment_instructions} ur={ur}/><p>{Date.parse(quote.expires_at)<=now?(ur?"قیمت کی میعاد ختم۔":"Quote expired."):ur?"اسٹاک ابھی مختص نہیں ہوا۔":"Stock is not reserved at checkout."}</p><label><input type="checkbox" checked={accepted} disabled={busy} onChange={e=>setAccepted(e.target.checked)}/>{ur?"میں کل رقم اور ترسیل کی تفصیلات قبول کرتا ہوں۔":"I accept the total and shipping details."}</label><button disabled={busy||!accepted||Date.parse(quote.expires_at)<=now} onClick={()=>void continueToPayment()}>{ur?"ادائیگی جاری رکھیں":"Continue to payment"}</button></section>}</>}<p role="status">{status}</p></section>;
+ if(!loaded)return <p role="status" style={{ padding: "1.5rem 0", color: "var(--checkout-muted)" }}>{ur?"کارٹ لوڈ ہو رہا ہے۔":"Loading cart…"}</p>;
+ if(!items.length)return <div className="checkout-panel"><p style={{ margin: 0, color: "var(--checkout-muted)" }}>{ur?"الگ QR کارٹ خالی ہے۔":"Your independent QR cart is empty."}</p></div>;
+
+ if(!checkout){
+  return (
+   <section dir={ur?"rtl":"ltr"} aria-label={ur?"الگ QR کارٹ":"Independent QR cart"}>
+    <div className="checkout-panel">
+     <h2>{ur?"QR آئٹمز":"QR items"}</h2>
+     <p style={{ color: "var(--checkout-muted)", fontSize: "0.9rem", margin: "0 0 1rem" }}>
+      {ur?"ہر آئٹم کا ایک QR، کاپیوں کی تعداد سے قطع نظر۔":"Each item receives one distinct QR after verified payment, regardless of copy count."}
+     </p>
+     {items.map((item,index)=><div className="checkout-item-card" key={`${item.product_id}:${item.identity_group}`}>
+      <div className="checkout-item-thumb"><CustomerIcon name="tag"/></div>
+      <div className="checkout-item-info">
+       <h3>{catalog.get(item.product_id)?.name??(ur?"مصنوعہ دستیاب نہیں":"Product unavailable")}</h3>
+       <p className="checkout-item-meta">{item.identity_group?(ur?"الگ شناخت":"Separate identity"):(ur?"مشترکہ آئٹم":"Merged item")}</p>
+       {item.sizes.map((s,n)=><div style={{display:"flex",alignItems:"center",gap:"0.5rem",margin:"0.4rem 0"}} key={s.variant_id}>
+        <span className="checkout-item-meta">{catalog.get(item.product_id)?.variants.find(v=>v.variant_id===s.variant_id)?.name??(ur?"سائز دستیاب نہیں":"Size unavailable")}:</span>
+        <input type="number" min={1} max={100} value={s.copies} disabled={busy} style={{width:"4rem",padding:"0.2rem 0.5rem",borderRadius:"6px",border:"1px solid var(--checkout-line)"}} onChange={e=>save(items.map((i,j)=>j===index?{...i,sizes:i.sizes.map((row,k)=>k===n?{...row,copies:Math.max(1,Math.min(100,Math.trunc(Number(e.target.value))||1))}:row)}:i))}/>
+        <button type="button" className="button secondary" style={{padding:"0.2rem 0.6rem",minHeight:"32px",fontSize:"0.75rem"}} onClick={()=>save(items.map((i,j)=>j===index?{...i,sizes:i.sizes.filter((_,k)=>k!==n)}:i).filter(i=>i.sizes.length))}>{ur?"سائز ہٹائیں":"Remove size"}</button>
+       </div>)}
+       <button type="button" className="button secondary" style={{padding:"0.3rem 0.8rem",minHeight:"34px",fontSize:"0.8rem",marginTop:"0.5rem"}} onClick={()=>save(items.filter((_,j)=>j!==index))}>{ur?"آئٹم ہٹائیں":"Remove item"}</button>
+      </div>
+     </div>)}
+     <div style={{ marginTop: "1rem" }}>
+      <a className="button" href="/checkout">{ur?"چیک آؤٹ":"Continue to checkout"}</a>
+     </div>
+    </div>
+   </section>
+  );
+ }
+
+ return (
+  <section dir={ur?"rtl":"ltr"} aria-label={ur?"چیک آؤٹ تفصیلات":"Checkout details"}>
+   <div className="checkout-layout">
+    <div className="checkout-main">
+     <div className="checkout-panel">
+      <h2>{ur?"منتخب کردہ آئٹمز":"Selected Items"}</h2>
+      {items.map((item,index)=><div className="checkout-item-card" key={`${item.product_id}:${item.identity_group}`}>
+       <div className="checkout-item-thumb"><CustomerIcon name="tag"/></div>
+       <div className="checkout-item-info">
+        <h3>{catalog.get(item.product_id)?.name??(ur?"مصنوعہ دستیاب نہیں":"Product unavailable")}</h3>
+        <p className="checkout-item-meta">{item.identity_group?(ur?"الگ شناخت":"Separate identity"):(ur?"مشترکہ آئٹم":"Merged item")}</p>
+        <div style={{display:"flex",flexWrap:"wrap",gap:"0.75rem",margin:"0.4rem 0"}}>
+         {item.sizes.map(s=><span key={s.variant_id} style={{fontSize:"0.85rem",background:"#f5eee6",padding:"0.2rem 0.6rem",borderRadius:"8px"}}>
+          {catalog.get(item.product_id)?.variants.find(v=>v.variant_id===s.variant_id)?.name}: <strong>{s.copies} {ur?"کاپیاں":"copies"}</strong>
+         </span>)}
+        </div>
+       </div>
+      </div>)}
+      {items.map(i=>catalog.get(i.product_id)).filter((p):p is CatalogProduct=>!!p&&!canOrder(p)).map(p=><p role="status" style={{color:"var(--danger)",fontSize:"0.875rem"}} key={p.product_id}>{p.name}: {checkoutUnavailableMessage(p,language)}</p>)}
+      {unavailable&&<div className="checkout-notice-box" style={{background:"#fff4ef",borderColor:"#e6c2b8",color:"#7c372a"}} role="alert">
+       <p style={{margin:0}}>{ur?"دستیاب سائز اور مشترکہ حد چیک کریں۔":"Some selected products are unavailable for ordering, or their size/copy limits changed. Your cart is preserved."}</p>
+      </div>}
+     </div>
+
+     <div className="checkout-panel">
+      <h2>{ur?"ترسیل کا پتہ":"Shipping Address"}</h2>
+      <SavedAddressSelector ur={ur} onSelect={selectAddress} disabled={busy}/>
+      <form onSubmit={getQuote} style={{ marginTop: "1rem" }}>
+       <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
+        {!saved&&<div className="checkout-form-grid" style={{ marginBottom: "1rem" }}>
+         <div className="checkout-field">
+          <label htmlFor="chk-name">{ur?"وصول کنندہ کا پورا نام":"Recipient Full Name"}</label>
+          <input id="chk-name" value={address.recipient_name} required maxLength={160} onChange={e=>{setAddress({...address,recipient_name:e.target.value});setConfirmed(false);invalidate();}} placeholder={ur?"مثلاً محمد عثمان":"e.g. Muhammad Usman"}/>
+         </div>
+         <div className="checkout-field">
+          <label htmlFor="chk-phone">{ur?"رابطہ فون نمبر":"Contact Phone Number"}</label>
+          <input id="chk-phone" value={address.phone} type="tel" required pattern="\+[1-9][0-9]{7,14}" maxLength={16} aria-describedby="checkout-phone-help" onChange={e=>{setAddress({...address,phone:e.target.value});setConfirmed(false);invalidate();}} placeholder="+923001234567"/>
+          <small id="checkout-phone-help" className="checkout-phone-help">{ur?"ملک کا کوڈ ضروری ہے (+92)، پھر ابتدائی 0 کے بغیر 10 ہندسے۔ مثال: +923001234567۔":"Include country code (+92) followed by 10 digits without leading 0. Example: +923001234567."}</small>
+         </div>
+         <div className="checkout-field">
+          <label htmlFor="chk-addr">{ur?"مکمل گلی / گھر کا پتہ":"Street Address & House / Flat No."}</label>
+          <input id="chk-addr" value={address.address} required maxLength={500} onChange={e=>{setAddress({...address,address:e.target.value});setConfirmed(false);invalidate();}} placeholder={ur?"گھر / فلیٹ نمبر، گلی، علاقہ":"House/apartment, street, area"}/>
+         </div>
+         <div className="checkout-form-grid two-col">
+          <div className="checkout-field">
+           <label htmlFor="chk-city">{ur?"شہر":"City"}</label>
+           <input id="chk-city" value={address.city} required maxLength={100} onChange={e=>{setAddress({...address,city:e.target.value});setConfirmed(false);invalidate();}} placeholder={ur?"مثلاً لاہور / کراچی":"e.g. Lahore, Karachi"}/>
+          </div>
+          <div className="checkout-field">
+           <label htmlFor="chk-prov">{ur?"صوبہ (اختیاری)":"Province (optional)"}</label>
+           <input id="chk-prov" value={address.province} maxLength={100} onChange={e=>{setAddress({...address,province:e.target.value});setConfirmed(false);invalidate();}} placeholder={ur?"مثلاً پنجاب / سندھ":"e.g. Punjab, Sindh"}/>
+          </div>
+         </div>
+         <div className="checkout-field">
+          <label htmlFor="chk-postal">{ur?"پوسٹل کوڈ (اختیاری)":"Postal Code (optional)"}</label>
+          <input id="chk-postal" value={address.postal_code} maxLength={20} onChange={e=>{setAddress({...address,postal_code:e.target.value});setConfirmed(false);invalidate();}} placeholder="54000"/>
+         </div>
+        </div>}
+
+        <label className="checkout-notice-box" style={{ cursor: "pointer" }}>
+         <input type="checkbox" required checked={confirmed} onChange={e=>{setConfirmed(e.target.checked);invalidate();}}/>
+         <span>{ur?"میں ترسیل کے فون اور پتے کی درستگی کی تصدیق کرتا ہوں۔":"I confirm that the shipping phone number and address are complete and correct."}</span>
+        </label>
+
+        <button className="button" style={{ minHeight: "48px" }} disabled={unavailable||!confirmed||busy} type="submit">
+         {busy ? (ur?"قیمت حاصل ہو رہی ہے…":"Calculating…") : quote ? (ur?"نئی قیمت حاصل کریں":"Refresh Final Quote") : (ur?"حتمی قیمت حاصل کریں":"Get Final Quote")}
+        </button>
+       </fieldset>
+      </form>
+     </div>
+    </div>
+
+    <aside className="checkout-sidebar checkout-summary-sticky">
+     <div className="checkout-panel">
+      <h2>{ur?"آرڈر کا خلاصہ":"Order Summary"}</h2>
+      {quote ? (
+       <div>
+        <div style={{ marginBottom: "1rem" }}>
+         {quote.items.map((i,n)=><div style={{display:"flex",justifyContent:"space-between",fontSize:"0.85rem",marginBottom:"0.4rem"}} key={n}>
+          <span>{i.product_name} ({i.quantity}x)</span>
+          <strong><bdi>PKR {i.line_total}</bdi></strong>
+         </div>)}
+        </div>
+        <dl className="checkout-summary-dl">
+         <div>
+          <dt>{ur?"مصنوعات کی قیمت":"Subtotal"}</dt>
+          <dd><bdi>PKR {quote.subtotal_pkr}</bdi></dd>
+         </div>
+         <div>
+          <dt>{ur?"ترسیل (ڈلیوری)":"Delivery"}</dt>
+          <dd><bdi>PKR {quote.shipping_pkr}</bdi></dd>
+         </div>
+         {Number(quote.tax_pkr) > 0 && <div>
+          <dt>{ur?"ٹیکس":"Tax"}</dt>
+          <dd><bdi>PKR {quote.tax_pkr}</bdi></dd>
+         </div>}
+         <div className="checkout-summary-total">
+          <dt>{ur?"کل واجب الادا رقم":"Total Amount"}</dt>
+          <dd><bdi>PKR {quote.total_pkr}</bdi></dd>
+         </div>
+        </dl>
+
+        <p style={{ fontSize: "0.8rem", color: "var(--checkout-muted)", marginTop: "0.75rem" }}>
+         {Date.parse(quote.expires_at)<=now?(ur?"قیمت کی میعاد ختم۔ نئی قیمت حاصل کریں۔":"Quote expired. Please refresh quote."):(ur?"قیمت کی میعاد جاری ہے۔":"Quote is locked for checkout.")}
+        </p>
+
+        <label className="checkout-notice-box" style={{ cursor: "pointer", fontSize: "0.85rem", margin: "1rem 0" }}>
+         <input type="checkbox" checked={accepted} disabled={busy} onChange={e=>setAccepted(e.target.checked)}/>
+         <span>{ur?"میں کل رقم اور ترسیل کی شرائط قبول کرتا ہوں۔":"I accept the order total and delivery terms."}</span>
+        </label>
+
+        <button className="button" style={{ width: "100%", minHeight: "50px", fontSize: "1rem" }} disabled={busy||!accepted||Date.parse(quote.expires_at)<=now} onClick={()=>void continueToPayment()}>
+         {busy ? (ur?"پروسیسنگ…":"Processing…") : (ur?"ادائیگی کے لیے آگے بڑھیں":"Continue to Payment")}
+        </button>
+       </div>
+      ) : (
+       <div style={{ textAlign: "center", padding: "1.5rem 0", color: "var(--checkout-muted)" }}>
+        <CustomerIcon name="cart" />
+        <p style={{ fontSize: "0.875rem", margin: "0.75rem 0 0" }}>
+         {ur?"ترسیل کا پتہ تصدیق کر کے حتمی قیمت حاصل کریں تاکہ کل رقم دیکھی جا سکے۔":"Confirm shipping address and request quote to see final total with delivery charges."}
+        </p>
+       </div>
+      )}
+
+      <div className="checkout-trust-badge">
+       <CustomerIcon name="shield"/>
+       <span>{ur?"بینک / راست تصدیق شدہ آرڈر":"Bank & Raast Verified Checkout"}</span>
+      </div>
+     </div>
+    </aside>
+   </div>
+   {status && <div className="checkout-notice-box" style={{background:"#fff4ef",borderColor:"#e6c2b8",color:"#7c372a",marginTop:"1rem"}} role="status"><p style={{margin:0}}>{status}</p></div>}
+  </section>
+ );
 }

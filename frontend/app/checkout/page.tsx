@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CheckoutCart } from "../../components/checkout";
 import { PaymentForm } from "../../components/customer-payment";
+import { CustomerIcon } from "../../components/customer-icon";
 import { getCatalog } from "../../lib/catalog";
 import { getLanguage } from "../../lib/i18n";
 import { uuid } from "../../lib/qr-contract";
@@ -16,9 +17,9 @@ export default async function Checkout({ searchParams }: { searchParams: Promise
     if (orderId !== undefined) {
         if (typeof orderId !== 'string' || !uuid(orderId)) notFound();
         return (
-            <section id="main" className="container section" tabIndex={-1}>
+            <div id="main" className="checkout-screen" dir={ur ? 'rtl' : 'ltr'} lang={ur ? 'ur' : 'en'} tabIndex={-1}>
                 <PaymentForm key={orderId} orderId={orderId} language={language}/>
-            </section>
+            </div>
         );
     }
 
@@ -26,7 +27,21 @@ export default async function Checkout({ searchParams }: { searchParams: Promise
 
     if (!session) {
         return (
-            <section id="main" className="container section" tabIndex={-1}>
+            <div id="main" className="checkout-screen" dir={ur ? 'rtl' : 'ltr'} lang={ur ? 'ur' : 'en'} tabIndex={-1}>
+                <header className="checkout-header">
+                    <Link href="/cart" className="checkout-back-link">
+                        <CustomerIcon name="arrow" />
+                        <span>{ur ? 'واپس کارٹ پر جائیں' : 'Back to Cart'}</span>
+                    </Link>
+                    <div className="checkout-title-row">
+                        <div>
+                            <h1>{ur ? 'چیک آؤٹ' : 'Checkout'}</h1>
+                            <p className="checkout-subtitle">
+                                {ur ? 'آرڈر مکمل کرنے کے لیے اکاؤنٹ لاگ اِن درکار ہے' : 'Sign in required to complete your order'}
+                            </p>
+                        </div>
+                    </div>
+                </header>
                 <div className="checkout-auth-card">
                     <span className="eyebrow">{ur ? "اکاؤنٹ درکار ہے" : "ACCOUNT REQUIRED"}</span>
                     <h1>{ur ? "آرڈر مکمل کرنے کے لیے لاگ اِن کریں" : "Sign in to complete your checkout"}</h1>
@@ -48,22 +63,48 @@ export default async function Checkout({ searchParams }: { searchParams: Promise
                     </div>
                 </div>
                 <div style={{ marginBlockStart: "32px" }}>
-                    <h2>{ur ? "آپ کے منتخب کردہ آئٹمز" : "Items in Your Cart"}</h2>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: 650, color: "var(--checkout-ink)", marginBottom: "1rem" }}>
+                        {ur ? "آپ کے منتخب کردہ آئٹمز" : "Items in Your Cart"}
+                    </h2>
                     <CheckoutCart products={catalog.products} language={language} checkout={false}/>
                 </div>
-            </section>
+            </div>
         );
     }
 
     return (
-        <section id="main" className="container section" tabIndex={-1}>
-            <div style={{ marginBottom: "16px" }}>
-                <Link href="/cart" style={{ color: "var(--teal)", textDecoration: "underline" }}>
-                    {ur ? '← واپس کارٹ' : '← Back to Cart'}
+        <div id="main" className="checkout-screen" dir={ur ? 'rtl' : 'ltr'} lang={ur ? 'ur' : 'en'} tabIndex={-1}>
+            <header className="checkout-header">
+                <Link href="/cart" className="checkout-back-link">
+                    <CustomerIcon name="arrow" />
+                    <span>{ur ? 'واپس کارٹ پر جائیں' : 'Back to Cart'}</span>
                 </Link>
-            </div>
-            <h1>{ur ? 'چیک آؤٹ' : 'Checkout'}</h1>
+                <div className="checkout-title-row">
+                    <div>
+                        <h1>{ur ? 'چیک آؤٹ' : 'Checkout'}</h1>
+                        <p className="checkout-subtitle">
+                            {ur ? 'ترسیل کا پتہ منتخب کریں اور اپنے آرڈر کا جائزہ لیں' : 'Confirm your delivery address and review order total'}
+                        </p>
+                    </div>
+                </div>
+                <div className="checkout-stepper" aria-label={ur ? 'مراحل' : 'Checkout steps'}>
+                    <span className="checkout-step completed">
+                        <span className="checkout-step-number">✓</span>
+                        <span>{ur ? 'کارٹ' : 'Cart'}</span>
+                    </span>
+                    <span className="checkout-step-divider">→</span>
+                    <span className="checkout-step active">
+                        <span className="checkout-step-number">2</span>
+                        <span>{ur ? 'ترسیل اور جائزہ' : 'Shipping & Review'}</span>
+                    </span>
+                    <span className="checkout-step-divider">→</span>
+                    <span className="checkout-step">
+                        <span className="checkout-step-number">3</span>
+                        <span>{ur ? 'ادائیگی' : 'Payment'}</span>
+                    </span>
+                </div>
+            </header>
             <CheckoutCart products={catalog.products} language={language} checkout/>
-        </section>
+        </div>
     );
 }

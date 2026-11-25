@@ -26,6 +26,7 @@ const paths = {
   arrow: <path d="M4 12h15m-5-5 5 5-5 5"/>,
   box: <><path d="m3 7 9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10M7 5l9 4"/></>,
   check: <><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></>,
+  shield: <><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8 12 3 3 5-6"/></>,
 } satisfies Record<string, ReactNode>;
 
 export type CustomerIconName = keyof typeof paths;
