@@ -37,7 +37,7 @@ export async function getCatalog(featured = false): Promise<Catalog> {
   try {
     const origin = validateOrigin(process.env.SAFERETURN_API_ORIGIN ?? "");
     const response = await fetch(`${origin}/api/v1/${featured ? "public/catalog/featured" : "public/products"}`, {
-      headers: { Accept: "application/json" }, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(8000),
+      headers: { Accept: "application/json" }, next: { revalidate: 60 }, redirect: "error", signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) throw new Error("unavailable");
     const data: unknown = await response.json();
@@ -51,7 +51,7 @@ export async function getProduct(sku: string): Promise<CatalogProduct | null | u
   try {
     const origin = validateOrigin(process.env.SAFERETURN_API_ORIGIN ?? "");
     const response = await fetch(`${origin}/api/v1/public/products/${encodeURIComponent(sku)}`, {
-      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(8000), headers: { Accept: "application/json" },
+      next: { revalidate: 60 }, redirect: "error", signal: AbortSignal.timeout(8000), headers: { Accept: "application/json" },
     });
     if (response.status === 404) return null;
     if (!response.ok) return undefined;

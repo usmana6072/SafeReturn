@@ -53,10 +53,16 @@ main:focus{outline:0}.customer-nav a,.customer-nav button,.mobile-menu summary{m
   font-weight: 800 !important;
   color: var(--teal, #864431) !important;
   text-decoration: none !important;
+  min-width: max-content !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
 }
 .brand bdi, .home-brand bdi {
   white-space: nowrap !important;
   display: inline-block !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  min-width: max-content !important;
 }
 .brand img, .home-brand img {
   display: block !important;
@@ -78,6 +84,8 @@ main:focus{outline:0}.customer-nav a,.customer-nav button,.mobile-menu summary{m
   justify-content: space-between;
   gap: 16px;
   min-height: 72px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
 }
 .storefront-actions {
   display: flex;
