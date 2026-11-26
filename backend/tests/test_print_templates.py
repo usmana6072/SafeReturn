@@ -315,6 +315,7 @@ def test_closed_create_and_unsafe_inputs(env, extra):
         ("symbol_mm", "35"),
         ("width_mm", "29.99"),
         ("height_mm", "49.99"),
+        ("qr_y_mm", "12.99"),
         ("width_mm", "40.00"),
         ("qr_x_mm", "30.00"),
         ("logo_mm", "6.00"),
@@ -349,8 +350,8 @@ def test_template_accepts_reduced_minimum_dimensions():
             "width_mm": "30.00",
             "height_mm": "50.00",
             "qr_x_mm": "5.00",
-            "qr_y_mm": "18.00",
-            "logo_mm": "3.00",
+            "qr_y_mm": "13.00",
+            "logo_mm": "3.50",
         }
     )
 
@@ -358,7 +359,9 @@ def test_template_accepts_reduced_minimum_dimensions():
         template.symbol_mm,
         template.width_mm,
         template.height_mm,
-    ) == ("20.00", "30.00", "50.00")
+        template.qr_y_mm,
+        template.logo_mm,
+    ) == ("20.00", "30.00", "50.00", "13.00", "3.50")
 
 
 def test_renderer_mapping_and_authoritative_fingerprint():

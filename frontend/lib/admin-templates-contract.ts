@@ -102,7 +102,7 @@ export function design(v: unknown): Design {
         if (n[key] <= 0 || n[key] > 270)
             bad(key);
     }
-    if (n.symbol_mm < 20 || n.symbol_mm > 100 || n.width_mm < 30 || n.width_mm > 190 || n.height_mm < 50 || n.qr_x_mm < 4 || n.qr_y_mm < 18 || n.logo_mm > 6 || n.min_pitch_mm < 0.3 || n.font_pt < 8 || n.font_pt > 14)
+    if (n.symbol_mm < 20 || n.symbol_mm > 100 || n.width_mm < 30 || n.width_mm > 190 || n.height_mm < 50 || n.qr_x_mm < 4 || n.qr_y_mm < 13 || n.logo_mm > 6 || n.min_pitch_mm < 0.3 || n.font_pt < 8 || n.font_pt > 14)
         bad('geometry');
     for (const key of ['english_lines', 'urdu_lines']) {
         if (!Array.isArray(o[key]) || (o[key] as unknown[]).length < 1 || (o[key] as unknown[]).length > 4)
