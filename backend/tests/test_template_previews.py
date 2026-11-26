@@ -222,6 +222,34 @@ def test_timeout_kills_worker_releases_capacity_and_scrubs_env(
     assert preview_core.CAPACITY.acquire(blocking=False)
     preview_core.CAPACITY.release()
 
+
+def test_worker_failure_logs_safe_reason_and_returns_generic_error(
+    synthetic_assets, monkeypatch, caplog
+):
+    spec, root = synthetic_assets
+    monkeypatch.setattr(
+        preview_core,
+        "sys",
+        SimpleNamespace(platform="linux", executable=sys.executable),
+    )
+    process = SimpleNamespace(returncode=1)
+    process.communicate = lambda data=None, timeout=None: (
+        preview_core.WORKER_ERROR_PREFIX + b"caption_overflow",
+        None,
+    )
+    monkeypatch.setattr(
+        preview_core.subprocess,
+        "Popen",
+        lambda *args, **kwargs: process,
+    )
+
+    with pytest.raises(PrintUnavailable, match="preview_failed"):
+        preview_core.isolated_preview(spec, root)
+
+    assert "reason=caption_overflow" in caplog.text
+    assert "Synthetic Lost" not in caplog.text
+
+
 def test_unsupported_preview_isolation_rejected_before_admission(env, monkeypatch):
     client, db, headers, settings = env
     settings.print_template_asset_root = 'configured-test-root'
