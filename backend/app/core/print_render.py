@@ -102,9 +102,9 @@ class Template(Closed):
     key: str = Field(pattern=r"^[a-zA-Z0-9._-]{3,80}$")
     version: int = Field(ge=1)
     tag_type: Literal["lost", "ice"]
-    symbol_mm: float = Field(ge=30, le=100)
-    width_mm: float = Field(ge=40, le=190)
-    height_mm: float = Field(ge=60, le=270)
+    symbol_mm: float = Field(ge=20, le=100)
+    width_mm: float = Field(ge=30, le=190)
+    height_mm: float = Field(ge=50, le=270)
     qr_x_mm: float = Field(ge=4)
     qr_y_mm: float = Field(ge=18)
     logo_mm: float = Field(gt=0, le=6)

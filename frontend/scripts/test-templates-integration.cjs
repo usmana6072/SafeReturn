@@ -14,6 +14,8 @@ await status(h.relay.POST(new NextRequest('https://templates.test/admin/template
 const b={key:'safe-design',name:'Safe design',purpose:'lost'};await status(send(base,'POST',b),201);await status(send(base,'POST',b),201);await status(send(base,'POST',{...b,name:'Changed'}),409);
 await status(send(base,'POST',{...b,description:'unsupported'}),422);
 for(const extra of [{renderer:'external'},{header:'https://unsafe.test'},{asset_set_id:'not-real'},{logo_mm:'8.00'},{urdu_lines:['Latin']}]){assert.throws(()=>c.design({...content(),...extra}));checks++;}
+const minimumDesign={...content(),symbol_mm:'20.00',width_mm:'30.00',height_mm:'50.00',qr_x_mm:'5.00',qr_y_mm:'18.00',logo_mm:'3.00'};assert.equal(c.design(minimumDesign).height_mm,'50.00');checks++;
+const compactDesign={...content(),symbol_mm:'25.00',width_mm:'35.00',height_mm:'55.00',qr_x_mm:'5.00',qr_y_mm:'18.00',logo_mm:'3.75'};assert.equal(c.design(compactDesign).symbol_mm,'25.00');checks++;
 await status(send(base+'/'+tid+'/revisions','POST',{content:content(),version_note:'Initial draft',base_revision_id:null},1),201);
 await status(send(rp,'PATCH',{content:content(),version_note:'Saved design'},1),200);
 await status(send(rp+'/preview','POST',{expected_revision:1},2),422);

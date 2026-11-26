@@ -309,10 +309,12 @@ def test_closed_create_and_unsafe_inputs(env, extra):
 @pytest.mark.parametrize(
     "field,value",
     [
-        ("symbol_mm", "29.99"),
+        ("symbol_mm", "19.99"),
         ("symbol_mm", 35),
         ("symbol_mm", "NaN"),
         ("symbol_mm", "35"),
+        ("width_mm", "29.99"),
+        ("height_mm", "49.99"),
         ("width_mm", "40.00"),
         ("qr_x_mm", "30.00"),
         ("logo_mm", "6.00"),
@@ -337,6 +339,26 @@ def test_closed_create_and_unsafe_inputs(env, extra):
 def test_closed_content_geometry_and_unsafe_assets(field, value):
     with pytest.raises(ValidationError):
         Content.model_validate(content() | {field: value})
+
+
+def test_template_accepts_reduced_minimum_dimensions():
+    template = Content.model_validate(
+        content()
+        | {
+            "symbol_mm": "20.00",
+            "width_mm": "30.00",
+            "height_mm": "50.00",
+            "qr_x_mm": "5.00",
+            "qr_y_mm": "18.00",
+            "logo_mm": "3.00",
+        }
+    )
+
+    assert (
+        template.symbol_mm,
+        template.width_mm,
+        template.height_mm,
+    ) == ("20.00", "30.00", "50.00")
 
 
 def test_renderer_mapping_and_authoritative_fingerprint():
