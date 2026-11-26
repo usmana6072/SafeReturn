@@ -1,7 +1,9 @@
 """Private synthetic proof pipeline, with no order/token/provider input."""
 
 import json
+import logging
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -18,6 +20,8 @@ from app.core.template_content import Content
 CAPACITY = threading.BoundedSemaphore(1)
 MAX_OUTPUT = 2 * 1024 * 1024
 PREVIEW_WALL_TIMEOUT_SECONDS = 60
+WORKER_ERROR_PREFIX = b"SAFERETURN_PREVIEW_ERROR:"
+logger = logging.getLogger(__name__)
 
 
 def checked_assets(assets, root):
@@ -107,14 +111,35 @@ def isolated_preview(spec, root):
             process.kill()
             process.communicate()
             raise PrintUnavailable("preview_timeout") from None
-        if (
-            process.returncode != 0
-            or not data.startswith(b"%PDF-")
-            or len(data) > MAX_OUTPUT
-        ):
+        if process.returncode != 0:
+            worker_code = "unclassified"
+            if data.startswith(WORKER_ERROR_PREFIX):
+                candidate = data[len(WORKER_ERROR_PREFIX) :].decode(
+                    "ascii", errors="ignore"
+                )
+                if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", candidate):
+                    worker_code = candidate
+            logger.error(
+                "Isolated template preview worker failed: return_code=%s reason=%s",
+                process.returncode,
+                worker_code,
+            )
+            raise PrintUnavailable("preview_failed")
+        if not data.startswith(b"%PDF-") or len(data) > MAX_OUTPUT:
+            logger.error(
+                "Isolated template preview worker returned invalid output: "
+                "return_code=%s output_size=%s",
+                process.returncode,
+                len(data),
+            )
             raise PrintUnavailable("preview_failed")
         return data
-    except OSError:
+    except OSError as exc:
+        logger.error(
+            "Isolated template preview worker could not be started or read: "
+            "error_type=%s",
+            type(exc).__name__,
+        )
         raise PrintUnavailable("preview_failed") from None
     finally:
         CAPACITY.release()
