@@ -35,8 +35,8 @@ function createHarness(){
  if(p.endsWith('/preview'))return new Response('%PDF-1.4\nsynthetic proof fixture\n%%EOF',{headers:{'Content-Type':'application/pdf','X-Template-Fingerprint':'a'.repeat(64)}});
  let result,status=200;
  if(p==='/admin/print-templates'){state.template={...state.template,...b};result=state.template;status=201;}
- else if(p.endsWith('/submit-qa')){state.revisions[0]={...state.revisions[0],status:'pending_qa',row_version:state.revisions[0].row_version+1};result={revision:state.revisions[0],validation_status:'needs_independent_physical_qa'};}
- else if(m==='PATCH'){state.revisions[0]={...state.revisions[0],content:b.content,row_version:state.revisions[0].row_version+1};result=state.revisions[0];}
+ else if(p.endsWith('/submit-qa')){state.revisions[0]={...state.revisions[0],status:'pending_qa',row_version:state.revisions[0].row_version+1};state.template.row_version++;result={revision:state.revisions[0],validation_status:'needs_independent_physical_qa'};}
+ else if(m==='PATCH'){state.revisions[0]={...state.revisions[0],content:b.content,row_version:state.revisions[0].row_version+1};state.template.row_version++;result=state.revisions[0];}
  else {const revision={revision_id:rid,template_id:tid,version:1,status:'draft',row_version:1,content:b.content,fingerprint_sha256:null,created_at:stamp,published_at:null};state.revisions=[revision];state.template.row_version++;result={template:state.template,revision};status=201;}
  const value={command_id:'00000000-0000-0000-0000-000000000599',result};state.receipts.set(key,{signature,value:JSON.parse(JSON.stringify(value)),status});return Response.json(value,{status});
  }

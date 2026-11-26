@@ -12,7 +12,8 @@ export const selectedStickerDesign: Design = {
 export function TemplateDesignFields({content,onChange,readOnly,purpose}:{content:string;onChange:(s:string)=>void;readOnly:boolean;purpose:'lost'|'ice'}) {
  let parsed:Partial<Design>={};let invalid=false;
  try{const p=JSON.parse(content);if(!p||typeof p!=='object'||Array.isArray(p))invalid=true;else parsed=p;}catch{invalid=true;}
- function change(key:keyof Design,value:unknown){onChange(JSON.stringify({schema_version:1,renderer:'safereturn-vector-v1',preset:'fixed-footer-v1',...parsed,[key]:value},null,2));}
+ const assetSetId=typeof parsed.asset_set_id==='string'&&parsed.asset_set_id?parsed.asset_set_id:selectedStickerDesign.asset_set_id;
+ function change(key:keyof Design,value:unknown){onChange(JSON.stringify({schema_version:1,renderer:'safereturn-vector-v1',preset:'fixed-footer-v1',...parsed,asset_set_id:parsed.asset_set_id??selectedStickerDesign.asset_set_id,[key]:value},null,2));}
  const text=(key:keyof Design)=>typeof parsed[key]==='string'?parsed[key] as string:'';
  const lines=(key:'english_lines'|'urdu_lines'|'material_codes')=>Array.isArray(parsed[key])&&parsed[key]!.every(v=>typeof v==='string')?parsed[key]!:[];
  const dimensions=[['width_mm','Sticker width (mm)'],['height_mm','Sticker height (mm)'],['symbol_mm','QR size (mm)'],['qr_x_mm','QR left position (mm)'],['qr_y_mm','QR bottom position (mm)'],['logo_mm','Logo size (mm)'],['font_pt','Text size (pt)'],['min_pitch_mm','Minimum QR module pitch (mm)']] as const;
@@ -26,8 +27,8 @@ export function TemplateDesignFields({content,onChange,readOnly,purpose}:{conten
  <label>English text (one line per row)<textarea aria-label="English sticker text" rows={2} value={lines('english_lines').join('\n')} onChange={e=>change('english_lines',e.target.value.split('\n'))}/></label>
  <label>Urdu text (one line per row)<textarea aria-label="Urdu sticker text" dir="rtl" rows={2} value={lines('urdu_lines').join('\n')} onChange={e=>change('urdu_lines',e.target.value.split('\n'))}/></label>
  <label>Materials (comma separated)<input aria-label="Sticker materials" value={lines('material_codes').join(', ')} onChange={e=>change('material_codes',[...new Set(e.target.value.split(',').map(v=>v.trim()).filter(Boolean))].sort())}/></label>
- <label>Enrolled font/logo asset set<input aria-label="Enrolled asset set ID" value={text('asset_set_id')} onChange={e=>change('asset_set_id',e.target.value)}/></label>
+ <label>Font and logo asset set<select aria-label="Font and logo asset set" value={assetSetId} onChange={e=>change('asset_set_id',e.target.value)}><option value={selectedStickerDesign.asset_set_id}>Amiri font + SafeReturn logo (enrolled development set)</option>{assetSetId!==selectedStickerDesign.asset_set_id&&<option value={assetSetId}>Current asset set ({assetSetId})</option>}</select></label>
  </fieldset>}
- <p className="text-sm">The selected development asset set uses Amiri and the solid-colour logo. This is asset registration, not template or physical QA approval. Vinyl is a proposed material until tested.</p>
+ <p className="text-sm">The registered development set includes Amiri and the solid-colour SafeReturn logo. It is the only set currently available in this picker; asset registration is not template or physical QA approval. Vinyl is a proposed material until tested.</p>
  </section>;
 }
