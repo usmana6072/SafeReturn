@@ -106,7 +106,7 @@ class Template(Closed):
     width_mm: float = Field(ge=30, le=190)
     height_mm: float = Field(ge=50, le=270)
     qr_x_mm: float = Field(ge=4)
-    qr_y_mm: float = Field(ge=18)
+    qr_y_mm: float = Field(ge=13)
     logo_mm: float = Field(gt=0, le=6)
     min_pitch_mm: float = Field(ge=0.3)
     font_pt: float = Field(ge=8, le=14)
