@@ -1,4 +1,4 @@
-"""Apply the reviewed template auth-window SQL to the pinned development DB."""
+"""Apply only the reviewed 0063/0064 revisions to the pinned dev database."""
 
 import argparse
 import hashlib
@@ -7,39 +7,39 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 import psycopg
+from alembic import command
+from alembic.config import Config
 from dotenv import dotenv_values
+from sqlalchemy import create_engine, text
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = "fhuxryfkfrvycsojkzvq"
-REVISION = "0043_standalone_activation"
-SQL_PATH = ROOT / "backend/alembic/versions/0064_template_auth_60_hours.sql"
-SQL_SHA256 = "0c6b34df745d33c4cdf5fb836787c83bab393163e8e50ed253c9e6c42b64a0fe"
+BEFORE = ["0044_support_dev_exception", "0062_template_geometry_minimums"]
+AFTER = ["0044_support_dev_exception", "0064_template_auth_60_hours"]
+REVISION = "0064_template_auth_60_hours"
 FUNCTIONS = (
     "sr_template_draft_service_v33",
     "sr_template_preview_admit",
     "sr_template_lifecycle",
 )
+AUTH_FUNCTIONS = """SELECT proname,prosrc,prosecdef,proconfig,pg_get_userbyid(proowner),proacl::text
+FROM pg_proc WHERE oid IN (
+ 'public.sr_template_draft_service_v33(uuid,bigint,text,jsonb)'::regprocedure,
+ 'public.sr_template_preview_admit(uuid,bigint,text,text)'::regprocedure,
+ 'public.sr_template_lifecycle(uuid,bigint,text,jsonb)'::regprocedure)
+ORDER BY proname"""
+METADATA = """SELECT oid::text,proowner::regrole::text,proacl::text,proconfig,prosecdef
+FROM pg_proc WHERE oid='public.sr_template_content_valid(jsonb)'::regprocedure"""
 
 
-def definitions(connection):
+def revisions(connection):
     return connection.execute(
-        "SELECT proname,prosrc,prosecdef,proconfig,pg_get_userbyid(proowner),proacl::text "
-        "FROM pg_proc WHERE oid IN ("
-        "'public.sr_template_draft_service_v33(uuid,bigint,text,jsonb)'::regprocedure,"
-        "'public.sr_template_preview_admit(uuid,bigint,text,text)'::regprocedure,"
-        "'public.sr_template_lifecycle(uuid,bigint,text,jsonb)'::regprocedure) "
-        "ORDER BY proname"
-    ).fetchall()
+        text("SELECT version_num FROM public.alembic_version ORDER BY version_num")
+    ).scalars().all()
 
 
-def expected_bodies():
-    source = (ROOT / "ops/template-auth-window-20min.sql").read_text(encoding="utf-8")
-    result = {}
-    for name in FUNCTIONS:
-        marker = f"CREATE OR REPLACE FUNCTION public.{name}("
-        chunk = source[source.index(marker) :]
-        result[name] = chunk.split("AS $$", 1)[1].split("$$;", 1)[0].strip()
-    return result
+def functions(connection):
+    return connection.execute(text(AUTH_FUNCTIONS)).all()
 
 
 def main():
@@ -66,66 +66,87 @@ def main():
     assert hashlib.sha256(ca.read_bytes()).hexdigest() == (
         "700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7"
     )
-    sql = SQL_PATH.read_bytes().replace(b"\r\n", b"\n")
-    actual_sql_sha256 = hashlib.sha256(sql).hexdigest()
-    assert actual_sql_sha256 == SQL_SHA256, (
-        f"Reviewed SQL checksum mismatch: {actual_sql_sha256}"
+    config = Config(str(ROOT / "backend/alembic.ini"))
+    config.set_main_option("script_location", str(ROOT / "backend/alembic"))
+    from alembic.script import ScriptDirectory
+
+    script = ScriptDirectory.from_config(config)
+    assert script.get_revision("0063_template_optional_urdu_compact_clearance").down_revision == (
+        "0062_template_geometry_minimums"
     )
-    expected = expected_bodies()
-    password = unquote(target.password)
-    with psycopg.connect(
-        host=target.hostname,
-        port=target.port,
-        dbname="postgres",
-        user=unquote(target.username),
-        password=password,
-        sslmode="verify-full",
-        sslrootcert=str(ca),
-        connect_timeout=10,
-    ) as connection:
-        connection.execute("SET LOCAL lock_timeout='3s'")
-        connection.execute("SET LOCAL statement_timeout='20000ms'")
-        connection.execute(
-            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
-            ("safereturn.template-auth-window-60h",),
-        )
-        revisions = connection.execute(
-            "SELECT version_num FROM public.alembic_version ORDER BY version_num"
-        ).fetchall()
-        assert revisions == [(REVISION,)], (
-            "Unexpected DB migration state; no update attempted"
-        )
-        before = definitions(connection)
-        assert [row[0] for row in before] == sorted(FUNCTIONS)
-        for name, body, security_definer, config, _owner, _acl in before:
-            assert body.strip() == expected[name], (
-                f"Installed {name} differs from reviewed source"
+    assert script.get_revision(REVISION).down_revision == (
+        "0063_template_optional_urdu_compact_clearance"
+    )
+    engine = create_engine(
+        "postgresql+psycopg://",
+        creator=lambda: psycopg.connect(
+            host=target.hostname,
+            port=target.port,
+            dbname="postgres",
+            user=unquote(target.username),
+            password=unquote(target.password),
+            sslmode="verify-full",
+            sslrootcert=str(ca),
+            connect_timeout=10,
+        ),
+    )
+    result = {"project": PROJECT, "revision": REVISION}
+    template_metadata = text(METADATA)
+    try:
+        with engine.connect() as connection:
+            transaction = connection.begin()
+            connection.execute(text("SET LOCAL lock_timeout='3s'"))
+            connection.execute(text("SET LOCAL statement_timeout='20000ms'"))
+            connection.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"),
+                {"key": "safereturn.template-auth-window-60h"},
             )
-            assert security_definer and config == ["search_path=pg_catalog"]
+            installed = revisions(connection)
+            if installed != BEFORE:
+                raise RuntimeError(
+                    f"Unexpected DB migration state {installed}; no update attempted"
+                )
+            before_auth = functions(connection)
+            assert [row[0] for row in before_auth] == sorted(FUNCTIONS)
+            assert all(
+                row[2] and row[3] == ["search_path=pg_catalog"]
+                for row in before_auth
+            )
+            for name, body, *_ in before_auth:
+                assert "sr_account_session_state" in body and "sr_is_staff" in body
+                assert "-amr>1200" in body or "-amr>300" in body
+                assert "-amr>216000" not in body
+            before_metadata = connection.execute(template_metadata).one()
 
-        connection.execute(sql.decode("utf-8"), prepare=False)
-        after = definitions(connection)
-        assert [row[2:] for row in after] == [row[2:] for row in before]
-        for name, body, *_ in after:
-            expected_body = expected[name].replace("-amr>1200", "-amr>216000").replace(
-                "-amr>300", "-amr>216000"
-            )
-            assert body.strip() == expected_body, (
-                f"Unexpected updated body for {name}"
-            )
-            assert "-amr>216000" in body and "-amr>1200" not in body
-        assert connection.execute(
-            "SELECT version_num FROM public.alembic_version ORDER BY version_num"
-        ).fetchall() == revisions
+            config.attributes["connection"] = connection
+            command.upgrade(config, REVISION)
 
-    result = {
-        "project": PROJECT,
-        "database_revision_unchanged": REVISION,
-        "updated_functions": [row[0] for row in after],
-        "owner_acl_search_path_and_security_definer_preserved": True,
-        "auth_age_seconds": 216000,
-        "alembic_revision_stamped": False,
-    }
+            assert revisions(connection) == AFTER
+            after_auth = functions(connection)
+            assert [row[2:] for row in after_auth] == [row[2:] for row in before_auth]
+            for old, new in zip(before_auth, after_auth, strict=True):
+                expected_body = old[1].replace("-amr>1200", "-amr>216000").replace(
+                    "-amr>300", "-amr>216000"
+                )
+                assert new[1].strip() == expected_body.strip()
+                assert "-amr>216000" in new[1]
+            assert connection.execute(template_metadata).one() == before_metadata
+            result.update(
+                applied_revisions=["0063_template_optional_urdu_compact_clearance", REVISION],
+                installed_revisions=AFTER,
+                updated_functions=[row[0] for row in after_auth],
+                function_security_metadata_preserved=True,
+                content_validator_metadata_preserved=True,
+                auth_age_seconds=216000,
+            )
+            transaction.commit()
+
+        with engine.connect() as connection:
+            assert revisions(connection) == AFTER
+            result["commit_verified"] = True
+    finally:
+        engine.dispose()
+
     receipt = ROOT / "tmp/template-activation/auth-window-60h-applied.json"
     receipt.parent.mkdir(parents=True, exist_ok=True)
     receipt.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
