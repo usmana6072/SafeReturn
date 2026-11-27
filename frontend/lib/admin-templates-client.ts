@@ -26,7 +26,7 @@ export function templateError(e: unknown, ur = false) {
     if (error.status === 401)
         return ur ? 'دوبارہ سائن ان کریں؛ درج شدہ ڈیزائن برقرار ہے۔' : 'Sign in again. Your unsaved design is retained.';
     if (error.code === 'REAUTH_REQUIRED')
-        return ur ? 'حساس کارروائی کے لیے دوبارہ تصدیق درکار ہے۔' : 'Recent authentication is required: all Print Template actions require authentication within 20 minutes. Reauthenticate using the existing sign-in/MFA flow, then review and retry. Your input is retained.';
+        return ur ? 'حساس کارروائی کے لیے دوبارہ تصدیق درکار ہے۔' : 'Recent authentication is required: Print Template actions require authentication within 3600 minutes (60 hours). Reauthenticate using the existing sign-in/MFA flow, then review and retry. Your input is retained.';
     if (error.code === 'PREVIEW_TIMEOUT') return 'The isolated preview worker exceeded its 60-second elapsed-time limit. Retry the same intent once; if repeated, inspect Render CPU/memory and worker logs. No preview or approval was produced.';
     if (error.code === 'PREVIEW_BUSY') return 'Another preview is running. Wait for it to finish, then retry the same intent.';
     if (error.code === 'PREVIEW_LAYOUT_INVALID') return 'The saved wording does not fit this sticker with the enrolled font and QR size. Shorten the heading or captions, increase the sticker or QR size, or reduce the number of text lines, then save and preview again.';

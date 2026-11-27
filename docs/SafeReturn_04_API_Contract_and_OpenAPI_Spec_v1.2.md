@@ -4,7 +4,7 @@
 
 ### Task5.1B exact delivered transport and remaining unavailable actions
 
-All paths below have `/api/v1` prefix. API300/302 reads explicitly allow operations/security_admin/superadmin with existing verified-account/live-session/MFA guards. API301/303/304/305/306 explicitly allow operations only, with existing signed-AMR recent authentication (300 seconds), final current authorization, and exact configured Origin if an Origin header is present. No role inheritance/grants. New `print_template_management_enabled` defaults false; no existing flag or configured credential changes. Missing pending0033 returns unavailable, not an empty registry success.
+All paths below have `/api/v1` prefix. API300/302 reads explicitly allow operations/security_admin/superadmin with existing verified-account/live-session/MFA guards. API301/303/304/305/306 explicitly allow operations only, with existing signed-AMR authentication no older than 216000 seconds (3600 minutes), final current authorization, and exact configured Origin if an Origin header is present. No role inheritance/grants. New `print_template_management_enabled` defaults false; no existing flag or configured credential changes. Missing pending0033 returns unavailable, not an empty registry success.
 
 | ID | Method/path | Closed request | Delivered behavior |
 |---|---|---|---|
