@@ -4,8 +4,8 @@ from pathlib import Path
 
 from alembic import op
 
-revision = "0064_template_auth_60_hours"
-down_revision = "0063_template_optional_urdu_compact_clearance"
+revision = "0064_template_auth_60h"
+down_revision = "0063_optional_urdu_compact"
 branch_labels = None
 depends_on = None
 
