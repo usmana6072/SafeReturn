@@ -33,6 +33,7 @@ from app.services.template_evidence import publication_proof, publisher
 
 PREVIEW_PLATFORM_SUPPORTED = sys.platform == "linux"
 
+
 class TemplateRoute(APIRoute):
     def get_route_handler(self):
         original = super().get_route_handler()
@@ -55,7 +56,11 @@ class TemplateRoute(APIRoute):
                     chunks = []
                     async for chunk in request.stream():
                         size += len(chunk)
-                        if size > (164000 if request.url.path.endswith("/qa-decision") else 32768):
+                        if size > (
+                            164000
+                            if request.url.path.endswith("/qa-decision")
+                            else 32768
+                        ):
                             fail(413, "FILE_TOO_LARGE")
                         chunks.append(chunk)
                     request._body = b"".join(chunks)
@@ -108,6 +113,7 @@ class ErrorBody(Closed):
         "PREVIEW_TIMEOUT",
         "PREVIEW_BUSY",
         "PREVIEW_WORKER_FAILED",
+        "PREVIEW_LAYOUT_INVALID",
         "TEMPLATE_MANAGEMENT_DISABLED",
         "TEMPLATE_ASSETS_UNAVAILABLE",
         "PREVIEW_ISOLATION_UNAVAILABLE",
@@ -311,10 +317,10 @@ def guard(context, request, *, write=False, draft=False):
     if write:
         recent_template_auth(context)
         origins = request.headers.getlist("origin")
-        web_origin = canonical_web_origin(request.app.state.settings.print_template_web_origin)
-        if origins and (
-            len(origins) != 1 or origins[0] != web_origin
-        ):
+        web_origin = canonical_web_origin(
+            request.app.state.settings.print_template_web_origin
+        )
+        if origins and (len(origins) != 1 or origins[0] != web_origin):
             fail(403, "TEMPLATE_ORIGIN_MISMATCH")
     if not request.app.state.settings.print_template_management_enabled:
         fail(503, "TEMPLATE_MANAGEMENT_DISABLED")
@@ -343,7 +349,9 @@ def command(context, request, action, body, *, prepare=None, **ids):
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     session = context.session
-    if action in {"publish", "bind", "retire", "manual_review_decide"} and not gate(session, exclusive=True):
+    if action in {"publish", "bind", "retire", "manual_review_decide"} and not gate(
+        session, exclusive=True
+    ):
         raise AccessError(503)
     if action in {"publish", "retire"}:
         publisher(context)
@@ -376,7 +384,12 @@ def command(context, request, action, body, *, prepare=None, **ids):
         if old:
             if old["request_hash"] != hashed:
                 fail(409, "IDEMPOTENCY_KEY_REUSED")
-            guard(authorize(context.session, context.principal), request, write=True, draft=draft_action)
+            guard(
+                authorize(context.session, context.principal),
+                request,
+                write=True,
+                draft=draft_action,
+            )
             return json.loads(
                 decrypt(
                     settings,
@@ -388,7 +401,12 @@ def command(context, request, action, body, *, prepare=None, **ids):
             )
         with session.begin_nested():
             result = TemplateRepository(context).call(action, payload | proof)
-            guard(authorize(context.session, context.principal), request, write=True, draft=draft_action)
+            guard(
+                authorize(context.session, context.principal),
+                request,
+                write=True,
+                draft=draft_action,
+            )
             envelope = {"command_id": str(uuid4()), "result": result}
             cipher, kv = encrypt(
                 settings, actor, "template:" + reference, json.dumps(envelope)
@@ -674,7 +692,17 @@ def proof(context, request, template_id, revision_id, expected, *, draft=True):
     try:
         data = isolated_preview(spec, root)
     except PrintUnavailable as exc:
-        code = {"preview_timeout": "PREVIEW_TIMEOUT", "preview_busy": "PREVIEW_BUSY", "asset_unavailable": "TEMPLATE_ASSETS_UNAVAILABLE", "unsafe_asset": "TEMPLATE_ASSETS_UNAVAILABLE", "asset_registry_unavailable": "TEMPLATE_ASSETS_UNAVAILABLE", "preview_failed": "PREVIEW_WORKER_FAILED"}.get(str(exc), "PREVIEW_WORKER_FAILED")
+        code = {
+            "preview_timeout": "PREVIEW_TIMEOUT",
+            "preview_busy": "PREVIEW_BUSY",
+            "asset_unavailable": "TEMPLATE_ASSETS_UNAVAILABLE",
+            "unsafe_asset": "TEMPLATE_ASSETS_UNAVAILABLE",
+            "asset_registry_unavailable": "TEMPLATE_ASSETS_UNAVAILABLE",
+            "preview_layout_invalid": "PREVIEW_LAYOUT_INVALID",
+            "preview_failed": "PREVIEW_WORKER_FAILED",
+        }.get(str(exc), "PREVIEW_WORKER_FAILED")
+        if code == "PREVIEW_LAYOUT_INVALID":
+            fail(422, code)
         fail(503, code)
     except (OSError, ValueError, KeyError):
         raise AccessError(503) from None
@@ -839,6 +867,7 @@ def install(application):
             response.headers["X-Content-Type-Options"] = "nosniff"
         return response
 
+
 class QAReviewView(Closed):
     review_id: UUID
     revision_id: UUID
@@ -874,7 +903,9 @@ class QADecision(Confirmed):
     decision: Literal["approved", "rejected"]
     expected_review_version: int = Field(ge=0, strict=True)
     preview_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
-    reason: str = Field(default="Staff recorded a manual print review", min_length=4, max_length=500)
+    reason: str = Field(
+        default="Staff recorded a manual print review", min_length=4, max_length=500
+    )
 
     @field_validator("reason")
     @classmethod
@@ -883,7 +914,11 @@ class QADecision(Confirmed):
 
 
 def review_available(context):
-    if not context.session.execute(text("SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('public.print_template_revisions') AND attname='manual_review_id' AND NOT attisdropped) AS template_qa_reviews_available")).scalar_one():
+    if not context.session.execute(
+        text(
+            "SELECT EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('public.print_template_revisions') AND attname='manual_review_id' AND NOT attisdropped) AS template_qa_reviews_available"
+        )
+    ).scalar_one():
         fail(503, "PROVIDER_UNAVAILABLE")
 
 
@@ -891,22 +926,39 @@ def review_available(context):
 def qa_status(template_id: UUID, revision_id: UUID, request: Request, context: Authenticated):
     require_staff(context, "operations")
     from app.db.template_registry import RegistryRepository
+
     guard(context, request)
     recent_template_auth(context)
     query(request, set())
     review_available(context)
-    return RegistryRepository(context).call("manual_review_status", {"template_id": str(template_id), "revision_id": str(revision_id)})
+    return RegistryRepository(context).call(
+        "manual_review_status",
+        {"template_id": str(template_id), "revision_id": str(revision_id)},
+    )
 
 
 @router.post("/admin/print-templates/{template_id}/revisions/{revision_id}/qa-decision", operation_id="API-312", response_model=QADecisionReceipt)
 def qa_decision(template_id: UUID, revision_id: UUID, body: QADecision, request: Request, context: Authenticated):
     require_staff(context, "operations")
     guard(context, request, write=True)
-    web_origin = canonical_web_origin(request.app.state.settings.print_template_web_origin)
+    web_origin = canonical_web_origin(
+        request.app.state.settings.print_template_web_origin
+    )
     if request.headers.getlist("origin") != [web_origin]:
         fail(403, "TEMPLATE_ORIGIN_MISMATCH")
     review_available(context)
-    result = command(context, request, "manual_review_decide", body, template_id=str(template_id), revision_id=str(revision_id))
+    result = command(
+        context,
+        request,
+        "manual_review_decide",
+        body,
+        template_id=str(template_id),
+        revision_id=str(revision_id),
+    )
     from app.db.template_registry import RegistryRepository
-    result["result"] = RegistryRepository(context).call("manual_review_status", {"template_id": str(template_id), "revision_id": str(revision_id)})
+
+    result["result"] = RegistryRepository(context).call(
+        "manual_review_status",
+        {"template_id": str(template_id), "revision_id": str(revision_id)},
+    )
     return result

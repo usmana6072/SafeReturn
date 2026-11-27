@@ -7,7 +7,7 @@ import { validateOrigin } from './transport';
 import { object, templateTarget, templateBody, templateQuery, templateResult, positive, type Action } from '../admin-templates-contract';
 import { parseResult as productResult } from '../admin-products-contract';
 const headers = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
-const codes = new Set(['PREVIEW_TIMEOUT', 'PREVIEW_BUSY', 'PREVIEW_WORKER_FAILED','AUTH_REQUIRED', 'FORBIDDEN', 'REAUTH_REQUIRED', 'NOT_FOUND', 'CONFLICT', 'IDEMPOTENCY_KEY_REUSED', 'VERSION_MISMATCH', 'FILE_TOO_LARGE', 'VALIDATION_ERROR', 'RATE_LIMITED', 'PROVIDER_UNAVAILABLE', 'TEMPLATE_MANAGEMENT_DISABLED', 'TEMPLATE_ASSETS_UNAVAILABLE', 'PREVIEW_ISOLATION_UNAVAILABLE', 'TEMPLATE_ORIGIN_MISMATCH']);
+const codes = new Set(['PREVIEW_TIMEOUT', 'PREVIEW_BUSY', 'PREVIEW_WORKER_FAILED', 'PREVIEW_LAYOUT_INVALID','AUTH_REQUIRED', 'FORBIDDEN', 'REAUTH_REQUIRED', 'NOT_FOUND', 'CONFLICT', 'IDEMPOTENCY_KEY_REUSED', 'VERSION_MISMATCH', 'FILE_TOO_LARGE', 'VALIDATION_ERROR', 'RATE_LIMITED', 'PROVIDER_UNAVAILABLE', 'TEMPLATE_MANAGEMENT_DISABLED', 'TEMPLATE_ASSETS_UNAVAILABLE', 'PREVIEW_ISOLATION_UNAVAILABLE', 'TEMPLATE_ORIGIN_MISMATCH']);
 async function bytes(message: Request | Response, max: number) { const reader = message.body?.getReader(); if (!reader)
     throw Error(); let size = 0; const parts: Uint8Array[] = []; try {
     for (;;) {

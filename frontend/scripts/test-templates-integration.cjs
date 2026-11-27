@@ -21,6 +21,7 @@ await status(send(base+'/'+tid+'/revisions','POST',{content:content(),version_no
 await status(send(rp,'PATCH',{content:content(),version_note:'Saved design'},1),200);
 await status(send(rp+'/preview','POST',{expected_revision:1},2),422);
 const pdf=await status(send(rp+'/preview','POST',{expected_revision:2},2),200);assert.equal(pdf.headers.get('content-type'),'application/pdf');assert.equal((await pdf.text()).slice(0,5),'%PDF-');
+s.status=503;s.errorCode='PREVIEW_LAYOUT_INVALID';const layout=await status(send(rp+'/preview','POST',{expected_revision:2},2),503);assert.equal((await layout.json()).error.code,'PREVIEW_LAYOUT_INVALID');s.status=0;s.errorCode=null;
 await status(send(rp+'/submit-qa','POST',{reason:'Ready for independent review'},2),200);
 await status(send(rp+'/publish','POST',{approval_id:tid,confirmed:true},3),422);
 await status(get('/admin/print-template-bindings',{variant_id:vid,tag_type:'lost'}),200);
