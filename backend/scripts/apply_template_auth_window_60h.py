@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PROJECT = "fhuxryfkfrvycsojkzvq"
 REVISION = "0043_standalone_activation"
 SQL_PATH = ROOT / "backend/alembic/versions/0064_template_auth_60_hours.sql"
-SQL_SHA256 = "2b4d5b6c60a801344df0f448eb08a9890e79ba3d7fe999e5aae5c0398fd77ff1"
+SQL_SHA256 = "0c6b34df745d33c4cdf5fb836787c83bab393163e8e50ed253c9e6c42b64a0fe"
 FUNCTIONS = (
     "sr_template_draft_service_v33",
     "sr_template_preview_admit",
@@ -67,7 +67,10 @@ def main():
         "700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7"
     )
     sql = SQL_PATH.read_bytes().replace(b"\r\n", b"\n")
-    assert hashlib.sha256(sql).hexdigest() == SQL_SHA256
+    actual_sql_sha256 = hashlib.sha256(sql).hexdigest()
+    assert actual_sql_sha256 == SQL_SHA256, (
+        f"Reviewed SQL checksum mismatch: {actual_sql_sha256}"
+    )
     expected = expected_bodies()
     password = unquote(target.password)
     with psycopg.connect(
