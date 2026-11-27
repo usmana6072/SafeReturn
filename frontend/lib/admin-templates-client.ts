@@ -5,8 +5,21 @@ export class TemplateApiError extends Error {
     constructor(public status: number, public code = 'PROVIDER_UNAVAILABLE') { super('Template request failed'); }
 }
 export function templateError(e: unknown, ur = false) {
-    if (e instanceof TemplateValidation)
+    if (e instanceof TemplateValidation) {
+        const geometry: Record<string, string> = {
+            symbol_mm: 'QR size must be 20–100 mm.',
+            width_mm: 'Sticker width must be 30–190 mm.',
+            height_mm: 'Sticker height must be 50–270 mm.',
+            qr_x_mm: 'Move the QR left position so the symbol has a 4 mm side margin and fits inside the sticker.',
+            qr_y_mm: 'Move the QR up enough to fit inside the sticker and leave room for its caption.',
+            logo_mm: 'Logo must be at most 6 mm and no more than 15% of the QR size.',
+            min_pitch_mm: 'Minimum QR module pitch must be at least 0.30 mm.',
+            font_pt: 'Text size must be 8–14 pt.',
+            caption_layout: 'The caption does not fit below the QR. Raise the QR, reduce text size, or use fewer text lines.',
+        };
+        if (geometry[e.field]) return geometry[e.field];
         return (ur ? 'فیلڈ چیک کریں: ' : 'Check field: ') + e.field;
+    }
     if (e instanceof SyntaxError)
         return ur ? 'درست JSON درج کریں۔' : 'Content JSON is invalid. Correct the JSON syntax before saving.';
     const error = e instanceof TemplateApiError ? e : new TemplateApiError(503);
