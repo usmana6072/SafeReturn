@@ -351,7 +351,8 @@ def test_template_accepts_reduced_minimum_dimensions():
             "height_mm": "50.00",
             "qr_x_mm": "5.00",
             "qr_y_mm": "13.00",
-            "logo_mm": "3.50",
+            # The logo remains at or below 15% of the reduced QR symbol.
+            "logo_mm": "3.00",
         }
     )
 
@@ -361,7 +362,7 @@ def test_template_accepts_reduced_minimum_dimensions():
         template.height_mm,
         template.qr_y_mm,
         template.logo_mm,
-    ) == ("20.00", "30.00", "50.00", "13.00", "3.50")
+    ) == ("20.00", "30.00", "50.00", "13.00", "3.00")
 
 
 def test_renderer_mapping_and_authoritative_fingerprint():

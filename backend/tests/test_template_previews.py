@@ -60,6 +60,25 @@ def test_real_synthetic_renderer_private_bounded_and_fixed_token(synthetic_asset
         ]
 
 
+def test_real_synthetic_renderer_accepts_compact_sticker_geometry(synthetic_assets):
+    spec, root = synthetic_assets
+    spec["content"] = content() | {
+        "symbol_mm": "20.00",
+        "width_mm": "30.00",
+        "height_mm": "50.00",
+        "qr_x_mm": "5.00",
+        "qr_y_mm": "13.00",
+        "logo_mm": "3.00",
+        "font_pt": "8.00",
+        "english_lines": ["Scan me"],
+        "urdu_lines": ["اسکین کریں"],
+    }
+    data = preview_core.render_synthetic(spec, root)
+    pdf = PdfReader(io.BytesIO(data))
+    assert len(pdf.pages) == 1
+    assert data.startswith(b"%PDF-")
+
+
 @pytest.mark.parametrize("case", ["outside", "remote", "hash", "oversize", "markup"])
 def test_preview_rejects_unsafe_registry_assets(synthetic_assets, case):
     spec, root = synthetic_assets
