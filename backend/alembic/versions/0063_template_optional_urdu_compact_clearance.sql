@@ -18,7 +18,7 @@ BEGIN
  OR (c->>'min_pitch_mm')::numeric<0.3 OR (c->>'font_pt')::numeric NOT BETWEEN 8 AND 14
  OR (c->>'qr_x_mm')::numeric+(c->>'symbol_mm')::numeric>(c->>'width_mm')::numeric-4
  OR (c->>'qr_y_mm')::numeric+(c->>'symbol_mm')::numeric>(c->>'height_mm')::numeric-
-    CASE c->>'preset' WHEN 'fixed-footer-v2' THEN 8 ELSE 12 END THEN RETURN false; END IF;
+    (CASE c->>'preset' WHEN 'fixed-footer-v2' THEN 8 ELSE 12 END) THEN RETURN false; END IF;
  IF jsonb_typeof(c->'header')<>'string' OR char_length(c->>'header') NOT BETWEEN 1 AND 50 THEN RETURN false; END IF;
  FOREACH field IN ARRAY ARRAY['english_lines','urdu_lines','material_codes'] LOOP
   IF jsonb_typeof(c->field)<>'array' OR jsonb_array_length(c->field) NOT BETWEEN
