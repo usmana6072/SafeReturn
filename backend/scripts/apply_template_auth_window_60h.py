@@ -92,9 +92,10 @@ def main():
         revisions = connection.execute(
             "SELECT version_num FROM public.alembic_version ORDER BY version_num"
         ).fetchall()
-        assert revisions == [(REVISION,)], (
-            "Unexpected DB migration state; no update attempted"
-        )
+        if revisions != [(REVISION,)]:
+            raise RuntimeError(
+                f"Unexpected DB migration state {revisions}; no update attempted"
+            )
         before = definitions(connection)
         assert [row[0] for row in before] == sorted(FUNCTIONS)
         for name, body, security_definer, config, _owner, _acl in before:
