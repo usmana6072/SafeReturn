@@ -14,7 +14,7 @@ export type TemplateRecord = {
 export type Design = {
     schema_version: 1;
     renderer: 'safereturn-vector-v1';
-    preset: 'fixed-footer-v1';
+    preset: 'fixed-footer-v1' | 'fixed-footer-v2';
     symbol_mm: string;
     width_mm: string;
     height_mm: string;
@@ -92,7 +92,7 @@ export function cursor(v: unknown): string | null { if (v === null)
 export function design(v: unknown): Design {
     const o = object(v), dims = ['symbol_mm', 'width_mm', 'height_mm', 'qr_x_mm', 'qr_y_mm', 'logo_mm', 'min_pitch_mm', 'font_pt'];
     exact(o, ['schema_version', 'renderer', 'preset', ...dims, 'header', 'english_lines', 'urdu_lines', 'asset_set_id', 'material_codes']);
-    if (o.schema_version !== 1 || o.renderer !== 'safereturn-vector-v1' || o.preset !== 'fixed-footer-v1')
+    if (o.schema_version !== 1 || o.renderer !== 'safereturn-vector-v1' || !['fixed-footer-v1', 'fixed-footer-v2'].includes(String(o.preset)))
         bad('renderer');
     const n: Record<string, number> = {};
     for (const key of dims) {
@@ -111,14 +111,15 @@ export function design(v: unknown): Design {
     if (n.min_pitch_mm < 0.3) bad('min_pitch_mm');
     if (n.font_pt < 8 || n.font_pt > 14) bad('font_pt');
     for (const key of ['english_lines', 'urdu_lines']) {
-        if (!Array.isArray(o[key]) || (o[key] as unknown[]).length < 1 || (o[key] as unknown[]).length > 4)
+        if (!Array.isArray(o[key]) || (o[key] as unknown[]).length < (key === 'urdu_lines' ? 0 : 1) || (o[key] as unknown[]).length > 4)
             bad(key);
         (o[key] as unknown[]).forEach(v => plain(v, key, 120));
     }
     if ((o.urdu_lines as string[]).some(s => /[A-Za-z0-9]/.test(s)))
         bad('urdu_lines');
     if (n.qr_x_mm + n.symbol_mm > n.width_mm - 4) bad('qr_x_mm');
-    if (n.qr_y_mm + n.symbol_mm > n.height_mm - 12) bad('qr_y_mm');
+    const topClearance = o.preset === 'fixed-footer-v2' ? 8 : 12;
+    if (n.qr_y_mm + n.symbol_mm > n.height_mm - topClearance) bad('qr_y_mm');
     if (n.logo_mm > n.symbol_mm * 0.15) bad('logo_mm');
     if (n.qr_y_mm - 4 - n.font_pt * 1.5 / 2.8346456693 * ((o.english_lines as string[]).length + (o.urdu_lines as string[]).length - 1) < 4) bad('caption_layout');
     if (!Array.isArray(o.material_codes) || o.material_codes.length < 1 || o.material_codes.length > 10 || o.material_codes.some(v => typeof v !== 'string' || !(/^[a-z0-9_-]{1,40}$/.test(v))) || JSON.stringify(o.material_codes) !== JSON.stringify([...new Set(o.material_codes)].sort()))

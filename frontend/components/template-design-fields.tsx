@@ -2,8 +2,8 @@
 import type { Design } from '../lib/admin-templates-contract';
 
 export const selectedStickerDesign: Design = {
- schema_version:1,renderer:'safereturn-vector-v1',preset:'fixed-footer-v1',
- symbol_mm:'30.00',width_mm:'40.00',height_mm:'60.00',qr_x_mm:'5.00',qr_y_mm:'18.00',
+ schema_version:1,renderer:'safereturn-vector-v1',preset:'fixed-footer-v2',
+ symbol_mm:'30.00',width_mm:'40.00',height_mm:'60.00',qr_x_mm:'5.00',qr_y_mm:'22.00',
  logo_mm:'4.00',min_pitch_mm:'0.30',font_pt:'8.00',header:'SafeReturn',
  english_lines:['Found? Scan me.'],urdu_lines:['ملا ہے؟ اسکین کریں'],
  asset_set_id:'0a7c508b-fc96-42d6-ba58-e367dbb8d08b',material_codes:['vinyl'],
@@ -13,7 +13,7 @@ export function TemplateDesignFields({content,onChange,readOnly,purpose}:{conten
  let parsed:Partial<Design>={};let invalid=false;
  try{const p=JSON.parse(content);if(!p||typeof p!=='object'||Array.isArray(p))invalid=true;else parsed=p;}catch{invalid=true;}
  const assetSetId=typeof parsed.asset_set_id==='string'&&parsed.asset_set_id?parsed.asset_set_id:selectedStickerDesign.asset_set_id;
- function change(key:keyof Design,value:unknown){onChange(JSON.stringify({schema_version:1,renderer:'safereturn-vector-v1',preset:'fixed-footer-v1',...parsed,asset_set_id:parsed.asset_set_id??selectedStickerDesign.asset_set_id,[key]:value},null,2));}
+ function change(key:keyof Design,value:unknown){onChange(JSON.stringify({schema_version:1,renderer:'safereturn-vector-v1',preset:parsed.preset??selectedStickerDesign.preset,...parsed,asset_set_id:parsed.asset_set_id??selectedStickerDesign.asset_set_id,[key]:value},null,2));}
  const text=(key:keyof Design)=>typeof parsed[key]==='string'?parsed[key] as string:'';
  const lines=(key:'english_lines'|'urdu_lines'|'material_codes')=>Array.isArray(parsed[key])&&parsed[key]!.every(v=>typeof v==='string')?parsed[key]!:[];
  const dimensions=[['width_mm','Sticker width (mm)'],['height_mm','Sticker height (mm)'],['symbol_mm','QR size (mm)'],['qr_x_mm','QR left position (mm)'],['qr_y_mm','QR bottom position (mm)'],['logo_mm','Logo size (mm)'],['font_pt','Text size (pt)'],['min_pitch_mm','Minimum QR module pitch (mm)']] as const;
@@ -24,8 +24,9 @@ export function TemplateDesignFields({content,onChange,readOnly,purpose}:{conten
  {invalid?<p role="status">Advanced JSON is invalid. Correct it below or load the selected Lost design. Your text has been retained.</p>:<fieldset disabled={readOnly} className="grid gap-3 md:grid-cols-2"><legend>Sticker dimensions and text</legend>
  {dimensions.map(([key,label])=><label key={key}>{label}<input aria-label={label} inputMode="decimal" value={typeof parsed[key]==='string'?parsed[key]:''} onChange={e=>change(key,e.target.value)}/></label>)}
  <label>Heading<input aria-label="Sticker heading" maxLength={50} value={text('header')} onChange={e=>change('header',e.target.value)}/></label>
+ <label>QR top clearance<select aria-label="QR top clearance" value={parsed.preset??selectedStickerDesign.preset} onChange={e=>change('preset',e.target.value)}><option value="fixed-footer-v1">12 mm (legacy layout)</option><option value="fixed-footer-v2">8 mm (compact layout)</option></select></label>
  <label>English text (one line per row)<textarea aria-label="English sticker text" rows={2} value={lines('english_lines').join('\n')} onChange={e=>change('english_lines',e.target.value.split('\n'))}/></label>
- <label>Urdu text (one line per row)<textarea aria-label="Urdu sticker text" dir="rtl" rows={2} value={lines('urdu_lines').join('\n')} onChange={e=>change('urdu_lines',e.target.value.split('\n'))}/></label>
+ <label>Urdu text (optional, one line per row)<textarea aria-label="Urdu sticker text (optional)" dir="rtl" rows={2} value={lines('urdu_lines').join('\n')} onChange={e=>change('urdu_lines',e.target.value===''?[]:e.target.value.split('\n'))}/></label>
  <label>Materials (comma separated)<input aria-label="Sticker materials" value={lines('material_codes').join(', ')} onChange={e=>change('material_codes',[...new Set(e.target.value.split(',').map(v=>v.trim()).filter(Boolean))].sort())}/></label>
  <label>Font and logo asset set<select aria-label="Font and logo asset set" value={assetSetId} onChange={e=>change('asset_set_id',e.target.value)}><option value={selectedStickerDesign.asset_set_id}>Amiri font + SafeReturn logo (enrolled development set)</option>{assetSetId!==selectedStickerDesign.asset_set_id&&<option value={assetSetId}>Current asset set ({assetSetId})</option>}</select></label>
  </fieldset>}

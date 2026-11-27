@@ -107,12 +107,13 @@ class Template(Closed):
     height_mm: float = Field(ge=50, le=270)
     qr_x_mm: float = Field(ge=4)
     qr_y_mm: float = Field(ge=13)
+    top_clearance_mm: Literal[8, 12] = 12
     logo_mm: float = Field(gt=0, le=6)
     min_pitch_mm: float = Field(ge=0.3)
     font_pt: float = Field(ge=8, le=14)
     header: str = Field(min_length=1, max_length=50)
     english_lines: list[str] = Field(min_length=1, max_length=4)
-    urdu_lines: list[str] = Field(min_length=1, max_length=4)
+    urdu_lines: list[str] = Field(max_length=4)
 
 
 class Bundle(Closed):
@@ -159,7 +160,7 @@ def load_bundle(settings):
         data = p.read_bytes()
         if hashlib.sha256(data).hexdigest() != settings.print_template_bundle_sha256:
             raise ValueError()
-        b = Bundle.model_validate_json(data).model_dump()
+        b = Bundle.model_validate_json(data).model_dump(exclude_defaults=True)
         u = urlsplit(b["origin"])
         if (
             u.scheme != "https"
@@ -182,9 +183,11 @@ def load_bundle(settings):
             if signature in signatures:
                 raise ValueError()
             signatures.add(signature)
+            top_clearance = t.get("top_clearance_mm", 12)
             if (
                 t["qr_x_mm"] + t["symbol_mm"] > t["width_mm"] - 4
-                or t["qr_y_mm"] + t["symbol_mm"] > t["height_mm"] - 12
+                or t["qr_y_mm"] + t["symbol_mm"]
+                > t["height_mm"] - top_clearance
                 or t["logo_mm"] > t["symbol_mm"] * 0.15
             ):
                 raise ValueError()
@@ -358,14 +361,15 @@ def render_pdf(manifest, *, asset_root=None):
                 c.setStrokeColorRGB(0.1, 0.15, 0.17)
                 c.setLineWidth(0.3)
                 c.rect(0, 0, width * mm, height * mm)
+                compact_header = t.get("top_clearance_mm", 12) == 8
                 c.setFillColorRGB(0.03, 0.22, 0.23) if t[
                     "tag_type"
                 ] == "lost" else c.setFillColorRGB(0.5, 0.1, 0.12)
                 c.rect(
                     2 * mm,
-                    (height - 9) * mm,
+                    (height - (7 if compact_header else 9)) * mm,
                     (width - 4) * mm,
-                    7 * mm,
+                    (5 if compact_header else 7) * mm,
                     stroke=0,
                     fill=1,
                 )
@@ -376,7 +380,11 @@ def render_pdf(manifest, *, asset_root=None):
                     > (width - 8) * mm
                 ):
                     raise PrintUnavailable("header_overflow")
-                c.drawCentredString(width * mm / 2, (height - 6.5) * mm, t["header"])
+                c.drawCentredString(
+                    width * mm / 2,
+                    (height - (4.5 if compact_header else 6.5)) * mm,
+                    t["header"],
+                )
                 qx = t["qr_x_mm"]
                 qy = t["qr_y_mm"]
                 size = t["symbol_mm"]

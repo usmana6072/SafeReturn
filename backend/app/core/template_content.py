@@ -33,7 +33,7 @@ def plain(value: str) -> str:
 class Content(Closed):
     schema_version: Literal[1]
     renderer: Literal["safereturn-vector-v1"]
-    preset: Literal["fixed-footer-v1"]
+    preset: Literal["fixed-footer-v1", "fixed-footer-v2"]
     symbol_mm: Millimeters
     width_mm: Millimeters
     height_mm: Millimeters
@@ -44,7 +44,7 @@ class Content(Closed):
     font_pt: Millimeters
     header: str = Field(min_length=1, max_length=50)
     english_lines: list[Line] = Field(min_length=1, max_length=4)
-    urdu_lines: list[Line] = Field(min_length=1, max_length=4)
+    urdu_lines: list[Line] = Field(default_factory=list, max_length=4)
     asset_set_id: UUID
     material_codes: list[Annotated[str, Field(pattern=r"^[a-z0-9_-]{1,40}$")]] = Field(
         min_length=1, max_length=10
@@ -86,10 +86,11 @@ class Content(Closed):
             if not Decimal(0) < Decimal(getattr(self, name)) <= Decimal(270):
                 raise ValueError("Invalid geometry bound")
         t = self.renderer_template("validation", 1, "lost")
+        top_clearance = Decimal(str(t.top_clearance_mm))
         if (
             Decimal(self.qr_x_mm) + Decimal(self.symbol_mm) > Decimal(self.width_mm) - 4
             or Decimal(self.qr_y_mm) + Decimal(self.symbol_mm)
-            > Decimal(self.height_mm) - 12
+            > Decimal(self.height_mm) - top_clearance
             or Decimal(self.logo_mm) > Decimal(self.symbol_mm) * Decimal("0.15")
             or Decimal(self.qr_y_mm)
             - 4
@@ -103,10 +104,16 @@ class Content(Closed):
         return self
 
     def renderer_template(self, key: str, version: int, purpose: str) -> Template:
-        fields = set(Template.model_fields) - {"key", "version", "tag_type"}
+        fields = set(Template.model_fields) - {
+            "key",
+            "version",
+            "tag_type",
+            "top_clearance_mm",
+        }
         return Template.model_validate(
             {"key": key, "version": version, "tag_type": purpose}
             | {name: getattr(self, name) for name in fields}
+            | {"top_clearance_mm": 8 if self.preset == "fixed-footer-v2" else 12}
         )
 
     def fingerprint(self, key, version, purpose, assets):
