@@ -173,7 +173,7 @@ def registry_manifest(specs, rows):
             templates.append(
                 Content.model_validate(s["content"])
                 .renderer_template(s["key"], s["version"], s["tag_type"])
-                .model_dump()
+                .model_dump(exclude_defaults=True)
             )
             seen.add(identity)
     first = specs[0]
