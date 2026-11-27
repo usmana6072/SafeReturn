@@ -5,7 +5,7 @@ from pathlib import Path
 from alembic import op
 
 revision = "0063_template_optional_urdu_compact_clearance"
-down_revision = "0062_template_geometry_minimums"
+down_revision = "0061_delivery_print_cleanup"
 branch_labels = None
 depends_on = None
 
