@@ -29,6 +29,7 @@ export function templateError(e: unknown, ur = false) {
         return ur ? 'حساس کارروائی کے لیے دوبارہ تصدیق درکار ہے۔' : 'Recent authentication is required: all Print Template actions require authentication within 20 minutes. Reauthenticate using the existing sign-in/MFA flow, then review and retry. Your input is retained.';
     if (error.code === 'PREVIEW_TIMEOUT') return 'The isolated preview worker exceeded its 60-second elapsed-time limit. Retry the same intent once; if repeated, inspect Render CPU/memory and worker logs. No preview or approval was produced.';
     if (error.code === 'PREVIEW_BUSY') return 'Another preview is running. Wait for it to finish, then retry the same intent.';
+    if (error.code === 'PREVIEW_LAYOUT_INVALID') return 'The saved wording does not fit this sticker with the enrolled font and QR size. Shorten the heading or captions, increase the sticker or QR size, or reduce the number of text lines, then save and preview again.';
     if (error.code === 'PREVIEW_WORKER_FAILED') return 'The isolated preview worker failed. Check the deployed worker/assets and Render logs; no preview or approval was produced.';
     if (error.code === 'TEMPLATE_MANAGEMENT_DISABLED')
         return 'Print Template Management is disabled in this backend environment. Reauthentication will not enable it.';

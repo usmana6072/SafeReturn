@@ -155,6 +155,28 @@ def test_preview_http_and_qa_submission_real_orchestration(
     assert db.admissions == 2
 
 
+def test_preview_layout_failure_has_actionable_safe_error(
+    env, synthetic_assets, monkeypatch
+):
+    client, db, headers, settings = env
+    monkeypatch.setattr("app.api.v1.print_templates.PREVIEW_PLATFORM_SUPPORTED", True)
+    db.preview_spec, settings.print_template_asset_root = synthetic_assets
+
+    def invalid_layout(*args):
+        raise PrintUnavailable("preview_layout_invalid")
+
+    monkeypatch.setattr("app.api.v1.print_templates.isolated_preview", invalid_layout)
+    response = client.post(
+        BASE + f"/{TID}/revisions/{RID}/preview",
+        json={"expected_revision": 1},
+        headers=headers(),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "PREVIEW_LAYOUT_INVALID"
+    assert db.admissions == 1
+
+
 @pytest.mark.parametrize(
     "admission,status",
     [("RATE_LIMITED", 429), ("FORBIDDEN", 403), ("IDEMPOTENCY_KEY_REUSED", 409)],
@@ -243,18 +265,42 @@ def test_worker_failure_logs_safe_reason_and_returns_generic_error(
         lambda *args, **kwargs: process,
     )
 
-    with pytest.raises(PrintUnavailable, match="preview_failed"):
+    with pytest.raises(PrintUnavailable, match="preview_layout_invalid"):
         preview_core.isolated_preview(spec, root)
 
     assert "reason=caption_overflow" in caplog.text
     assert "Synthetic Lost" not in caplog.text
 
 
+def test_unclassified_worker_failure_remains_generic(synthetic_assets, monkeypatch):
+    spec, root = synthetic_assets
+    monkeypatch.setattr(
+        preview_core,
+        "sys",
+        SimpleNamespace(platform="linux", executable=sys.executable),
+    )
+    process = SimpleNamespace(returncode=1)
+    process.communicate = lambda data=None, timeout=None: (
+        preview_core.WORKER_ERROR_PREFIX + b"MemoryError",
+        None,
+    )
+    monkeypatch.setattr(
+        preview_core.subprocess, "Popen", lambda *args, **kwargs: process
+    )
+
+    with pytest.raises(PrintUnavailable, match="preview_failed"):
+        preview_core.isolated_preview(spec, root)
+
+
 def test_unsupported_preview_isolation_rejected_before_admission(env, monkeypatch):
     client, db, headers, settings = env
-    settings.print_template_asset_root = 'configured-test-root'
-    monkeypatch.setattr('app.api.v1.print_templates.PREVIEW_PLATFORM_SUPPORTED', False)
-    response = client.post(BASE + f'/{TID}/revisions/{RID}/preview', json={'expected_revision':1}, headers=headers())
+    settings.print_template_asset_root = "configured-test-root"
+    monkeypatch.setattr("app.api.v1.print_templates.PREVIEW_PLATFORM_SUPPORTED", False)
+    response = client.post(
+        BASE + f"/{TID}/revisions/{RID}/preview",
+        json={"expected_revision": 1},
+        headers=headers(),
+    )
     assert response.status_code == 503
-    assert response.json()['error']['code'] == 'PREVIEW_ISOLATION_UNAVAILABLE'
+    assert response.json()["error"]["code"] == "PREVIEW_ISOLATION_UNAVAILABLE"
     assert db.admissions == 0

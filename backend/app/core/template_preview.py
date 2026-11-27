@@ -21,6 +21,14 @@ CAPACITY = threading.BoundedSemaphore(1)
 MAX_OUTPUT = 2 * 1024 * 1024
 PREVIEW_WALL_TIMEOUT_SECONDS = 60
 WORKER_ERROR_PREFIX = b"SAFERETURN_PREVIEW_ERROR:"
+LAYOUT_FAILURES = {
+    "caption_overflow",
+    "caption_unrenderable",
+    "header_overflow",
+    "missing_urdu_glyph",
+    "mixed_direction_caption",
+    "qr_density_unapproved",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -124,6 +132,8 @@ def isolated_preview(spec, root):
                 process.returncode,
                 worker_code,
             )
+            if worker_code in LAYOUT_FAILURES:
+                raise PrintUnavailable("preview_layout_invalid")
             raise PrintUnavailable("preview_failed")
         if not data.startswith(b"%PDF-") or len(data) > MAX_OUTPUT:
             logger.error(
