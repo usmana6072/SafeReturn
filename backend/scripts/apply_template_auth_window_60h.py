@@ -15,8 +15,8 @@ from sqlalchemy import create_engine, text
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = "fhuxryfkfrvycsojkzvq"
 BEFORE = ["0044_support_dev_exception", "0062_template_geometry_minimums"]
-AFTER = ["0044_support_dev_exception", "0064_template_auth_60_hours"]
-REVISION = "0064_template_auth_60_hours"
+AFTER = ["0044_support_dev_exception", "0064_template_auth_60h"]
+REVISION = "0064_template_auth_60h"
 FUNCTIONS = (
     "sr_template_draft_service_v33",
     "sr_template_preview_admit",
@@ -71,11 +71,11 @@ def main():
     from alembic.script import ScriptDirectory
 
     script = ScriptDirectory.from_config(config)
-    assert script.get_revision("0063_template_optional_urdu_compact_clearance").down_revision == (
+    assert script.get_revision("0063_optional_urdu_compact").down_revision == (
         "0062_template_geometry_minimums"
     )
     assert script.get_revision(REVISION).down_revision == (
-        "0063_template_optional_urdu_compact_clearance"
+        "0063_optional_urdu_compact"
     )
 
     engine = create_engine(
@@ -133,7 +133,7 @@ def main():
                 assert "-amr>216000" in new[1]
             assert connection.execute(template_metadata).one() == before_metadata
             result.update(
-                applied_revisions=["0063_template_optional_urdu_compact_clearance", REVISION],
+                applied_revisions=["0063_optional_urdu_compact", REVISION],
                 installed_revisions=AFTER,
                 updated_functions=[row[0] for row in after_auth],
                 function_security_metadata_preserved=True,
