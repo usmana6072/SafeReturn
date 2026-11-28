@@ -14,7 +14,7 @@ export default async function Home(){
  return <div className="home-page">
  <a href="#main" className="skip-link">{t.skip}</a>
  <header className="site-header home-header"><div className="home-container header-inner">
- <a className="brand home-brand" href="/" aria-label="SafeReturn"><img src="/brand/safereturn_logo.svg" alt="" width="34" height="34"/><bdi>SafeReturn</bdi></a>
+ <a className="brand home-brand" href="/" aria-label="SafeReturn"><img src="/icon-192.png" alt="" width="34" height="34"/><bdi>SafeReturn</bdi></a>
  <nav className="desktop-nav" aria-label={t.menu}>{links}</nav>
  <form action={changeLanguage}><input type="hidden" name="language" value={ur?"en":"ur"}/><button className="language-button" lang={ur?"en":"ur"}>{ur?"English":"اردو"}</button></form>
  <HomeMenu label={t.menu}>{links}<a className="home-menu-shop" href="/shop">{h.navShop}<HomeIcon name="arrow"/></a></HomeMenu>
@@ -37,6 +37,6 @@ export default async function Home(){
  <section className="home-container home-closing"><div><p className="home-eyebrow">{h.closingEyebrow}</p><h2>{h.closingTitle}</h2><p>{h.closingText}</p></div><a className="home-button" href="/shop">{h.navShop}<HomeIcon name="arrow"/></a></section>
  <aside className="home-container home-safety"><HomeIcon name="shield"/><p>{t.safety}</p></aside>
  </main>
- <footer className="home-footer"><div className="home-container home-footer-main"><div><a className="brand home-brand" href="/"><img src="/brand/safereturn_logo.svg" width="32" height="32" alt=""/><bdi>SafeReturn</bdi></a><p>{t.footer}</p><small>{h.footerPurpose}</small></div><nav aria-label={h.footerNavigate}><strong>{h.footerNavigate}</strong><a href="#stickers">{t.products}</a><a href="#how-it-works">{t.how}</a><a href="#faq">{t.help}</a></nav><nav aria-label={h.footerAccount}><strong>{h.footerAccount}</strong><a href="/account">{h.account}</a><a href="/shop">{h.navShop}</a><a href="/help">{h.support}</a><a href="/login">{h.login}</a></nav></div><div className="home-container home-footer-bottom"><small><bdi>© 2026 SafeReturn</bdi></small><small>English · اردو</small></div></footer>
+ <footer className="home-footer"><div className="home-container home-footer-main"><div><a className="brand home-brand" href="/"><img src="/icon-192.png" width="32" height="32" alt=""/><bdi>SafeReturn</bdi></a><p>{t.footer}</p><small>{h.footerPurpose}</small></div><nav aria-label={h.footerNavigate}><strong>{h.footerNavigate}</strong><a href="#stickers">{t.products}</a><a href="#how-it-works">{t.how}</a><a href="#faq">{t.help}</a></nav><nav aria-label={h.footerAccount}><strong>{h.footerAccount}</strong><a href="/account">{h.account}</a><a href="/shop">{h.navShop}</a><a href="/help">{h.support}</a><a href="/login">{h.login}</a></nav></div><div className="home-container home-footer-bottom"><small><bdi>© 2026 SafeReturn</bdi></small><small>English · اردو</small></div></footer>
  </div>;
 }

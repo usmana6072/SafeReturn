@@ -14,7 +14,7 @@ export type TemplateRecord = {
 export type Design = {
     schema_version: 1;
     renderer: 'safereturn-vector-v1';
-    preset: 'fixed-footer-v1' | 'fixed-footer-v2';
+    preset: 'fixed-footer-v1' | 'fixed-footer-v2' | 'qr-only-v3';
     symbol_mm: string;
     width_mm: string;
     height_mm: string;
@@ -92,7 +92,7 @@ export function cursor(v: unknown): string | null { if (v === null)
 export function design(v: unknown): Design {
     const o = object(v), dims = ['symbol_mm', 'width_mm', 'height_mm', 'qr_x_mm', 'qr_y_mm', 'logo_mm', 'min_pitch_mm', 'font_pt'];
     exact(o, ['schema_version', 'renderer', 'preset', ...dims, 'header', 'english_lines', 'urdu_lines', 'asset_set_id', 'material_codes']);
-    if (o.schema_version !== 1 || o.renderer !== 'safereturn-vector-v1' || !['fixed-footer-v1', 'fixed-footer-v2'].includes(String(o.preset)))
+    if (o.schema_version !== 1 || o.renderer !== 'safereturn-vector-v1' || !['fixed-footer-v1', 'fixed-footer-v2', 'qr-only-v3'].includes(String(o.preset)))
         bad('renderer');
     const n: Record<string, number> = {};
     for (const key of dims) {
@@ -102,26 +102,34 @@ export function design(v: unknown): Design {
         if (n[key] <= 0 || n[key] > 270)
             bad(key);
     }
-    if (n.symbol_mm < 20 || n.symbol_mm > 100) bad('symbol_mm');
-    if (n.width_mm < 30 || n.width_mm > 190) bad('width_mm');
-    if (n.height_mm < 50 || n.height_mm > 270) bad('height_mm');
-    if (n.qr_x_mm < 4) bad('qr_x_mm');
-    if (n.qr_y_mm < 13) bad('qr_y_mm');
+    const compact = o.preset === 'qr-only-v3';
+    if (n.symbol_mm < (compact ? 15 : 20) || n.symbol_mm > 100) bad('symbol_mm');
+    if (n.width_mm < (compact ? 25 : 30) || n.width_mm > 190) bad('width_mm');
+    if (n.height_mm < (compact ? 20 : 50) || n.height_mm > 270) bad('height_mm');
+    if (n.qr_x_mm < (compact ? 0.5 : 4)) bad('qr_x_mm');
+    if (n.qr_y_mm < (compact ? 0.3 : 13)) bad('qr_y_mm');
     if (n.logo_mm > 6) bad('logo_mm');
     if (n.min_pitch_mm < 0.3) bad('min_pitch_mm');
-    if (n.font_pt < 8 || n.font_pt > 14) bad('font_pt');
+    if (n.font_pt < (compact ? 4.5 : 8) || n.font_pt > 14) bad('font_pt');
     for (const key of ['english_lines', 'urdu_lines']) {
-        if (!Array.isArray(o[key]) || (o[key] as unknown[]).length < (key === 'urdu_lines' ? 0 : 1) || (o[key] as unknown[]).length > 4)
+        if (!Array.isArray(o[key]) || (o[key] as unknown[]).length > 4)
             bad(key);
         (o[key] as unknown[]).forEach(v => plain(v, key, 120));
     }
     if ((o.urdu_lines as string[]).some(s => /[A-Za-z0-9]/.test(s)))
         bad('urdu_lines');
-    if (n.qr_x_mm + n.symbol_mm > n.width_mm - 4) bad('qr_x_mm');
-    const topClearance = o.preset === 'fixed-footer-v2' ? 8 : 12;
-    if (n.qr_y_mm + n.symbol_mm > n.height_mm - topClearance) bad('qr_y_mm');
+    if (compact) {
+        if (n.qr_x_mm + n.symbol_mm > n.width_mm - 0.5) bad('qr_x_mm');
+        if (n.qr_y_mm + n.symbol_mm > n.height_mm - 0.5) bad('qr_y_mm');
+    } else {
+        if (n.qr_x_mm + n.symbol_mm > n.width_mm - 4) bad('qr_x_mm');
+        if (n.qr_y_mm + n.symbol_mm > n.height_mm - (o.preset === 'fixed-footer-v2' ? 8 : 12)) bad('qr_y_mm');
+    }
     if (n.logo_mm > n.symbol_mm * 0.15) bad('logo_mm');
-    if (n.qr_y_mm - 4 - n.font_pt * 1.5 / 2.8346456693 * ((o.english_lines as string[]).length + (o.urdu_lines as string[]).length - 1) < 4) bad('caption_layout');
+    const captionCount = (o.english_lines as string[]).length + (o.urdu_lines as string[]).length;
+    if (compact) {
+        if (n.qr_y_mm < 0.3 + (captionCount ? 0.2 : 0) + captionCount * n.font_pt / 2.8346456693) bad('caption_layout');
+    } else if (captionCount && n.qr_y_mm - 4 - n.font_pt * 1.5 / 2.8346456693 * (captionCount - 1) < 4) bad('caption_layout');
     if (!Array.isArray(o.material_codes) || o.material_codes.length < 1 || o.material_codes.length > 10 || o.material_codes.some(v => typeof v !== 'string' || !(/^[a-z0-9_-]{1,40}$/.test(v))) || JSON.stringify(o.material_codes) !== JSON.stringify([...new Set(o.material_codes)].sort()))
         bad('material_codes');
     uuid(o.asset_set_id);

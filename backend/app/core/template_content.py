@@ -33,7 +33,7 @@ def plain(value: str) -> str:
 class Content(Closed):
     schema_version: Literal[1]
     renderer: Literal["safereturn-vector-v1"]
-    preset: Literal["fixed-footer-v1", "fixed-footer-v2"]
+    preset: Literal["fixed-footer-v1", "fixed-footer-v2", "qr-only-v3"]
     symbol_mm: Millimeters
     width_mm: Millimeters
     height_mm: Millimeters
@@ -43,7 +43,7 @@ class Content(Closed):
     min_pitch_mm: Millimeters
     font_pt: Millimeters
     header: str = Field(min_length=1, max_length=50)
-    english_lines: list[Line] = Field(min_length=1, max_length=4)
+    english_lines: list[Line] = Field(default_factory=list, max_length=4)
     urdu_lines: list[Line] = Field(default_factory=list, max_length=4)
     asset_set_id: UUID
     material_codes: list[Annotated[str, Field(pattern=r"^[a-z0-9_-]{1,40}$")]] = Field(
@@ -86,21 +86,38 @@ class Content(Closed):
             if not Decimal(0) < Decimal(getattr(self, name)) <= Decimal(270):
                 raise ValueError("Invalid geometry bound")
         t = self.renderer_template("validation", 1, "lost")
-        top_clearance = Decimal(str(t.top_clearance_mm))
-        if (
-            Decimal(self.qr_x_mm) + Decimal(self.symbol_mm) > Decimal(self.width_mm) - 4
-            or Decimal(self.qr_y_mm) + Decimal(self.symbol_mm)
-            > Decimal(self.height_mm) - top_clearance
-            or Decimal(self.logo_mm) > Decimal(self.symbol_mm) * Decimal("0.15")
-            or Decimal(self.qr_y_mm)
-            - 4
-            - Decimal(str(t.font_pt))
-            * Decimal("1.5")
-            / Decimal("2.8346456693")
-            * (len(self.english_lines) + len(self.urdu_lines) - 1)
-            < 4
-        ):
-            raise ValueError("Invalid QR or caption placement")
+        if self.preset == "qr-only-v3":
+            line_count = len(self.english_lines) + len(self.urdu_lines)
+            caption_height = Decimal(self.font_pt) * line_count / Decimal("2.8346456693")
+            caption_gap = Decimal("0.20") if line_count else Decimal(0)
+            if (
+                Decimal(self.width_mm) < 25
+                or Decimal(self.height_mm) < 20
+                or Decimal(self.symbol_mm) < 15
+                or Decimal(self.qr_x_mm) < Decimal("0.50")
+                or Decimal(self.qr_y_mm) < Decimal("0.30") + caption_gap + caption_height
+                or Decimal(self.qr_x_mm) + Decimal(self.symbol_mm) > Decimal(self.width_mm) - Decimal("0.50")
+                or Decimal(self.qr_y_mm) + Decimal(self.symbol_mm) > Decimal(self.height_mm) - Decimal("0.50")
+                or Decimal(self.font_pt) < Decimal("4.50")
+                or Decimal(self.min_pitch_mm) < Decimal("0.30")
+                or Decimal(self.logo_mm) > min(Decimal("6.00"), Decimal(self.symbol_mm) * Decimal("0.15"))
+            ):
+                raise ValueError("Invalid QR or caption placement")
+        else:
+            line_count = len(self.english_lines) + len(self.urdu_lines)
+            if (
+                Decimal(self.width_mm) < 30
+                or Decimal(self.height_mm) < 50
+                or Decimal(self.symbol_mm) < 20
+                or Decimal(self.qr_x_mm) < 4
+                or Decimal(self.qr_y_mm) < 13
+                or Decimal(self.font_pt) < 8
+                or Decimal(self.qr_x_mm) + Decimal(self.symbol_mm) > Decimal(self.width_mm) - 4
+                or Decimal(self.qr_y_mm) + Decimal(self.symbol_mm) > Decimal(self.height_mm) - Decimal(str(t.top_clearance_mm))
+                or Decimal(self.logo_mm) > min(Decimal("6.00"), Decimal(self.symbol_mm) * Decimal("0.15"))
+                or line_count and Decimal(self.qr_y_mm) - 4 - Decimal(self.font_pt) * Decimal("1.5") / Decimal("2.8346456693") * (line_count - 1) < 4
+            ):
+                raise ValueError("Invalid QR or caption placement")
         return self
 
     def renderer_template(self, key: str, version: int, purpose: str) -> Template:
@@ -113,7 +130,7 @@ class Content(Closed):
         return Template.model_validate(
             {"key": key, "version": version, "tag_type": purpose}
             | {name: getattr(self, name) for name in fields}
-            | {"top_clearance_mm": 8 if self.preset == "fixed-footer-v2" else 12}
+            | {"top_clearance_mm": 0.5 if self.preset == "qr-only-v3" else 8 if self.preset == "fixed-footer-v2" else 12}
         )
 
     def fingerprint(self, key, version, purpose, assets):

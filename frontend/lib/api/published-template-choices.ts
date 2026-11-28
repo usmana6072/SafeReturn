@@ -57,7 +57,13 @@ export async function publishedTemplateChoices(origin: string, token: string, co
         if (detail.template.template_id !== template.template_id) throw new PublishedTemplateError();
         if (detail.template.lifecycle_status === 'active') for (const revision of detail.revisions) {
           if (revision.status === 'published' && revision.published_at) {
-            const item = { template_key: detail.template.key, template_version: revision.version };
+            const item = {
+              template_key: detail.template.key, template_version: revision.version,
+              name: detail.template.name, width_mm: revision.content.width_mm,
+              height_mm: revision.content.height_mm, symbol_mm: revision.content.symbol_mm,
+              english_caption: revision.content.english_lines.length > 0,
+              urdu_caption: revision.content.urdu_lines.length > 0,
+            };
             pairs.set(item.template_key + '@' + item.template_version, item);
             if (pairs.size > 100) throw new PublishedTemplateError();
           }

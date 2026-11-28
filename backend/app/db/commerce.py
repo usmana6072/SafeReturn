@@ -223,7 +223,7 @@ class OrderItemSize(Identity, Created, Base):
     __table_args__ = (
         UniqueConstraint("logical_item_id", "variant_id"),
         UniqueConstraint("logical_item_id", "size_mm_snapshot"),
-        CheckConstraint("copies BETWEEN 1 AND 100 AND size_mm_snapshot BETWEEN 30 AND 100 AND variant_version_snapshot>0", name="shape"),
+        CheckConstraint("copies BETWEEN 1 AND 100 AND size_mm_snapshot BETWEEN 15 AND 100 AND variant_version_snapshot>0", name="shape"),
     )
 
 

@@ -7,15 +7,15 @@ export class TemplateApiError extends Error {
 export function templateError(e: unknown, ur = false) {
     if (e instanceof TemplateValidation) {
         const geometry: Record<string, string> = {
-            symbol_mm: 'QR size must be 20–100 mm.',
-            width_mm: 'Sticker width must be 30–190 mm.',
-            height_mm: 'Sticker height must be 50–270 mm.',
-            qr_x_mm: 'Move the QR left position so the symbol has a 4 mm side margin and fits inside the sticker.',
+            symbol_mm: 'QR size must be 15–100 mm for the compact preset; legacy footer templates require at least 20 mm.',
+            width_mm: 'Sticker width must be at least 25 mm for the compact preset and 30 mm for legacy footer templates (maximum 190 mm).',
+            height_mm: 'Sticker height must be at least 20 mm for the compact preset and 50 mm for legacy footer templates (maximum 270 mm).',
+            qr_x_mm: 'Position the QR so it fits inside the sticker with its required side margin (0.5 mm compact, 4 mm legacy).',
             qr_y_mm: 'Move the QR up enough to fit inside the sticker and leave room for its caption.',
             logo_mm: 'Logo must be at most 6 mm and no more than 15% of the QR size.',
             min_pitch_mm: 'Minimum QR module pitch must be at least 0.30 mm.',
-            font_pt: 'Text size must be 8–14 pt.',
-            caption_layout: 'The caption does not fit below the QR. Raise the QR, reduce text size, or use fewer text lines.',
+            font_pt: 'Text size must be 4.5–14 pt for the compact preset and 8–14 pt for legacy footer templates.',
+            caption_layout: 'The captions do not fit below the QR. Raise the QR or reduce text size or caption lines.',
         };
         if (geometry[e.field]) return geometry[e.field];
         return (ur ? 'فیلڈ چیک کریں: ' : 'Check field: ') + e.field;
@@ -29,7 +29,7 @@ export function templateError(e: unknown, ur = false) {
         return ur ? 'حساس کارروائی کے لیے دوبارہ تصدیق درکار ہے۔' : 'Recent authentication is required: Print Template actions require authentication within 3600 minutes (60 hours). Reauthenticate using the existing sign-in/MFA flow, then review and retry. Your input is retained.';
     if (error.code === 'PREVIEW_TIMEOUT') return 'The isolated preview worker exceeded its 60-second elapsed-time limit. Retry the same intent once; if repeated, inspect Render CPU/memory and worker logs. No preview or approval was produced.';
     if (error.code === 'PREVIEW_BUSY') return 'Another preview is running. Wait for it to finish, then retry the same intent.';
-    if (error.code === 'PREVIEW_LAYOUT_INVALID') return 'The saved wording does not fit this sticker with the enrolled font and QR size. Shorten the heading or captions, increase the sticker or QR size, or reduce the number of text lines, then save and preview again.';
+    if (error.code === 'PREVIEW_LAYOUT_INVALID') return 'The saved wording or QR does not fit the enrolled renderer. For caption overflow, shorten the copy, use fewer lines, reduce text size, or increase the sticker dimensions. For QR density, increase the QR size and recheck caption clearance before previewing again.';
     if (error.code === 'PREVIEW_WORKER_FAILED') return 'The isolated preview worker failed. Check the deployed worker/assets and Render logs; no preview or approval was produced.';
     if (error.code === 'TEMPLATE_MANAGEMENT_DISABLED')
         return 'Print Template Management is disabled in this backend environment. Reauthentication will not enable it.';

@@ -19,7 +19,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -123,6 +123,12 @@ class VariantRequest(Closed):
     template_version: int = Field(default=1, ge=1, le=100000, strict=True)
     is_active: bool = Field(default=True, strict=True)
     sort_order: int = Field(default=0, ge=-100000, le=100000, strict=True)
+
+    @model_validator(mode="after")
+    def sticker_size(self):
+        if self.fulfillment_method == "pdf_label" and self.size_mm is not None and not Decimal(15) <= self.size_mm <= Decimal(100):
+            raise ValueError("QR symbol size must be between 15 and 100 mm")
+        return self
 
     @field_validator("unit_price", mode="before")
     @classmethod
@@ -427,7 +433,7 @@ def publishable(context, request, product):
     if not variants or any(
         v["fulfillment_method"] != "pdf_label"
         or v["size_mm"] is None
-        or v["size_mm"] < 30
+        or v["size_mm"] < 15
         or v["currency_code"] != "PKR"
         or (single and eligible[str(v["id"])] is not True)
         or eligible[str(v["id"])] is False

@@ -1,23 +1,23 @@
 {
   "schema_version": 1,
   "renderer": "safereturn-vector-v1",
-  "preset": "fixed-footer-v1",
-  "symbol_mm": "30.00",
-  "width_mm": "40.00",
-  "height_mm": "60.00",
+  "preset": "qr-only-v3",
+  "symbol_mm": "15.00",
+  "width_mm": "25.00",
+  "height_mm": "20.00",
   "qr_x_mm": "5.00",
-  "qr_y_mm": "18.00",
-  "logo_mm": "4.00",
+  "qr_y_mm": "4.26",
+  "logo_mm": "2.00",
   "min_pitch_mm": "0.30",
-  "font_pt": "8.00",
+  "font_pt": "5.00",
   "header": "SafeReturn",
   "english_lines": [
-    "Found? Scan me."
+    "SCAN TO CONTACT OWNER"
   ],
   "urdu_lines": [
-    "ملا ہے؟ اسکین کریں"
+    "مالک سے رابطے کے لیے اسکین کریں"
   ],
-  "asset_set_id": "0a7c508b-fc96-42d6-ba58-e367dbb8d08b",
+  "asset_set_id": "70af0cb0-0cef-4d3a-a24a-f3cb0c81d5e4",
   "material_codes": [
     "vinyl"
   ]

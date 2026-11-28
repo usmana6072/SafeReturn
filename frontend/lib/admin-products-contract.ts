@@ -73,9 +73,10 @@ export function variantBody(v: unknown): VariantBody {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(sku))
         throw Error('contract');
     const size = o.size_mm === null ? null : str(o.size_mm, 12);
-    if (size !== null && (!/^\d{1,5}(\.\d{1,2})?$/.test(size) || Number(size) <= 0 || Number(size) > 99999))
+    const fulfillment = one(o.fulfillment_method, ['pdf_label', 'manufacturer_artwork', 'manual']);
+    if (size !== null && (!/^\d{1,5}(\.\d{1,2})?$/.test(size) || Number(size) <= 0 || Number(size) > 99999 || fulfillment === 'pdf_label' && (Number(size) < 15 || Number(size) > 100)))
         throw Error('contract');
-    return { sku, name: str(o.name, 160), size_mm: size, material: nullable(o.material, 120), color: nullable(o.color, 80), fulfillment_method: one(o.fulfillment_method, ['pdf_label', 'manufacturer_artwork', 'manual']), template_key: nullable(o.template_key, 120), template_version: int(o.template_version, 1, 100000), is_active: bool(o.is_active), sort_order: int(o.sort_order, -100000, 100000) };
+    return { sku, name: str(o.name, 160), size_mm: size, material: nullable(o.material, 120), color: nullable(o.color, 80), fulfillment_method: fulfillment, template_key: nullable(o.template_key, 120), template_version: int(o.template_version, 1, 100000), is_active: bool(o.is_active), sort_order: int(o.sort_order, -100000, 100000) };
 }
 export function imageBody(v: unknown, edit = false): ImageBody | ImageEdit { const o = obj(v); exact(o, edit ? ['alt_text', 'sort_order', 'is_primary'] : ['cloudinary_public_id', 'alt_text', 'sort_order', 'is_primary']); const data = { alt_text: str(o.alt_text, 240), sort_order: int(o.sort_order, -100000, 100000), is_primary: bool(o.is_primary) }; if (edit)
     return data; const id = str(o.cloudinary_public_id, 240); if (!/^[A-Za-z0-9/_-]+$/.test(id))
