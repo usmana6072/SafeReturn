@@ -42,8 +42,8 @@ class Session:
         raise AssertionError('No database write or binding may precede failed admission')
 
 
-@pytest.mark.parametrize('mfa,age,role', [(False,0,True),(True,1201,True),(True,0,False)])
-def test_binding_cannot_bypass_staff_mfa_or_twenty_minutes(mfa,age,role):
+@pytest.mark.parametrize('mfa,age,role', [(False,0,True),(True,216001,True),(True,0,False)])
+def test_binding_cannot_bypass_staff_mfa_or_sixty_hours(mfa,age,role):
     context=SimpleNamespace(email_verified=True,mfa_verified=mfa,principal=SimpleNamespace(user_id=uuid4(),session_id=uuid4(),authentication_time=int(time.time())-age),session=Session(role))
     with pytest.raises((AccessError,HTTPException)):
         ensure_variant_template(context,Settings(_env_file=None,print_template_management_enabled=True),{'template_key':'reviewed'}, {'commerce_model':'single_qr'})
@@ -69,7 +69,7 @@ class PublicationSession:
     def __init__(self, mismatch=False):
         from decimal import Decimal
         self.info={}; self.bound=False; self.mismatch=mismatch; self.calls=[]
-        self.variant={'id':uuid4(),'catalog_version':1,'fulfillment_method':'pdf_label','size_mm':Decimal('30.00'),'currency_code':'PKR','template_key':'reviewed','template_version':1,'material':'vinyl'}
+        self.variant={'id':uuid4(),'catalog_version':1,'fulfillment_method':'pdf_label','size_mm':Decimal('15.00'),'currency_code':'PKR','template_key':'reviewed','template_version':1,'material':'vinyl'}
     def execute(self, statement, params=None):
         import json
         sql=str(statement);self.calls.append(sql)

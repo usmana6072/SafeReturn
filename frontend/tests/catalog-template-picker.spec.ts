@@ -7,6 +7,12 @@ test('strict template response parser excludes ambiguous and private projections
  for(const data of [{...valid,as_of:'2026-02-30T17:00:00Z'}, {...valid,private:'PRIVATE_CANARY'}, {...valid,items:[{template_key:'alpha',template_version:'1'}]}, {...valid,items:[...valid.items,...valid.items]}, {...valid,items:[{template_key:'x/y',template_version:1}]}, {...valid,items:[{...valid.items[0],path:'PRIVATE_CANARY'}]}]) expect(()=>parseTemplateChoices(data)).toThrow('unavailable');
 });
 
+test('published template choices validate and retain print configuration metadata',()=>{
+ const choice={template_key:'alpha',template_version:1,name:'Compact Bilingual',width_mm:'25.00',height_mm:'20.00',symbol_mm:'15.00',english_caption:true,urdu_caption:true};
+ expect(parseTemplateChoices({as_of:'2026-10-19T17:00:00Z',items:[choice]}).items[0]).toEqual(choice);
+ expect(()=>parseTemplateChoices({as_of:'2026-10-19T17:00:00Z',items:[{...choice,symbol_mm:'14.00'}]})).toThrow('unavailable');
+});
+
 test('template picker loading, empty, outage, stale, removed and draft-safe bindings',async({page,context},testInfo)=>{
  test.setTimeout(120000);page.setDefaultTimeout(15000);
  await page.clock.install();
@@ -23,7 +29,8 @@ test('template picker loading, empty, outage, stale, removed and draft-safe bind
     calls++;
     if(hold) await new Promise<void>(resolve=>{release=resolve;});
     if(mode==='down')return route.fulfill({status:503,json:{error:{code:'PROVIDER_UNAVAILABLE',message:'PRIVATE_CANARY'}}});
-    const items=mode==='empty'?[]:mode==='removed'?[{template_key:'beta',template_version:2}]:[{template_key:'alpha',template_version:1},{template_key:'beta',template_version:2}];
+    const compact={template_key:'alpha',template_version:1,name:'Compact Bilingual',width_mm:'25.00',height_mm:'20.00',symbol_mm:'15.00',english_caption:true,urdu_caption:true};
+    const items=mode==='empty'?[]:mode==='removed'?[{template_key:'beta',template_version:2}]:[compact,{template_key:'beta',template_version:2}];
     return route.fulfill({json:{as_of:new Date().toISOString(),items}});
    }
    return route.fulfill({json:{items:request.url().includes('categories')?[]:[product]}});
@@ -46,7 +53,7 @@ test('template picker loading, empty, outage, stale, removed and draft-safe bind
  await expect(picker.getByRole('status')).toHaveText('No published or configured templates are available.');
  await page.getByLabel('sku',{exact:true}).fill('SYNTHETIC');await page.getByLabel('name',{exact:true}).fill('Keep draft values');await page.getByLabel('unit price',{exact:true}).fill('100.00');
  await page.getByRole('button',{name:'Save',exact:true}).click();await expect(notice).toHaveText('Saved.');expect(saves[0].body.template_key).toBeNull();expect(saves[0].body.template_version).toBe(1);
- mode='valid';await page.getByRole('button',{name:'Refresh templates',exact:true}).click();await expect(choice).toBeEnabled();await choice.focus();await expect(choice).toBeFocused();await choice.selectOption('alpha@1');
+ mode='valid';await page.getByRole('button',{name:'Refresh templates',exact:true}).click();await expect(choice).toBeEnabled();await expect(choice.locator('option[value="alpha@1"]')).toContainText('Compact Bilingual — 25.00 × 20.00 mm, QR 15.00 mm, EN on, UR on');await choice.focus();await expect(choice).toBeFocused();await choice.selectOption('alpha@1');
  await page.getByLabel('name',{exact:true}).fill('Preserved');await page.getByLabel('sku',{exact:true}).fill('NEW-SYNTHETIC');await page.getByLabel('unit price',{exact:true}).fill('125.00');
  mode='down';const before=saves.length;await page.getByRole('button',{name:'Save',exact:true}).click();await expect(notice).toContainText('Selected template is unavailable');expect(saves.length).toBe(before);await expect(page.getByLabel('name',{exact:true})).toHaveValue('Preserved');await expect(picker).toContainText('alpha@1');
  mode='valid';saveStatus=422;await page.getByRole('button',{name:'Refresh templates',exact:true}).click();await expect(choice).toBeEnabled();await page.getByRole('button',{name:'Save',exact:true}).click();await expect(notice).toContainText('reviewed template');expect(saves.at(-1).body.template_key).toBe('alpha');expect(saves.at(-1).body.template_version).toBe(1);

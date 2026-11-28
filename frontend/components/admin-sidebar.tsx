@@ -47,9 +47,7 @@ export function AdminSidebar({
           }`}
           onClick={onItemClick}
         >
-          <span className="bg-sky-500 text-white p-1.5 rounded-lg flex items-center justify-center shrink-0">
-            <AdminIcon name="shield" className="w-4 h-4" />
-          </span>
+          <img src="/icon-192.png" width="32" height="32" alt="" className="rounded-md shrink-0" />
           <span className="tracking-tight flex items-center gap-1.5">
             <span>SafeReturn</span>
             <span className="text-[11px] font-medium text-sky-400 bg-sky-950/70 border border-sky-800/60 px-1.5 py-0.5 rounded">
@@ -62,11 +60,11 @@ export function AdminSidebar({
           <Link
             href="/admin"
             prefetch={false}
-            className="mx-auto bg-sky-500 text-white p-1.5 rounded-lg flex items-center justify-center"
+            className="mx-auto flex items-center justify-center"
             title="SafeReturn Admin"
             onClick={onItemClick}
           >
-            <AdminIcon name="shield" className="w-4 h-4" />
+            <img src="/icon-192.png" width="32" height="32" alt="" className="rounded-md" />
           </Link>
         )}
 

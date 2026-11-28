@@ -14,7 +14,7 @@ import uharfbuzz as hb
 from fontTools.pens.basePen import BasePen
 from fontTools.ttLib import TTFont as SourceFont
 from lxml import etree
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from reportlab.graphics import renderPDF
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
@@ -22,7 +22,11 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 from svglib.svglib import svg2rlg
 
-from app.core.public_site import PREVIOUS_WEB_HOSTS, PUBLIC_WEB_ORIGIN, canonical_web_origin
+from app.core.public_site import (
+    PREVIOUS_WEB_HOSTS,
+    PUBLIC_WEB_ORIGIN,
+    canonical_web_origin,
+)
 
 
 class OutlinePen(BasePen):
@@ -102,18 +106,47 @@ class Template(Closed):
     key: str = Field(pattern=r"^[a-zA-Z0-9._-]{3,80}$")
     version: int = Field(ge=1)
     tag_type: Literal["lost", "ice"]
-    symbol_mm: float = Field(ge=20, le=100)
-    width_mm: float = Field(ge=30, le=190)
-    height_mm: float = Field(ge=50, le=270)
-    qr_x_mm: float = Field(ge=4)
-    qr_y_mm: float = Field(ge=13)
-    top_clearance_mm: Literal[8, 12] = 12
+    preset: Literal["fixed-footer-v1", "fixed-footer-v2", "qr-only-v3"] = "fixed-footer-v1"
+    symbol_mm: float = Field(ge=15, le=100)
+    width_mm: float = Field(ge=25, le=190)
+    height_mm: float = Field(ge=20, le=270)
+    qr_x_mm: float = Field(ge=0.5)
+    qr_y_mm: float = Field(ge=0.3)
+    top_clearance_mm: float = 12
     logo_mm: float = Field(gt=0, le=6)
     min_pitch_mm: float = Field(ge=0.3)
-    font_pt: float = Field(ge=8, le=14)
+    font_pt: float = Field(ge=4.5, le=14)
     header: str = Field(min_length=1, max_length=50)
-    english_lines: list[str] = Field(min_length=1, max_length=4)
+    english_lines: list[str] = Field(max_length=4)
     urdu_lines: list[str] = Field(max_length=4)
+
+    @model_validator(mode="after")
+    def geometry(self):
+        if self.preset == "qr-only-v3":
+            if self.qr_x_mm + self.symbol_mm > self.width_mm - 0.5:
+                raise ValueError("QR side margin")
+            if self.qr_y_mm + self.symbol_mm > self.height_mm - 0.5:
+                raise ValueError("QR top margin")
+            if self.logo_mm > min(6, self.symbol_mm * 0.15):
+                raise ValueError("QR center logo size")
+            line_count = len(self.english_lines) + len(self.urdu_lines)
+            caption_height = line_count * self.font_pt / 2.8346456693
+            caption_gap = 0.2 if line_count else 0
+            if self.qr_y_mm < 0.3 + caption_gap + caption_height:
+                raise ValueError("Caption layout")
+        else:
+            if self.symbol_mm < 20 or self.width_mm < 30 or self.height_mm < 50:
+                raise ValueError("Legacy fixed-footer minimum dimensions")
+            if self.qr_x_mm < 4 or self.qr_y_mm < 13 or self.font_pt < 8:
+                raise ValueError("Legacy fixed-footer geometry")
+            if self.qr_x_mm + self.symbol_mm > self.width_mm - 4:
+                raise ValueError("QR side margin")
+            if self.qr_y_mm + self.symbol_mm > self.height_mm - self.top_clearance_mm:
+                raise ValueError("QR top clearance")
+            line_count = len(self.english_lines) + len(self.urdu_lines)
+            if line_count and self.qr_y_mm - 4 - self.font_pt * 1.5 / 2.8346456693 * (line_count - 1) < 4:
+                raise ValueError("Caption layout")
+        return self
 
 
 class Bundle(Closed):
@@ -184,10 +217,11 @@ def load_bundle(settings):
                 raise ValueError()
             signatures.add(signature)
             top_clearance = t.get("top_clearance_mm", 12)
+            compact = t.get("preset", "fixed-footer-v1") == "qr-only-v3"
             if (
-                t["qr_x_mm"] + t["symbol_mm"] > t["width_mm"] - 4
+                t["qr_x_mm"] + t["symbol_mm"] > t["width_mm"] - (0.5 if compact else 4)
                 or t["qr_y_mm"] + t["symbol_mm"]
-                > t["height_mm"] - top_clearance
+                > t["height_mm"] - (0.5 if compact else top_clearance)
                 or t["logo_mm"] > t["symbol_mm"] * 0.15
             ):
                 raise ValueError()
@@ -361,30 +395,32 @@ def render_pdf(manifest, *, asset_root=None):
                 c.setStrokeColorRGB(0.1, 0.15, 0.17)
                 c.setLineWidth(0.3)
                 c.rect(0, 0, width * mm, height * mm)
-                compact_header = t.get("top_clearance_mm", 12) == 8
-                c.setFillColorRGB(0.03, 0.22, 0.23) if t[
-                    "tag_type"
-                ] == "lost" else c.setFillColorRGB(0.5, 0.1, 0.12)
-                c.rect(
-                    2 * mm,
-                    (height - (7 if compact_header else 9)) * mm,
-                    (width - 4) * mm,
-                    (5 if compact_header else 7) * mm,
-                    stroke=0,
-                    fill=1,
-                )
-                c.setFillColorRGB(1, 1, 1)
-                c.setFont(font_name, t["font_pt"])
-                if (
-                    pdfmetrics.stringWidth(t["header"], font_name, t["font_pt"])
-                    > (width - 8) * mm
-                ):
-                    raise PrintUnavailable("header_overflow")
-                c.drawCentredString(
-                    width * mm / 2,
-                    (height - (4.5 if compact_header else 6.5)) * mm,
-                    t["header"],
-                )
+                qr_only = t.get("preset", "fixed-footer-v1") == "qr-only-v3"
+                if not qr_only:
+                    compact_header = t.get("top_clearance_mm", 12) == 8
+                    c.setFillColorRGB(0.03, 0.22, 0.23) if t[
+                        "tag_type"
+                    ] == "lost" else c.setFillColorRGB(0.5, 0.1, 0.12)
+                    c.rect(
+                        2 * mm,
+                        (height - (7 if compact_header else 9)) * mm,
+                        (width - 4) * mm,
+                        (5 if compact_header else 7) * mm,
+                        stroke=0,
+                        fill=1,
+                    )
+                    c.setFillColorRGB(1, 1, 1)
+                    c.setFont(font_name, t["font_pt"])
+                    if (
+                        pdfmetrics.stringWidth(t["header"], font_name, t["font_pt"])
+                        > (width - 8) * mm
+                    ):
+                        raise PrintUnavailable("header_overflow")
+                    c.drawCentredString(
+                        width * mm / 2,
+                        (height - (4.5 if compact_header else 6.5)) * mm,
+                        t["header"],
+                    )
                 qx = t["qr_x_mm"]
                 qy = t["qr_y_mm"]
                 size = t["symbol_mm"]
@@ -412,12 +448,13 @@ def render_pdf(manifest, *, asset_root=None):
                 c.scale(ls * mm / logo.width, ls * mm / logo.height)
                 renderPDF.draw(logo, c, 0, 0)
                 c.restoreState()
-                yy = qy - 4
+                leading = t["font_pt"] / mm * (1 if qr_only else 1.5)
+                yy = qy - (0.2 + t["font_pt"] / mm * 0.85 if qr_only else 4)
                 c.setFillColorRGB(0.05, 0.08, 0.1)
                 for text, rtl in [(s, False) for s in t["english_lines"]] + [
                     (s, True) for s in t["urdu_lines"]
                 ]:
-                    if yy < 4 or any(
+                    if yy < (0.3 if qr_only else 4) or any(
                         ord(ch) not in font.face.charToGlyph
                         for ch in text
                         if not ch.isspace()
@@ -432,16 +469,16 @@ def render_pdf(manifest, *, asset_root=None):
                             width * mm / 2,
                             yy * mm,
                             t["font_pt"],
-                            (width - 8) * mm,
+                            (width - 1 if qr_only else width - 8) * mm,
                         )
                     else:
                         if (
                             pdfmetrics.stringWidth(text, font_name, t["font_pt"])
-                            > (width - 8) * mm
+                            > (width - 1 if qr_only else width - 8) * mm
                         ):
                             raise PrintUnavailable("caption_overflow")
                         c.drawCentredString(width * mm / 2, yy * mm, text)
-                    yy -= t["font_pt"] * 1.5 / mm
+                    yy -= leading
                 c.endForm()
                 forms[form] = True
             for _ in range(occurrence["copies"]):

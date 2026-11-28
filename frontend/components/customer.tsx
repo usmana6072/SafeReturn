@@ -9,7 +9,7 @@ export function CustomerShell({ ur, children, unread }: { ur: boolean; children:
   return <div className="customer-portal" dir={ur ? "rtl" : "ltr"} lang={ur ? "ur" : "en"}>
     <a className="skip-link" href="#main-content">{ur ? "مواد پر جائیں" : "Skip to content"}</a>
     <header className="portal-header">
-      <Link className="brand" href="/dashboard"><img src="/brand/safereturn_logo.svg" width="34" height="34" alt=""/>SafeReturn</Link>
+      <Link className="brand" href="/dashboard"><img src="/icon-192.png" width="34" height="34" alt=""/>SafeReturn</Link>
       <div className="header-controls">
         <Link href="/inbox?status=new" prefetch={false} className="header-bell"><CustomerIcon name="bell"/>
           <span className="sr-only">{ur ? "فائنڈر پیغامات کی اطلاعات" : "Finder message notifications"}</span>{unread}</Link>

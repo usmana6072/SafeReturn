@@ -365,6 +365,45 @@ def test_template_accepts_reduced_minimum_dimensions():
     ) == ("20.00", "30.00", "50.00", "13.00", "3.00")
 
 
+@pytest.mark.parametrize(
+    "english,urdu",
+    [([], []), (["SCAN TO CONTACT OWNER"], []), ([], ["مالک سے رابطے کے لیے اسکین کریں"]),
+     (["SCAN TO CONTACT OWNER"], ["مالک سے رابطے کے لیے اسکین کریں"])],
+)
+def test_compact_minimum_sticker_and_independent_captions(english, urdu):
+    compact = Content.model_validate(content() | {
+        "preset": "qr-only-v3", "symbol_mm": "15.00", "width_mm": "25.00",
+        "height_mm": "20.00", "qr_x_mm": "5.00", "qr_y_mm": "4.26",
+        "logo_mm": "2.00", "font_pt": "5.00", "english_lines": english,
+        "urdu_lines": urdu,
+    })
+    renderer = compact.renderer_template("compact-minimum", 1, "lost")
+    assert (renderer.width_mm, renderer.height_mm, renderer.symbol_mm) == (25, 20, 15)
+    assert renderer.preset == "qr-only-v3"
+    assert renderer.english_lines == english and renderer.urdu_lines == urdu
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"width_mm": "24.99"}, {"width_mm": "191.00"}, {"height_mm": "19.99"},
+        {"height_mm": "271.00"}, {"symbol_mm": "14.99"}, {"symbol_mm": "101.00"},
+        {"symbol_mm": "16.00"}, {"qr_x_mm": "9.51"}, {"qr_y_mm": "4.02"},
+        {"qr_x_mm": "bad"}, {"width_mm": ""}, {"height_mm": "-1.00"},
+    ],
+)
+def test_compact_minimum_rejects_invalid_physical_layout(changes):
+    base = content() | {
+        "preset": "qr-only-v3", "symbol_mm": "15.00", "width_mm": "25.00",
+        "height_mm": "20.00", "qr_x_mm": "5.00", "qr_y_mm": "4.26",
+        "logo_mm": "2.00", "font_pt": "5.00",
+        "english_lines": ["SCAN TO CONTACT OWNER"],
+        "urdu_lines": ["مالک سے رابطے کے لیے اسکین کریں"],
+    }
+    with pytest.raises(ValidationError):
+        Content.model_validate(base | changes)
+
+
 def test_renderer_mapping_and_authoritative_fingerprint():
     c = Content.model_validate(content())
     t = c.renderer_template("synthetic", 2, "ice")
@@ -626,15 +665,15 @@ def test_precise_disabled_and_origin_errors(env):
     assert response.json()['error']['code'] == 'TEMPLATE_ORIGIN_MISMATCH'
     assert not db.helper_calls
 
-@pytest.mark.parametrize('age,status',[(301,201),(850,201),(1150,201),(1201,403)])
-def test_draft_twenty_minute_window(env,age,status):
+@pytest.mark.parametrize('age,status',[(301,201),(850,201),(1150,201),(200000,201),(216001,403)])
+def test_draft_sixty_hour_window(env,age,status):
     client,_db,headers,_=env
     response=client.post(BASE,json={'key':'window-test','name':'Window test','purpose':'lost'},headers=headers(amr=[{'method':'totp','timestamp':int(time.time())-age}]))
     assert response.status_code==status
 
 
-@pytest.mark.parametrize('age,denied', [(400,False),(1150,False),(1201,True)])
-def test_sensitive_template_actions_twenty_minutes(env,age,denied):
+@pytest.mark.parametrize('age,denied', [(400,False),(1150,False),(200000,False),(216001,True)])
+def test_sensitive_template_actions_sixty_hours(env,age,denied):
     client,_db,headers,_=env
     response=client.post(BASE+f'/{TID}/revisions/{RID}/submit-qa',json={'reason':'Reviewed draft'},headers=headers(amr=[{'method':'totp','timestamp':int(time.time())-age}]))
     if denied:

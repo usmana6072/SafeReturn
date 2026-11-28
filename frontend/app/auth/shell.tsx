@@ -4,7 +4,7 @@ import { ReactNode } from "react";
 export function AuthShell({ children, ur }: { children: ReactNode; ur: boolean }) {
   return <>
     <header className="container auth-header"><Link href="/" className="brand">
-      <span className="brand-mark">S</span>SafeReturn</Link>
+      <img src="/icon-192.png" width="36" height="36" alt=""/>SafeReturn</Link>
       <Link href="/">{ur ? "ویب سائٹ پر واپس" : "Back to website"}</Link></header>
     <main id="main-content" className="container auth-layout">
       <aside className="auth-promo"><span className="eyebrow">SAFERETURN</span>

@@ -29,7 +29,7 @@ export default async function Home() {
       <header className="site-header home-header">
         <div className="home-container header-inner">
           <a className="brand home-brand" href="/" aria-label="SafeReturn">
-            <img src="/brand/safereturn_logo.svg" alt="" width="34" height="34" />
+            <img src="/icon-192.png" alt="" width="34" height="34" />
             <bdi>SafeReturn</bdi>
           </a>
           <nav className="desktop-nav" aria-label={t.menu}>
@@ -243,7 +243,7 @@ export default async function Home() {
         <div className="home-container home-footer-main">
           <div>
             <a className="brand home-brand" href="/">
-              <img src="/brand/safereturn_logo.svg" width="32" height="32" alt="" />
+              <img src="/icon-192.png" width="32" height="32" alt="" />
               <bdi>SafeReturn</bdi>
             </a>
             <p>{t.footer}</p>
